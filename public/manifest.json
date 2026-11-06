@@ -1,0 +1,15 @@
+{
+  "name": "roti-na",
+  "short_name": "roti-na",
+  "start_url": "/roti-na/",
+  "display": "standalone",
+  "background_color": "#09090b",
+  "theme_color": "#09090b",
+  "icons": [
+    {
+      "src": "/nome-do-seu-repositorio/icon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
