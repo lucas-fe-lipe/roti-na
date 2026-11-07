@@ -119,7 +119,7 @@ export default function Dashboard() {
   }
 
   const horas = Array.from({ length: maxHour - minHour }, (_, i) => i + minHour);
-  const ROW_HEIGHT = 26; 
+  const ROW_HEIGHT = 22; // Altura reduzida em ~15%
   
   const currentHour = currentTime.getHours();
   const currentMinute = currentTime.getMinutes();
@@ -332,11 +332,13 @@ export default function Dashboard() {
         </button>
       </header>
 
-      <main className="flex-1 px-6 pt-2 pb-6 flex flex-col items-center overflow-auto">
+      {/* Margens laterais removidas no celular (px-0), mantidas em telas grandes (sm:px-6) */}
+      <main className="flex-1 px-0 pt-0 pb-6 sm:px-6 sm:pt-2 flex flex-col items-center overflow-auto w-full">
         
         {activePage === 'Grade' && (
           <div className="w-full max-w-5xl flex flex-col pb-10">
-            <div className="flex ml-[60px] bg-black rounded-t-md shrink-0">
+            {/* Largura do horário ajustada para 38px */}
+            <div className="flex ml-[38px] bg-black sm:rounded-t-md shrink-0">
               {diasDaSemana.map((dia) => (
                 <div key={dia} className="flex-1 py-1.5 text-center font-bold text-[10px] text-white">
                   {dia}
@@ -345,22 +347,22 @@ export default function Dashboard() {
             </div>
 
             <div className="flex relative">
-              <div className="w-[60px] bg-black rounded-bl-md relative shrink-0">
+              <div className="w-[38px] bg-black sm:rounded-bl-md relative shrink-0">
                 {horas.map(hora => (
                   <div key={hora} style={{ height: ROW_HEIGHT }} className="relative">
-                    <span className="absolute top-0 right-3 -translate-y-1/2 text-[10px] font-medium text-zinc-400 bg-black px-1">
+                    <span className="absolute top-0 right-1 -translate-y-1/2 text-[10px] font-medium text-zinc-400 bg-black px-0.5">
                       {hora.toString().padStart(2, '0')}:00
                     </span>
                   </div>
                 ))}
                 <div className="h-0 relative">
-                  <span className="absolute top-0 right-3 -translate-y-1/2 text-[10px] font-medium text-zinc-400 bg-black px-1">
+                  <span className="absolute top-0 right-1 -translate-y-1/2 text-[10px] font-medium text-zinc-400 bg-black px-0.5">
                     {maxHour.toString().padStart(2, '0')}:00
                   </span>
                 </div>
               </div>
 
-              <div className="flex-1 bg-white relative overflow-hidden rounded-br-md border-r border-b border-zinc-300">
+              <div className="flex-1 bg-white relative overflow-hidden sm:rounded-br-md border-r border-b border-zinc-300">
                 {horas.map((hora) => (
                   <div key={hora} style={{ height: ROW_HEIGHT }} className="grid grid-cols-7 relative">
                     {diasDaSemana.map((dia, idx) => (
@@ -412,7 +414,8 @@ export default function Dashboard() {
               </div>
             </div>
 
-            <div className="mt-3 flex items-center gap-3 overflow-x-auto pb-1 scrollbar-none ml-[60px]">
+            {/* Listas agora ocupam 100% da largura, sem o ml-[60px] */}
+            <div className="mt-3 flex items-center gap-3 overflow-x-auto pb-1 scrollbar-none w-full px-2 sm:px-0">
               {metas.map((m) => {
                 const percentual = Math.min(100, (m.progresso / m.meta) * 100);
                 return (
@@ -439,7 +442,7 @@ export default function Dashboard() {
               )}
             </div>
 
-            <div className="mt-3 ml-[60px] flex flex-col gap-2">
+            <div className="mt-3 w-full px-2 sm:px-0 flex flex-col gap-2">
               
               <div className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 shadow-lg">
                 <div className="flex justify-between items-center mb-1">
