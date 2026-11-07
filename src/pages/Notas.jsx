@@ -190,16 +190,31 @@ export default function Notas({ user, atividades, isAvaliacoesOpen, setIsAvaliac
     await syncAvaliacoesComTarefas(disciplina, curso.id, curso.periodos[periodoIndex].id);
   };
 
-  const calcAvaliacoes = (avaliacoes = []) => {
-    let maxTotal = 0, obtidaTotal = 0;
-    avaliacoes.forEach(a => {
-      if (a.obtida !== '' && !isNaN(a.obtida)) {
-        maxTotal += Number(a.max) || 0;
-        obtidaTotal += Number(a.obtida) || 0;
-      }
-    });
+  const calcAvaliacoes = (avaliacoes = [], usarMedia = false) => {
+    let maxTotal = 0, obtidaTotal = 0, percentual = 0;
+
+    if (usarMedia && avaliacoes.length > 0) {
+      let somaPercentuais = 0;
+      let count = 0;
+      avaliacoes.forEach(a => {
+        if (a.obtida !== '' && !isNaN(a.obtida) && a.max !== '' && !isNaN(a.max) && Number(a.max) > 0) {
+          somaPercentuais += (Number(a.obtida) / Number(a.max)) * 100;
+          count++;
+          maxTotal += Number(a.max);
+          obtidaTotal += Number(a.obtida);
+        }
+      });
+      percentual = count > 0 ? somaPercentuais / count : 0;
+    } else {
+      avaliacoes.forEach(a => {
+        if (a.obtida !== '' && !isNaN(a.obtida)) {
+          maxTotal += Number(a.max) || 0;
+          obtidaTotal += Number(a.obtida) || 0;
+        }
+      });
+      percentual = maxTotal > 0 ? (obtidaTotal / maxTotal) * 100 : 0;
+    }
     
-    const percentual = maxTotal > 0 ? (obtidaTotal / maxTotal) * 100 : 0;
     const cappedMax = Math.min(100, maxTotal);
     const cappedObtida = Math.min(100, obtidaTotal);
     const notaBase = cappedMax > 0 ? (cappedObtida / cappedMax) * 100 : 0;
@@ -212,7 +227,7 @@ export default function Notas({ user, atividades, isAvaliacoesOpen, setIsAvaliac
     disciplinas.forEach(d => {
       if (isGeral && (d.status === 'A Cursar' || d.status === 'Cursando')) return;
 
-      const { maxTotal, notaBase } = calcAvaliacoes(d.avaliacoes);
+      const { maxTotal, notaBase } = calcAvaliacoes(d.avaliacoes, d.usarMedia);
       if (!isGeral && maxTotal === 0 && (d.status === 'A Cursar' || d.status === 'Cursando')) return;
 
       if (maxTotal > 0) hasNotas = true;
@@ -346,7 +361,7 @@ export default function Notas({ user, atividades, isAvaliacoesOpen, setIsAvaliac
                       {!isMinPer && (
                         <div className="mt-3 flex flex-col gap-2">
                           {periodo.disciplinas?.map(disc => {
-                            const { maxTotal, obtidaTotal, percentual } = calcAvaliacoes(disc.avaliacoes);
+                            const { maxTotal, obtidaTotal, percentual } = calcAvaliacoes(disc.avaliacoes, disc.usarMedia);
                             const isDiscRed = maxTotal > 0 && percentual < 60;
                             
                             return (
@@ -478,14 +493,54 @@ function ModalPeriodo({ periodoInicial, onClose, onSave, onDelete }) {
 }
 
 function ModalDisciplina({ disciplinaInicial, tiposHoras, atividades, onClose, onSave, onDelete }) {
-  const [disc, setDisc] = useState(disciplinaInicial || { nome: '', professor: '', cargaHoraria: '', tipoHora: tiposHoras[0]?.nome || '', status: 'Cursando', atividadeVinculada: '', avaliacoes: [] });
+  const [disc, setDisc] = useState(disciplinaInicial || { nome: '', professor: '', cargaHoraria: '', tipoHora: tiposHoras[0]?.nome || '', status: 'Cursando', atividadeVinculada: '', usarMedia: false, avaliacoes: [] });
+  const [draggedIndex, setDraggedIndex] = useState(null);
 
   const hAv = (id, f, v) => setDisc(p => ({ ...p, avaliacoes: p.avaliacoes.map(a => a.id === id ? { ...a, [f]: v } : a) }));
   
-  let maxT = 0, obtT = 0;
-  disc.avaliacoes.forEach(a => { if (a.obtida !== '' && !isNaN(a.obtida)) { maxT += Number(a.max)||0; obtT += Number(a.obtida)||0; }});
+  const handleDragStart = (e, index) => {
+    setDraggedIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e, index) => {
+    e.preventDefault();
+    if (draggedIndex === null || draggedIndex === index) return;
+    const novasAvaliacoes = [...disc.avaliacoes];
+    const itemMovido = novasAvaliacoes.splice(draggedIndex, 1)[0];
+    novasAvaliacoes.splice(index, 0, itemMovido);
+    setDraggedIndex(index);
+    setDisc(p => ({ ...p, avaliacoes: novasAvaliacoes }));
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIndex(null);
+  };
+
+  let maxT = 0, obtT = 0, percFinal = 0;
+
+  if (disc.usarMedia && disc.avaliacoes.length > 0) {
+    let somaPercentuais = 0;
+    let count = 0;
+    disc.avaliacoes.forEach(a => {
+      if (a.obtida !== '' && !isNaN(a.obtida) && a.max !== '' && !isNaN(a.max) && Number(a.max) > 0) {
+        somaPercentuais += (Number(a.obtida) / Number(a.max)) * 100;
+        count++;
+        maxT += Number(a.max);
+        obtT += Number(a.obtida);
+      }
+    });
+    percFinal = count > 0 ? somaPercentuais / count : 0;
+  } else {
+    disc.avaliacoes.forEach(a => { 
+      if (a.obtida !== '' && !isNaN(a.obtida)) { 
+        maxT += Number(a.max)||0; 
+        obtT += Number(a.obtida)||0; 
+      }
+    });
+    percFinal = maxT > 0 ? (obtT / maxT) * 100 : 0;
+  }
   
-  const percFinal = maxT > 0 ? (obtT / maxT) * 100 : 0;
   const isDiscRed = maxT > 0 && percFinal < 60;
 
   return (
@@ -531,14 +586,22 @@ function ModalDisciplina({ disciplinaInicial, tiposHoras, atividades, onClose, o
             </div>
             
             <div className="space-y-1.5">
-              {disc.avaliacoes.map(av => {
+              {disc.avaliacoes.map((av, index) => {
                 const isCalculable = av.max !== '' && av.obtida !== '' && Number(av.max) > 0;
                 const pNum = isCalculable ? (Number(av.obtida) / Number(av.max)) * 100 : 0;
                 const pLocal = isCalculable ? pNum.toFixed(1) + '%' : '';
                 const isRed = isCalculable && pNum < 60;
 
                 return (
-                  <div key={av.id} className="flex gap-1 items-center">
+                  <div 
+                    key={av.id} 
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, index)}
+                    onDragOver={(e) => handleDragOver(e, index)}
+                    onDragEnd={handleDragEnd}
+                    className="flex gap-1 items-center bg-zinc-950/40 p-1 rounded border border-zinc-800/80"
+                  >
+                    <span className="text-zinc-500 cursor-grab hover:text-zinc-300 select-none px-1 text-xs font-bold tracking-tighter" title="Arraste para mover">⋮⋮</span>
                     <input type="text" value={av.nome} onChange={e => hAv(av.id, 'nome', e.target.value)} placeholder="Nome" className="flex-1 min-w-0 bg-zinc-950 border border-zinc-700 rounded p-1.5 text-white text-xs" />
                     
                     {av.showDateInput ? (
@@ -561,8 +624,21 @@ function ModalDisciplina({ disciplinaInicial, tiposHoras, atividades, onClose, o
               })}
             </div>
             
-            <div className="mt-3 text-xs font-medium text-zinc-400">
-              Nota Final: <span className={`font-bold text-sm ${isDiscRed ? 'text-red-500' : 'text-white'}`}>{obtT.toFixed(2)} / {maxT.toFixed(2)} - {percFinal.toFixed(2)}%</span>
+            <div className="mt-3 flex justify-between items-center text-xs font-medium text-zinc-400">
+              <div>
+                Nota Final: <span className={`font-bold text-sm ${isDiscRed ? 'text-red-500' : 'text-white'}`}>{obtT.toFixed(2)} / {maxT.toFixed(2)} - {percFinal.toFixed(2)}%</span>
+              </div>
+              
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-zinc-400">média</span>
+                <button 
+                  type="button" 
+                  onClick={() => setDisc(p => ({ ...p, usarMedia: !p.usarMedia }))}
+                  className={`w-9 h-5 flex items-center rounded-full p-1 transition-colors duration-200 ease-in-out ${disc.usarMedia ? 'bg-blue-600' : 'bg-zinc-700'}`}
+                >
+                  <div className={`bg-white w-3.5 h-3.5 rounded-full shadow-md transform transition-transform duration-200 ease-in-out ${disc.usarMedia ? 'translate-x-4' : 'translate-x-0'}`} />
+                </button>
+              </div>
             </div>
           </div>
         </div>
