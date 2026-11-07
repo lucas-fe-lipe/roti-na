@@ -36,7 +36,7 @@ export default function Dashboard() {
   const [tarefaDetalhe, setTarefaDetalhe] = useState(null);
   const [modoVisualizacao, setModoVisualizacao] = useState(true);
 
-  // 'atrasadas' inicia true (minimizado) por padrão
+  // 'atrasadas' e 'concluidas' iniciam como true (minimizados). As datas iniciam maximizadas por padrão (false).
   const [minimizedSections, setMinimizedSections] = useState({ concluidas: true, atrasadas: true });
 
   const [categorias, setCategorias] = useState(['Estudos', 'Trabalho', 'Treinos', 'Outros']);
@@ -306,7 +306,6 @@ export default function Dashboard() {
     }
   });
 
-  // Filtro de tarefas atrasadas (data anterior a hoje e não concluídas)
   const tarefasAtrasadasPorData = {};
   let totalAtrasadas = 0;
 
@@ -496,7 +495,7 @@ export default function Dashboard() {
 
             <div className="mt-3 w-full px-2 sm:px-0 flex flex-col gap-2">
               
-              {/* BLOCO DE ATRASADAS (Aparece apenas se houver tarefas atrasadas, e inicia minimizado) */}
+              {/* BLOCO DE ATRASADAS (Inicia minimizado) */}
               {totalAtrasadas > 0 && (
                 <div className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 shadow-lg">
                   <div className="flex justify-between items-center mb-1">
@@ -553,7 +552,7 @@ export default function Dashboard() {
                 </div>
               )}
 
-              {/* BLOCO DE HOJE */}
+              {/* BLOCO DE HOJE (Inicia maximizado) */}
               <div className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 shadow-lg">
                 <div className="flex justify-between items-center mb-1">
                   <button onClick={() => toggleMinimizar(hojeStr)} className="text-xs font-bold text-zinc-200 hover:text-white flex items-center gap-2">
@@ -645,7 +644,9 @@ export default function Dashboard() {
 
               {datasOrdenadas.map(dataKey => {
                 if (dataKey === hojeStr || dataKey < hojeStr) return null;
-                const isMinimizado = minimizedSections[dataKey] !== undefined ? minimizedSections[dataKey] : true;
+                
+                // Por padrão, se não estiver definido no state, inicia como falso (maximizado)
+                const isMinimizado = minimizedSections[dataKey] !== undefined ? minimizedSections[dataKey] : false;
                 
                 const listaTarefas = (tarefasPorData[dataKey] || []).filter(t => !t.concluida);
                 if (listaTarefas.length === 0 && dataKey !== 'Sem data') return null;
@@ -697,6 +698,7 @@ export default function Dashboard() {
                 );
               })}
 
+              {/* BLOCO DE CONCLUÍDAS (Inicia minimizado) */}
               {(tarefasConcluidas.length > 0 || atividadesConcluidasHojeList.length > 0) && (
                 <div className="bg-zinc-900/50 border border-zinc-800/80 rounded-xl px-3 py-2.5 shadow-lg">
                   <div className="flex justify-between items-center mb-1">
