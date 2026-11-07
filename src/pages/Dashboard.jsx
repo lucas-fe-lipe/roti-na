@@ -313,13 +313,19 @@ export default function Dashboard() {
     setMinimizedSections(prev => ({ ...prev, [dataKey]: !prev[dataKey] }));
   };
 
+  const isImageAvatar = userAvatar.startsWith('<img') || userAvatar.startsWith('http') || userAvatar.startsWith('/');
+
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col">
       <header className="flex justify-between items-center px-6 py-2 border-b border-zinc-800 shrink-0">
         <div onClick={() => setIsSidebarOpen(true)} className="flex items-center gap-2 cursor-pointer hover:text-zinc-300">
           <div className="w-8 h-8 rounded-full border-2 border-zinc-700 flex items-center justify-center overflow-hidden bg-zinc-800 text-zinc-200 font-bold text-[10px]">
             {userAvatar ? (
-              <div className="w-full h-full" dangerouslySetInnerHTML={{ __html: userAvatar }} />
+              isImageAvatar && !userAvatar.startsWith('<') ? (
+                <img src={userAvatar} alt="Perfil" className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center" dangerouslySetInnerHTML={{ __html: userAvatar }} />
+              )
             ) : (
               <span>{userInitials}</span>
             )}
