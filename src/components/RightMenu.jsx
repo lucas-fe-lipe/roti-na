@@ -1,4 +1,4 @@
-export default function RightMenu({ isOpen, onClose, onOpenNewActivity, onSelectPage, activePage }) {
+export default function RightMenu({ isOpen, onClose, onSelectPage, activePage }) {
   if (!isOpen) return null;
 
   return (
@@ -10,13 +10,6 @@ export default function RightMenu({ isOpen, onClose, onOpenNewActivity, onSelect
         </div>
 
         <div className="flex flex-col space-y-2">
-          <button 
-            onClick={() => { onOpenNewActivity(); onClose(); }} 
-            className="flex items-center gap-2 py-2 text-zinc-300 hover:text-white text-sm font-medium transition-colors text-left"
-          >
-            <span className="text-base font-bold">+</span> Nova Atividade
-          </button>
-
           <button 
             onClick={() => { onSelectPage('Grade'); onClose(); }} 
             className={`py-2 text-sm font-medium text-left transition-colors ${activePage === 'Grade' ? 'text-white font-bold' : 'text-zinc-400 hover:text-zinc-200'}`}
