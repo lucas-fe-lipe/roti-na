@@ -406,15 +406,15 @@ export default function Dashboard() {
                       <div 
                         key={`${atv.id}-${i}`} 
                         onClick={() => abrirDetalhesAtividade(atv)}
-                        className={`absolute rounded text-[10px] text-white overflow-hidden cursor-pointer hover:opacity-100 transition-opacity border border-black/20 px-1 py-0.5 flex flex-col justify-start break-words ${opacityClass}`}
+                        className={`absolute rounded text-[10px] text-white overflow-hidden cursor-pointer hover:opacity-100 transition-opacity border border-black/20 px-0.5 py-0 flex flex-col justify-start ${opacityClass}`}
                         style={{
                           backgroundColor: atv.cor, top: `${top}px`, height: `${height}px`,
                           left: `calc(${dayIndex} * (100% / 7))`, width: `calc(100% / 7)`
                         }}
                       >
-                        <div className="font-bold leading-tight break-words overflow-hidden [display:-webkit-box] [-webkit-line-clamp:unset] [-webkit-box-orient:vertical]">{textoPrincipal}</div>
+                        <div className="font-bold truncate leading-tight">{textoPrincipal}</div>
                         {atv.detalhes && (
-                          <div className="text-[8px] opacity-80 leading-tight mt-0.5 break-words overflow-hidden [display:-webkit-box] [-webkit-line-clamp:2] [-webkit-box-orient:vertical]">({atv.detalhes})</div>
+                          <div className="text-[8px] opacity-80 leading-tight mt-0 whitespace-pre-line overflow-hidden">{atv.detalhes}</div>
                         )}
                       </div>
                     );
@@ -481,7 +481,7 @@ export default function Dashboard() {
                           <span className="text-white font-bold text-xs">-</span>
                           <div className="flex flex-col overflow-hidden flex-1">
                             <span className="text-white font-semibold text-xs truncate">{atv.apelido || atv.nome}</span>
-                            {atv.detalhes && <span className="text-zinc-200 text-[10px] truncate max-w-full">({atv.detalhes})</span>}
+                            {atv.detalhes && <span className="text-zinc-200 text-[10px] truncate max-w-full">{atv.detalhes}</span>}
                           </div>
                         </div>
                         <div onClick={(e) => e.stopPropagation()} className="shrink-0 pl-2 flex items-center">
@@ -516,7 +516,7 @@ export default function Dashboard() {
                                 <span className="text-white font-semibold text-xs truncate">{t.nome}</span>
                                 {isAtrasado && <span className="bg-red-600 text-white text-[9px] px-1.5 py-0.5 rounded font-bold shrink-0">Atrasado</span>}
                               </div>
-                              {t.detalhes && <span className="text-zinc-300 text-[10px] truncate max-w-full">({t.detalhes})</span>}
+                              {t.detalhes && <span className="text-zinc-300 text-[10px] truncate max-w-full">{t.detalhes}</span>}
                             </div>
                           </div>
                           <div onClick={(e) => e.stopPropagation()} className="shrink-0 pl-2 flex items-center">
@@ -580,7 +580,7 @@ export default function Dashboard() {
                                     <span className="text-white font-semibold text-xs truncate">{t.nome}</span>
                                     {isAtrasado && <span className="bg-red-600 text-white text-[9px] px-1.5 py-0.5 rounded font-bold shrink-0">Atrasado</span>}
                                   </div>
-                                  {t.detalhes && <span className="text-zinc-300 text-[10px] truncate max-w-full">({t.detalhes})</span>}
+                                  {t.detalhes && <span className="text-zinc-300 text-[10px] truncate max-w-full">{t.detalhes}</span>}
                                 </div>
                               </div>
                               <div onClick={(e) => e.stopPropagation()} className="shrink-0 pl-2 flex items-center">
@@ -622,7 +622,7 @@ export default function Dashboard() {
                             <span className="text-white font-bold text-xs">-</span>
                             <div className="flex flex-col overflow-hidden flex-1">
                               <span className="text-white font-semibold text-xs truncate line-through">{atv.apelido || atv.nome}</span>
-                              {atv.detalhes && <span className="text-zinc-200 text-[10px] truncate line-through">({atv.detalhes})</span>}
+                              {atv.detalhes && <span className="text-zinc-200 text-[10px] truncate line-through">{atv.detalhes}</span>}
                             </div>
                           </div>
                           <div onClick={(e) => e.stopPropagation()} className="shrink-0 pl-2 flex items-center">
@@ -644,7 +644,7 @@ export default function Dashboard() {
                             
                             <div className="flex flex-col overflow-hidden flex-1">
                               <span className="text-white font-semibold text-xs truncate line-through">{t.nome}</span>
-                              {t.detalhes && <span className="text-zinc-300 text-[10px] truncate line-through">({t.detalhes})</span>}
+                              {t.detalhes && <span className="text-zinc-300 text-[10px] truncate line-through">{t.detalhes}</span>}
                             </div>
                           </div>
 
