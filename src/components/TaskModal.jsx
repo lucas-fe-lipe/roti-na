@@ -70,7 +70,7 @@ export default function TaskModal({ isOpen, onClose, onSave, onDelete, taskEdita
           <div className="flex gap-3">
             <div className="flex-1">
               <label className="block text-sm mb-1 text-zinc-400">Data (Opcional)</label>
-              <input type="date" value={data} onChange={e => setData(data)} className="w-full bg-zinc-950 border border-zinc-700 rounded p-2 text-zinc-100 focus:outline-none [color-scheme:dark]" />
+              <input type="date" value={data} onChange={e => setData(e.target.value)} className="w-full bg-zinc-950 border border-zinc-700 rounded p-2 text-zinc-100 focus:outline-none [color-scheme:dark]" />
             </div>
             <div className="flex-1">
               <label className="block text-sm mb-1 text-zinc-400">Horário (Opcional)</label>
