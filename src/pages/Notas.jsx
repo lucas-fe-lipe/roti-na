@@ -153,10 +153,7 @@ export default function Notas({ user, atividades }) {
       }
     });
     
-    // Percentual exibido individualmente na disciplina (mantém o cálculo original para ver pontos extras)
     const percentual = maxTotal > 0 ? (obtidaTotal / maxTotal) * 100 : 0;
-    
-    // A nota para a média considera diretamente o total obtido como base 100 (ex: tirou 83 = nota 83)
     const notaBase100 = Math.min(100, obtidaTotal);
 
     return { maxTotal, obtidaTotal, percentual, notaBase100 };
@@ -464,7 +461,6 @@ function ModalDisciplina({ disciplinaInicial, tiposHoras, atividades, onClose, o
   disc.avaliacoes.forEach(a => { if (a.obtida !== '' && !isNaN(a.obtida)) { maxT += Number(a.max)||0; obtT += Number(a.obtida)||0; }});
   
   const percFinal = maxT > 0 ? (obtT / maxT) * 100 : 0;
-  const notaFinalBase100 = Math.min(100, obtT);
   const isDiscRed = maxT > 0 && percFinal < 60;
 
   return (
@@ -529,7 +525,7 @@ function ModalDisciplina({ disciplinaInicial, tiposHoras, atividades, onClose, o
             </div>
             
             <div className="mt-3 text-xs font-medium text-zinc-400">
-              Nota Final: <span className={`font-bold text-sm ${isDiscRed ? 'text-red-500' : 'text-white'}`}>{obtT.toFixed(2)} / {maxT.toFixed(2)} - {percFinal.toFixed(2)}% (Média base 100: {notaFinalBase100.toFixed(2)})</span>
+              Nota Final: <span className={`font-bold text-sm ${isDiscRed ? 'text-red-500' : 'text-white'}`}>{obtT.toFixed(2)} / {maxT.toFixed(2)} - {percFinal.toFixed(2)}%</span>
             </div>
           </div>
         </div>
