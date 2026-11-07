@@ -2,14 +2,13 @@ import { useState, useEffect } from 'react';
 import { collection, doc, setDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase';
 
-export default function Notas({ user, atividades }) {
+export default function Notas({ user, atividades, isAvaliacoesOpen, setIsAvaliacoesOpen }) {
   const [cursos, setCursos] = useState([]);
   const [tarefas, setTarefas] = useState([]);
   
   const [cursoModal, setCursoModal] = useState({ open: false, data: null });
   const [periodoModal, setPeriodoModal] = useState({ open: false, data: null, cursoId: null });
   const [disciplinaModal, setDisciplinaModal] = useState({ open: false, data: null, periodoId: null, cursoId: null });
-  const [modalAvaliacoes, setModalAvaliacoes] = useState(false);
 
   const [cursosMinimizados, setCursosMinimizados] = useState({});
   const [periodosMinimizados, setPeriodosMinimizados] = useState({});
@@ -56,14 +55,12 @@ export default function Notas({ user, atividades }) {
       const taskId = `av_${cursoId}_${periodoId}_${disciplinaAtualizada.id}_${av.id}`;
       
       if (av.obtida !== '' && !isNaN(av.obtida)) {
-        // Se concluiu (ganhou nota), apaga a tarefa
         if (user) {
           await deleteDoc(doc(db, 'users', user.uid, 'tarefas', taskId)).catch(() => {});
         } else {
           tarefasLocais = tarefasLocais.filter(t => t.id !== taskId);
         }
       } else if (av.dataHora) {
-        // Se tem data e não tem nota, cria/atualiza a tarefa
         const taskData = {
           id: taskId,
           texto: `${av.nome} - ${disciplinaAtualizada.nome}`,
@@ -241,28 +238,14 @@ export default function Notas({ user, atividades }) {
 
   const hoje = new Date().toISOString().split('T')[0];
 
-  // Correção da separação para não duplicar e processar corretamente sem data final
   const cursosConcluidos = cursos.filter(c => c.dataFim && c.dataFim < hoje).sort((a, b) => new Date(b.dataFim) - new Date(a.dataFim));
   const cursosFuturos = cursos.filter(c => c.dataInicio && c.dataInicio > hoje && (!c.dataFim || c.dataFim >= hoje)).sort((a, b) => new Date(a.dataInicio) - new Date(b.dataInicio));
   const cursosAtuais = cursos.filter(c => !cursosConcluidos.includes(c) && !cursosFuturos.includes(c)).sort((a, b) => (a.dataFim ? new Date(a.dataFim).getTime() : Infinity) - (b.dataFim ? new Date(b.dataFim).getTime() : Infinity));
   const cursosOrdenados = [...cursosAtuais, ...cursosFuturos, ...cursosConcluidos];
 
   return (
-    <div className="w-full max-w-full overflow-hidden flex flex-col gap-4">
+    <div className="w-full max-w-full overflow-hidden flex flex-col gap-4 mt-2">
       
-      <div className="flex justify-between items-center bg-zinc-900/50 p-2 rounded-lg border border-zinc-800">
-        {cursos.length === 0 ? (
-          <button onClick={() => setCursoModal({ open: true, data: null })} className="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-4 py-2 rounded font-medium text-sm transition-colors border border-zinc-700">
-            + Adicionar Curso
-          </button>
-        ) : <div className="text-zinc-400 text-sm font-bold ml-2">Suas Notas</div>}
-        
-        <button onClick={() => setModalAvaliacoes(true)} className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-3 py-1.5 rounded text-sm transition-colors border border-zinc-700">
-          <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-          <span className="font-bold">Avaliações</span>
-        </button>
-      </div>
-
       {cursosOrdenados.map(curso => {
         const isMin = cursosMinimizados[curso.id] !== false; 
         let totalHorasMeta = 0;
@@ -303,7 +286,6 @@ export default function Notas({ user, atividades }) {
                 <button onClick={() => toggleMinimizarCurso(curso.id)} className="text-zinc-400 hover:text-white font-bold text-sm mt-1 shrink-0 p-1">
                   {isMin ? '▶\uFE0E' : '▼\uFE0E'}
                 </button>
-                {/* Clique no nome maximiza/minimiza */}
                 <div className="flex-1 min-w-0 cursor-pointer" onClick={() => toggleMinimizarCurso(curso.id)}>
                   <h2 className="text-lg sm:text-xl font-bold text-white break-words leading-tight">{curso.nome} - {curso.instituicao}</h2>
                   {(anoInicio || anoFim) && (
@@ -348,7 +330,6 @@ export default function Notas({ user, atividades }) {
                         <button onClick={() => toggleMinimizarPeriodo(periodo.id)} className="text-zinc-400 hover:text-white font-bold text-xs shrink-0 p-1">
                           {isMinPer ? '▶\uFE0E' : '▼\uFE0E'}
                         </button>
-                        {/* Clique no nome maximiza/minimiza */}
                         <span className="font-bold text-white text-sm sm:text-base truncate cursor-pointer" onClick={() => toggleMinimizarPeriodo(periodo.id)}>{periodo.nome}</span>
                         <span className="text-[10px] sm:text-xs text-gray-500">({periodo.dataInicio || '?'} até {periodo.dataFim || '?'})</span>
                         {perAtual && <span className="bg-blue-600 text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded text-white font-bold shrink-0">ATUAL</span>}
@@ -406,13 +387,11 @@ export default function Notas({ user, atividades }) {
         );
       })}
 
-      {cursos.length > 0 && (
-        <div className="flex justify-start mt-2 mb-4">
-          <button onClick={() => setCursoModal({ open: true, data: null })} className="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-4 py-2 rounded font-medium text-sm transition-colors border border-zinc-700">
-            + Adicionar Curso
-          </button>
-        </div>
-      )}
+      <div className="flex justify-start mt-2 mb-4">
+        <button onClick={() => setCursoModal({ open: true, data: null })} className="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-4 py-2 rounded font-medium text-sm transition-colors border border-zinc-700">
+          + Adicionar Curso
+        </button>
+      </div>
 
       {cursoModal.open && <ModalCurso cursoInicial={cursoModal.data} onClose={() => setCursoModal({ open: false, data: null })} onSave={salvarCurso} onDelete={excluirCurso} />}
       {periodoModal.open && <ModalPeriodo periodoInicial={periodoModal.data} onClose={() => setPeriodoModal({ open: false, data: null, cursoId: null })} onSave={(p) => salvarPeriodo(p, periodoModal.cursoId)} onDelete={(id) => excluirPeriodo(id, periodoModal.cursoId)} />}
@@ -426,14 +405,13 @@ export default function Notas({ user, atividades }) {
           onDelete={(id) => excluirDisciplina(id, disciplinaModal.periodoId, disciplinaModal.cursoId)} 
         />
       )}
-      {modalAvaliacoes && (
-        <ModalAvaliacoesGlobal cursos={cursos} tarefas={tarefas} onClose={() => setModalAvaliacoes(false)} onConfirmar={confirmarNotaGlobal} />
+      {isAvaliacoesOpen && (
+        <ModalAvaliacoesGlobal cursos={cursos} tarefas={tarefas} onClose={() => setIsAvaliacoesOpen(false)} onConfirmar={confirmarNotaGlobal} />
       )}
     </div>
   );
 }
 
-// ... Modais de Curso e Período idênticos ao anterior ...
 function ModalCurso({ cursoInicial, onClose, onSave, onDelete }) {
   const [curso, setCurso] = useState(cursoInicial || { nome: '', instituicao: '', dataInicio: '', dataFim: '', tiposHoras: [{ id: Date.now().toString(), nome: 'Obrigatória', quantidade: '' }] });
   const handleTipoHoraChange = (id, field, value) => setCurso(p => ({ ...p, tiposHoras: p.tiposHoras.map(t => t.id === id ? { ...t, [field]: value } : t) }));
@@ -561,21 +539,19 @@ function ModalDisciplina({ disciplinaInicial, tiposHoras, atividades, onClose, o
 
                 return (
                   <div key={av.id} className="flex gap-1 items-center">
-                    <input type="text" value={av.nome} onChange={e => hAv(av.id, 'nome', e.target.value)} placeholder="Nome" className="w-[85px] bg-zinc-950 border border-zinc-700 rounded p-1.5 text-white text-xs" />
+                    <input type="text" value={av.nome} onChange={e => hAv(av.id, 'nome', e.target.value)} placeholder="Nome" className="flex-1 min-w-0 bg-zinc-950 border border-zinc-700 rounded p-1.5 text-white text-xs" />
                     
                     {av.showDateInput ? (
-                      <input type="datetime-local" value={av.dataHora || ''} onChange={e => hAv(av.id, 'dataHora', e.target.value)} onBlur={() => hAv(av.id, 'showDateInput', false)} autoFocus className="flex-1 bg-zinc-950 border border-zinc-700 rounded p-1.5 text-white text-[10px] [color-scheme:dark]" />
+                      <input type="datetime-local" value={av.dataHora || ''} onChange={e => hAv(av.id, 'dataHora', e.target.value)} onBlur={() => hAv(av.id, 'showDateInput', false)} autoFocus className="w-[100px] sm:w-auto bg-zinc-950 border border-zinc-700 rounded p-1.5 text-white text-[10px] [color-scheme:dark] shrink-0" />
                     ) : (
-                      <div className="flex-1 flex justify-center">
-                        <button onClick={() => hAv(av.id, 'showDateInput', true)} className={`w-8 h-8 flex items-center justify-center rounded border transition-colors ${av.dataHora ? 'bg-blue-600/20 border-blue-500/50 text-blue-400' : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:bg-zinc-700 hover:text-white'}`}>
-                           <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-                        </button>
-                      </div>
+                      <button onClick={() => hAv(av.id, 'showDateInput', true)} className={`w-8 h-8 shrink-0 flex items-center justify-center rounded border transition-colors ${av.dataHora ? 'bg-blue-600/20 border-blue-500/50 text-blue-400' : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:bg-zinc-700 hover:text-white'}`}>
+                         <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                      </button>
                     )}
 
-                    <input type="number" value={av.max} onChange={e => hAv(av.id, 'max', e.target.value)} placeholder="Total" className="w-11 bg-zinc-950 border border-zinc-700 rounded p-1.5 text-white text-xs text-center" />
-                    <input type="number" value={av.obtida} onChange={e => hAv(av.id, 'obtida', e.target.value)} placeholder="Nota" className="w-11 bg-zinc-950 border border-zinc-700 rounded p-1.5 text-white text-xs text-center" />
-                    <span className={`w-9 text-right text-[10px] font-bold ${isRed ? 'text-red-500' : 'text-zinc-400'}`}>{pLocal}</span>
+                    <input type="number" value={av.max} onChange={e => hAv(av.id, 'max', e.target.value)} placeholder="Total" className="w-10 sm:w-11 shrink-0 bg-zinc-950 border border-zinc-700 rounded p-1.5 text-white text-xs text-center" />
+                    <input type="number" value={av.obtida} onChange={e => hAv(av.id, 'obtida', e.target.value)} placeholder="Nota" className="w-10 sm:w-11 shrink-0 bg-zinc-950 border border-zinc-700 rounded p-1.5 text-white text-xs text-center" />
+                    <span className={`w-9 shrink-0 text-right text-[10px] font-bold ${isRed ? 'text-red-500' : 'text-zinc-400'}`}>{pLocal}</span>
                     <button onClick={() => setDisc(p => ({...p, avaliacoes: p.avaliacoes.filter(x => x.id !== av.id)}))} className="text-red-500 hover:text-red-400 font-bold px-1.5 py-0.5 text-base bg-transparent border-none shrink-0">×</button>
                   </div>
                 );
