@@ -1,12 +1,19 @@
 import { useState, useEffect } from 'react';
 import { updateProfile, deleteUser } from 'firebase/auth';
-import { DEFAULT_AVATARS, getInitials } from '../utils/defaultAvatars';
+import { getInitials } from '../utils/defaultAvatars';
 
 export default function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }) {
   const [displayName, setDisplayName] = useState('');
   const [selectedAvatar, setSelectedAvatar] = useState('');
   const [erro, setErro] = useState('');
   const [confirmarExclusao, setConfirmarExclusao] = useState(false);
+
+  // As 3 imagens específicas que você colocou na pasta public
+  const customAvatars = [
+    { id: '1', url: '/roti-na/avatar1.png', name: 'Avatar 1' },
+    { id: '2', url: '/roti-na/avatar2.png', name: 'Avatar 2' },
+    { id: '3', url: '/roti-na/avatar3.png', name: 'Avatar 3' },
+  ];
 
   useEffect(() => {
     if (user && isOpen) {
@@ -78,25 +85,29 @@ export default function EditProfileModal({ isOpen, onClose, user, onProfileUpdat
 
           <div>
             <label className="block text-sm mb-2 text-zinc-400">Escolha o Avatar ou Iniciais</label>
-            <div className="flex items-center gap-3">
+            
+            {/* CARROSSEL HORIZONTAL COM AVATARES GRANDES */}
+            <div className="flex items-center gap-4 overflow-x-auto py-2 px-1 scrollbar-thin scrollbar-thumb-zinc-700">
+              
               {/* Opção Iniciais */}
               <div 
                 onClick={() => setSelectedAvatar('')}
-                className={`w-12 h-12 rounded-full border-2 flex items-center justify-center cursor-pointer bg-zinc-800 text-zinc-200 font-bold text-sm transition-all ${!selectedAvatar ? 'border-white scale-105' : 'border-zinc-700 opacity-60 hover:opacity-100'}`}
+                className={`w-20 h-20 rounded-full border-4 flex items-center justify-center cursor-pointer bg-zinc-800 text-zinc-200 font-bold text-xl shrink-0 transition-all ${!selectedAvatar ? 'border-white scale-105 shadow-lg' : 'border-zinc-700 opacity-60 hover:opacity-100'}`}
                 title="Usar Iniciais"
               >
                 {userInitials}
               </div>
 
-              {/* Opções dos 3 Avatares SVG */}
-              {DEFAULT_AVATARS.map((avatar) => (
+              {/* Opções das 3 Imagens Personalizadas */}
+              {customAvatars.map((avatar) => (
                 <div 
                   key={avatar.id}
-                  onClick={() => setSelectedAvatar(avatar.svg)}
-                  className={`w-12 h-12 rounded-full border-2 overflow-hidden cursor-pointer transition-all ${selectedAvatar === avatar.svg ? 'border-white scale-105' : 'border-zinc-700 opacity-60 hover:opacity-100'}`}
+                  onClick={() => setSelectedAvatar(avatar.url)}
+                  className={`w-20 h-20 rounded-full border-4 overflow-hidden cursor-pointer shrink-0 transition-all ${selectedAvatar === avatar.url ? 'border-white scale-105 shadow-lg' : 'border-zinc-700 opacity-60 hover:opacity-100'}`}
                   title={avatar.name}
-                  dangerouslySetInnerHTML={{ __html: avatar.svg }}
-                />
+                >
+                  <img src={avatar.url} alt={avatar.name} className="w-full h-full object-cover" />
+                </div>
               ))}
             </div>
           </div>
