@@ -11,6 +11,7 @@ export default function Sidebar({ isOpen, onClose, user, onProfileUpdated }) {
   const [erro, setErro] = useState('');
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
   const [userAvatar, setUserAvatar] = useState('');
+  const [isFullScreenImageOpen, setIsFullScreenImageOpen] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -48,6 +49,8 @@ export default function Sidebar({ isOpen, onClose, user, onProfileUpdated }) {
   const userName = user ? (user.displayName || user.email.split('@')[0]) : '';
   const userInitials = getInitials(userName || user?.email);
 
+  const isImageAvatar = userAvatar.startsWith('<img') || userAvatar.startsWith('http') || userAvatar.startsWith('/');
+
   return (
     <>
       {isOpen && <div className="fixed inset-0 bg-black/50 z-40 transition-opacity" onClick={onClose}></div>}
@@ -58,24 +61,34 @@ export default function Sidebar({ isOpen, onClose, user, onProfileUpdated }) {
           <button onClick={onClose} className="text-zinc-400 hover:text-white text-3xl leading-none font-light">&times;</button>
         </div>
 
-        <div className="p-6 flex-1 flex flex-col gap-5">
+        <div className="p-6 flex-1 flex flex-col gap-5 overflow-y-auto">
           {user ? (
-            <div className="flex flex-col gap-6">
-              <div className="flex items-center gap-3 p-3 bg-zinc-950 rounded-lg border border-zinc-800">
-                <div className="w-10 h-10 rounded-full border-2 border-zinc-700 flex items-center justify-center overflow-hidden bg-zinc-800 text-zinc-200 font-bold text-xs shrink-0">
+            <div className="flex flex-col gap-6 items-center">
+              
+              {/* FOTO GRANDE E CENTRALIZADA */}
+              <div className="flex flex-col items-center gap-3 mt-2">
+                <div 
+                  onClick={() => setIsFullScreenImageOpen(true)}
+                  className="w-24 h-24 rounded-full border-4 border-zinc-700 flex items-center justify-center overflow-hidden bg-zinc-800 text-zinc-200 font-bold text-2xl shadow-xl cursor-pointer hover:border-zinc-500 transition-all"
+                  title="Clique para ver em tela cheia"
+                >
                   {userAvatar ? (
-                    <div className="w-full h-full" dangerouslySetInnerHTML={{ __html: userAvatar }} />
+                    isImageAvatar && !userAvatar.startsWith('<') ? (
+                      <img src={userAvatar} alt="Perfil" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center" dangerouslySetInnerHTML={{ __html: userAvatar }} />
+                    )
                   ) : (
                     <span>{userInitials}</span>
                   )}
                 </div>
-                <div className="overflow-hidden">
-                  <span className="text-sm font-medium text-zinc-100 truncate block">{userName}</span>
-                  <span className="text-xs text-zinc-500 truncate block">{user.email}</span>
+                <div className="text-center overflow-hidden w-full">
+                  <span className="text-base font-bold text-zinc-100 truncate block">{userName}</span>
+                  <span className="text-xs text-zinc-400 truncate block mt-0.5">{user.email}</span>
                 </div>
               </div>
 
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-2 w-full mt-2">
                 <button 
                   onClick={() => setIsEditProfileOpen(true)}
                   className="w-full text-left px-4 py-2.5 rounded bg-zinc-800/50 hover:bg-zinc-800 text-sm text-zinc-200 transition-colors flex items-center justify-between"
@@ -140,6 +153,27 @@ export default function Sidebar({ isOpen, onClose, user, onProfileUpdated }) {
           )}
         </div>
       </div>
+
+      {/* MODAL DE TELA CHEIA PARA A FOTO */}
+      {isFullScreenImageOpen && (
+        <div className="fixed inset-0 bg-black/95 flex items-center justify-center z-50 p-4" onClick={() => setIsFullScreenImageOpen(false)}>
+          <div className="relative max-w-lg w-full flex flex-col items-center">
+            <button className="absolute -top-12 right-0 text-white text-3xl font-light">&times;</button>
+            <div className="w-64 h-64 sm:w-80 sm:h-80 rounded-full border-4 border-zinc-700 overflow-hidden bg-zinc-800 flex items-center justify-center shadow-2xl text-zinc-200 font-bold text-6xl">
+              {userAvatar ? (
+                isImageAvatar && !userAvatar.startsWith('<') ? (
+                  <img src={userAvatar} alt="Perfil Grande" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center scale-150" dangerouslySetInnerHTML={{ __html: userAvatar }} />
+                )
+              ) : (
+                <span>{userInitials}</span>
+              )}
+            </div>
+            <span className="text-zinc-300 font-bold text-lg mt-6">{userName}</span>
+          </div>
+        </div>
+      )}
 
       <EditProfileModal isOpen={isEditProfileOpen} onClose={() => setIsEditProfileOpen(false)} user={user} onProfileUpdated={onProfileUpdated} />
     </>
