@@ -3,7 +3,7 @@ import Dashboard from "./pages/Dashboard";
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename="/roti-na">
       <Routes>
         <Route path="/" element={<Dashboard />} />
       </Routes>
