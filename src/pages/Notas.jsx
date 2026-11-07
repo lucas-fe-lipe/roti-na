@@ -346,8 +346,8 @@ function ModalCurso({ cursoInicial, onClose, onSave, onDelete }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-      <div className="bg-zinc-900 text-zinc-100 rounded-lg w-full max-w-lg p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto border border-zinc-800">
+    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-3 sm:p-4">
+      <div className="bg-zinc-900 text-zinc-100 rounded-lg w-full max-w-lg p-4 sm:p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto border border-zinc-800">
         <h2 className="text-xl font-bold">{cursoInicial ? 'Editar Curso' : 'Novo Curso'}</h2>
         
         <div className="space-y-3">
@@ -387,8 +387,8 @@ function ModalPeriodo({ periodoInicial, onClose, onSave, onDelete }) {
   const [periodo, setPeriodo] = useState(periodoInicial || { nome: '', dataInicio: '', dataFim: '', tipoMedia: 'ponderada' });
 
   return (
-    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-      <div className="bg-zinc-900 text-zinc-100 rounded-lg w-full max-w-sm p-6 shadow-2xl space-y-4 border border-zinc-800">
+    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-3 sm:p-4">
+      <div className="bg-zinc-900 text-zinc-100 rounded-lg w-full max-w-sm p-4 sm:p-6 shadow-2xl space-y-4 border border-zinc-800">
         <h2 className="text-xl font-bold">{periodoInicial ? 'Editar Período' : 'Novo Período'}</h2>
         
         <div className="space-y-3">
@@ -429,14 +429,14 @@ function ModalDisciplina({ disciplinaInicial, tiposHoras, atividades, onClose, o
   const isDiscRed = maxT > 0 && percFinal < 60;
 
   return (
-    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-      <div className="bg-zinc-900 text-zinc-100 rounded-xl w-full max-w-md p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto border border-zinc-800">
+    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-2 sm:p-4">
+      <div className="bg-zinc-900 text-zinc-100 rounded-xl w-full max-w-md p-3 sm:p-5 shadow-2xl space-y-3 max-h-[90vh] overflow-y-auto border border-zinc-800">
         <h2 className="text-xl font-bold">{disciplinaInicial ? 'Editar Disciplina' : 'Nova Disciplina'}</h2>
         
-        <div className="space-y-3">
+        <div className="space-y-2.5">
           <div><label className="block text-xs font-semibold text-zinc-400 mb-1">Nome</label><input type="text" value={disc.nome} onChange={e => setDisc({...disc, nome: e.target.value})} className="w-full bg-zinc-950 border border-zinc-700 rounded p-2 text-white text-sm" /></div>
           <div><label className="block text-xs font-semibold text-zinc-400 mb-1">Professor</label><input type="text" value={disc.professor} onChange={e => setDisc({...disc, professor: e.target.value})} className="w-full bg-zinc-950 border border-zinc-700 rounded p-2 text-white text-sm" /></div>
-          <div className="flex gap-3">
+          <div className="flex gap-2">
             <div className="flex-1"><label className="block text-xs font-semibold text-zinc-400 mb-1">Carga (H)</label><input type="number" value={disc.cargaHoraria} onChange={e => setDisc({...disc, cargaHoraria: e.target.value})} className="w-full bg-zinc-950 border border-zinc-700 rounded p-2 text-white text-sm" /></div>
             <div className="flex-1">
               <label className="block text-xs font-semibold text-zinc-400 mb-1">Tipo</label>
@@ -464,42 +464,39 @@ function ModalDisciplina({ disciplinaInicial, tiposHoras, atividades, onClose, o
             </select>
           </div>
 
-          <div className="pt-3 border-t border-zinc-800">
-            <div className="flex justify-between items-center mb-3">
+          <div className="pt-2 border-t border-zinc-800">
+            <div className="flex justify-between items-center mb-2">
               <label className="text-sm font-bold text-zinc-300">Avaliações</label>
-              <button onClick={() => setDisc(p => ({...p, avaliacoes: [...p.avaliacoes, { id: Date.now().toString(), nome: `P${p.avaliacoes.length+1}`, max: '', obtida: '' }]}))} className="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-3 py-1 rounded text-xs border border-zinc-600 font-bold tracking-wide">+ Prova</button>
+              <button onClick={() => setDisc(p => ({...p, avaliacoes: [...p.avaliacoes, { id: Date.now().toString(), nome: `P${p.avaliacoes.length+1}`, max: '', obtida: '' }]}))} className="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-2.5 py-1 rounded text-xs border border-zinc-600 font-bold">+ Prova</button>
             </div>
             
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {disc.avaliacoes.map(av => {
-                const isCalculable = av.max !== '' && av.obtida !== '';
-                const pLocal = isCalculable ? ((Number(av.obtida)/Number(av.max))*100).toFixed(1)+'%' : '-';
                 return (
-                  <div key={av.id} className="flex gap-2 items-center">
-                    <input type="text" value={av.nome} onChange={e => hAv(av.id, 'nome', e.target.value)} placeholder="Nome" className="flex-1 bg-zinc-950 border border-zinc-700 rounded p-2 text-white text-sm" />
-                    <input type="number" value={av.max} onChange={e => hAv(av.id, 'max', e.target.value)} placeholder="Total" className="w-16 bg-zinc-950 border border-zinc-700 rounded p-2 text-white text-sm text-center" />
-                    <input type="number" value={av.obtida} onChange={e => hAv(av.id, 'obtida', e.target.value)} placeholder="Nota" className="w-16 bg-zinc-950 border border-zinc-700 rounded p-2 text-white text-sm text-center" />
-                    <span className="w-12 text-right text-[10px] font-bold text-zinc-400">{pLocal}</span>
-                    <button onClick={() => setDisc(p => ({...p, avaliacoes: p.avaliacoes.filter(x => x.id !== av.id)}))} className="bg-red-500 hover:bg-red-400 text-white w-7 h-7 flex items-center justify-center rounded text-xs font-bold shrink-0">X</button>
+                  <div key={av.id} className="flex gap-1.5 items-center">
+                    <input type="text" value={av.nome} onChange={e => hAv(av.id, 'nome', e.target.value)} placeholder="Nome" className="flex-1 bg-zinc-950 border border-zinc-700 rounded p-1.5 text-white text-xs" />
+                    <input type="number" value={av.max} onChange={e => hAv(av.id, 'max', e.target.value)} placeholder="Total" className="w-14 bg-zinc-950 border border-zinc-700 rounded p-1.5 text-white text-xs text-center" />
+                    <input type="number" value={av.obtida} onChange={e => hAv(av.id, 'obtida', e.target.value)} placeholder="Nota" className="w-14 bg-zinc-950 border border-zinc-700 rounded p-1.5 text-white text-xs text-center" />
+                    <button onClick={() => setDisc(p => ({...p, avaliacoes: p.avaliacoes.filter(x => x.id !== av.id)}))} className="bg-red-600 hover:bg-red-500 text-white w-6 h-6 flex items-center justify-center rounded text-xs font-bold shrink-0">X</button>
                   </div>
                 );
               })}
             </div>
             
-            <div className="mt-4 text-xs font-medium text-zinc-400">
+            <div className="mt-3 text-xs font-medium text-zinc-400">
               Nota Final: <span className={`font-bold text-sm ${isDiscRed ? 'text-red-500' : 'text-white'}`}>{obtT.toFixed(1)} / {maxT.toFixed(1)} - {percFinal.toFixed(2)}%</span>
             </div>
           </div>
         </div>
 
-        <div className="flex justify-between items-center pt-4 border-t border-zinc-800 mt-4">
+        <div className="flex justify-between items-center pt-3 border-t border-zinc-800 mt-3">
           {disciplinaInicial ? (
             <button onClick={() => onDelete(disc.id)} className="text-red-500 hover:text-red-400 font-bold text-sm">Excluir</button>
           ) : <div></div>}
           
           <div className="flex gap-2">
-            <button onClick={onClose} className="px-4 py-2 bg-zinc-800 rounded text-zinc-300 hover:bg-zinc-700 font-bold text-sm transition-colors">Cancelar</button>
-            <button onClick={() => onSave(disc)} className="px-4 py-2 bg-zinc-600 text-white rounded hover:bg-zinc-500 font-bold text-sm transition-colors">Salvar</button>
+            <button onClick={onClose} className="px-3 py-1.5 bg-zinc-800 rounded text-zinc-300 hover:bg-zinc-700 font-bold text-xs transition-colors">Cancelar</button>
+            <button onClick={() => onSave(disc)} className="px-3 py-1.5 bg-zinc-600 text-white rounded hover:bg-zinc-500 font-bold text-xs transition-colors">Salvar</button>
           </div>
         </div>
       </div>
