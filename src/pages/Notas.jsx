@@ -60,12 +60,12 @@ export default function Notas({ user, atividades, isAvaliacoesOpen, setIsAvaliac
         } else {
           tarefasLocais = tarefasLocais.filter(t => t.id !== taskId);
         }
-      } else if (av.dataHora) {
+      } else if (av.data) {
         const taskData = {
           id: taskId,
           texto: `${av.nome} - ${disciplinaAtualizada.nome}`,
-          data: av.dataHora.split('T')[0],
-          hora: av.dataHora.split('T')[1] || '',
+          data: av.data,
+          hora: av.hora || '',
           concluida: false,
           tipo: 'avaliacao'
         };
@@ -527,7 +527,7 @@ function ModalDisciplina({ disciplinaInicial, tiposHoras, atividades, onClose, o
           <div className="pt-2 border-t border-zinc-800">
             <div className="flex justify-between items-center mb-2">
               <label className="text-sm font-bold text-zinc-300">Avaliações</label>
-              <button onClick={() => setDisc(p => ({...p, avaliacoes: [...p.avaliacoes, { id: Date.now().toString(), nome: `P${p.avaliacoes.length+1}`, max: '', obtida: '', dataHora: '', showDateInput: false }]}))} className="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-2.5 py-1 rounded text-xs border border-zinc-600 font-bold">+ Adicionar</button>
+              <button onClick={() => setDisc(p => ({...p, avaliacoes: [...p.avaliacoes, { id: Date.now().toString(), nome: `P${p.avaliacoes.length+1}`, max: '', obtida: '', data: '', hora: '', showDateInput: false }]}))} className="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-2.5 py-1 rounded text-xs border border-zinc-600 font-bold">+ Adicionar</button>
             </div>
             
             <div className="space-y-1.5">
@@ -542,9 +542,12 @@ function ModalDisciplina({ disciplinaInicial, tiposHoras, atividades, onClose, o
                     <input type="text" value={av.nome} onChange={e => hAv(av.id, 'nome', e.target.value)} placeholder="Nome" className="flex-1 min-w-0 bg-zinc-950 border border-zinc-700 rounded p-1.5 text-white text-xs" />
                     
                     {av.showDateInput ? (
-                      <input type="datetime-local" value={av.dataHora || ''} onChange={e => hAv(av.id, 'dataHora', e.target.value)} onBlur={() => hAv(av.id, 'showDateInput', false)} autoFocus className="w-[100px] sm:w-auto bg-zinc-950 border border-zinc-700 rounded p-1.5 text-white text-[10px] [color-scheme:dark] shrink-0" />
+                      <div className="flex gap-1 shrink-0 items-center">
+                        <input type="date" value={av.data || ''} onChange={e => hAv(av.id, 'data', e.target.value)} onBlur={(e) => { if (!e.currentTarget.parentNode.contains(e.relatedTarget)) hAv(av.id, 'showDateInput', false); }} autoFocus className="w-[105px] bg-zinc-950 border border-zinc-700 rounded p-1.5 text-white text-[10px] [color-scheme:dark]" />
+                        <input type="time" value={av.hora || ''} onChange={e => hAv(av.id, 'hora', e.target.value)} onBlur={(e) => { if (!e.currentTarget.parentNode.contains(e.relatedTarget)) hAv(av.id, 'showDateInput', false); }} className="w-[75px] bg-zinc-950 border border-zinc-700 rounded p-1.5 text-white text-[10px] [color-scheme:dark]" />
+                      </div>
                     ) : (
-                      <button onClick={() => hAv(av.id, 'showDateInput', true)} className={`w-8 h-8 shrink-0 flex items-center justify-center rounded border transition-colors ${av.dataHora ? 'bg-blue-600/20 border-blue-500/50 text-blue-400' : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:bg-zinc-700 hover:text-white'}`}>
+                      <button onClick={() => hAv(av.id, 'showDateInput', true)} className={`w-8 h-8 shrink-0 flex items-center justify-center rounded border transition-colors ${av.data ? 'bg-blue-600/20 border-blue-500/50 text-blue-400' : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:bg-zinc-700 hover:text-white'}`}>
                          <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
                       </button>
                     )}
@@ -605,30 +608,47 @@ function ModalAvaliacoesGlobal({ cursos, tarefas, onClose, onConfirmar }) {
     if (av.obtida !== '' && !isNaN(av.obtida)) {
       concluidas.push(av);
     } else {
-      const taskId = `av_${av.cursoId}_av.${av.periodoId}_${av.disciplinaId}_${av.id}`;
+      const taskId = `av_${av.cursoId}_${av.periodoId}_${av.disciplinaId}_${av.id}`;
       const task = tarefas.find(t => t.id === taskId);
-      const dataAv = av.dataHora ? new Date(av.dataHora) : null;
+      
+      let dataAv = null;
+      if (av.data) {
+        dataAv = new Date(`${av.data}T${av.hora || '00:00'}:00`);
+      }
       
       if (task?.concluida || (dataAv && dataAv < now)) correcao.push(av);
       else proximas.push(av);
     }
   });
 
-  correcao.sort((a, b) => (!a.dataHora ? -1 : !b.dataHora ? 1 : new Date(a.dataHora) - new Date(b.dataHora)));
-  proximas.sort((a, b) => (!a.dataHora ? 1 : !b.dataHora ? -1 : new Date(a.dataHora) - new Date(b.dataHora)));
-  concluidas.sort((a, b) => (!a.dataHora ? 1 : !b.dataHora ? -1 : new Date(b.dataHora) - new Date(a.dataHora)));
+  correcao.sort((a, b) => {
+    if (!a.data) return -1;
+    if (!b.data) return 1;
+    return new Date(`${a.data}T${a.hora || '00:00'}:00`) - new Date(`${b.data}T${b.hora || '00:00'}:00`);
+  });
+  
+  proximas.sort((a, b) => {
+    if (!a.data) return 1;
+    if (!b.data) return -1;
+    return new Date(`${a.data}T${a.hora || '00:00'}:00`) - new Date(`${b.data}T${b.hora || '00:00'}:00`);
+  });
+  
+  concluidas.sort((a, b) => {
+    if (!a.data) return 1;
+    if (!b.data) return -1;
+    return new Date(`${b.data}T${b.hora || '00:00'}:00`) - new Date(`${a.data}T${a.hora || '00:00'}:00`);
+  });
 
-  const formatarData = (iso) => {
-    if (!iso) return 'Sem data';
-    const [d, t] = iso.split('T');
-    const [y, m, day] = d.split('-');
-    return `${day}/${m} às ${t || '00:00'}`;
+  const formatarData = (dataStr, horaStr) => {
+    if (!dataStr) return 'Sem data';
+    const [y, m, day] = dataStr.split('-');
+    return `${day}/${m}${horaStr ? ` às ${horaStr}` : ''}`;
   };
 
   const renderAvItem = (av, editavel) => (
     <div key={`${av.cursoId}_${av.id}`} className="flex items-center gap-2 mb-2 p-2.5 bg-zinc-800/40 border border-zinc-800 rounded-lg">
       <div className="flex-1 min-w-0 pr-2">
-        <div className="text-[11px] text-zinc-400 mb-0.5">{formatarData(av.dataHora)}</div>
+        <div className="text-[11px] text-zinc-400 mb-0.5">{formatarData(av.data, av.hora)}</div>
         <div className="text-sm font-bold text-white truncate leading-tight">{av.nome}</div>
         <div className="text-xs text-zinc-500 truncate">{av.disciplinaNome}</div>
       </div>
@@ -667,7 +687,7 @@ function ModalAvaliacoesGlobal({ cursos, tarefas, onClose, onConfirmar }) {
           <div>
             <div className="flex items-center gap-2 cursor-pointer mb-2" onClick={() => setMinCorrecao(!minCorrecao)}>
               <span className="text-zinc-400 text-xs font-bold">{minCorrecao ? '▶\uFE0E' : '▼\uFE0E'}</span>
-              <h3 className="font-bold text-red-400 uppercase tracking-wide text-sm">Correção ({correcao.length})</h3>
+              <h3 className="font-bold text-white uppercase tracking-wide text-sm">Correção ({correcao.length})</h3>
             </div>
             {!minCorrecao && (
               <div className="flex flex-col">
@@ -691,7 +711,7 @@ function ModalAvaliacoesGlobal({ cursos, tarefas, onClose, onConfirmar }) {
           <div>
             <div className="flex items-center gap-2 cursor-pointer mb-2" onClick={() => setMinConcluidas(!minConcluidas)}>
               <span className="text-zinc-400 text-xs font-bold">{minConcluidas ? '▶\uFE0E' : '▼\uFE0E'}</span>
-              <h3 className="font-bold text-green-500 uppercase tracking-wide text-sm">Concluídas ({concluidas.length})</h3>
+              <h3 className="font-bold text-white uppercase tracking-wide text-sm">Concluídas ({concluidas.length})</h3>
             </div>
             {!minConcluidas && (
               <div className="flex flex-col opacity-60">
