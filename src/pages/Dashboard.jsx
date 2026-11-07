@@ -222,8 +222,8 @@ export default function Dashboard() {
     }
   };
 
-  const handleToggleConcluidaAtividade = (atvOriginalId) => {
-    const key = `atv-${atvOriginalId}`;
+  const handleToggleConcluidaAtividade = (atvId, horarioInicio) => {
+    const key = `atv-${atvId}-${horarioInicio}`;
     setAtividadesConcluidasHoje(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
@@ -277,11 +277,13 @@ export default function Dashboard() {
     atv.horarios.forEach(h => {
       const diaAbreviado = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'][currentDay];
       if (h.dia === diaAbreviado) {
+        const uniqueKey = `atv-${atv.id}-${h.inicio}`;
         atividadesDoDia.push({
           ...atv,
-          uniqueKey: `atv-${atv.id}`,
+          uniqueKey,
           horarioExibicao: h.inicio,
-          concluida: !!atividadesConcluidasHoje[`atv-${atv.id}`]
+          horarioInicio: h.inicio,
+          concluida: !!atividadesConcluidasHoje[uniqueKey]
         });
       }
     });
@@ -412,9 +414,9 @@ export default function Dashboard() {
                           left: `calc(${dayIndex} * (100% / 7))`, width: `calc(100% / 7)`
                         }}
                       >
-                        <div className="font-bold leading-tight break-words">{textoPrincipal}</div>
+                        <div className="font-bold leading-none break-words">{textoPrincipal}</div>
                         {atv.detalhes && (
-                          <div className="text-[8px] opacity-80 leading-tight mt-0.5 whitespace-pre-line break-words">{atv.detalhes}</div>
+                          <div className="text-[8px] opacity-80 leading-none mt-0.5 whitespace-pre-line break-words">{atv.detalhes}</div>
                         )}
                       </div>
                     );
@@ -434,13 +436,13 @@ export default function Dashboard() {
               {metas.map((m) => {
                 const percentual = Math.min(100, (m.progresso / m.meta) * 100);
                 return (
-                  <div key={m.id} className="relative flex items-center justify-between min-w-[200px] max-w-[280px] bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden shrink-0 h-12 shadow-md">
+                  <div key={m.id} className="relative inline-flex items-center justify-between w-auto max-w-[280px] bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden shrink-0 h-12 shadow-md">
                     <div className="absolute top-0 left-0 bottom-0 transition-all duration-300 opacity-80 z-0" style={{ width: `${percentual}%`, backgroundColor: m.cor }}></div>
                     <div className="relative z-10 px-3 flex flex-col justify-center overflow-hidden">
                       <span className="text-xs font-bold text-white truncate">{m.titulo}</span>
                       <span className="text-[10px] text-zinc-300 font-mono">{m.progresso} / {m.meta} {m.unidade}</span>
                     </div>
-                    <div className="relative z-10 flex items-center gap-1 pr-2">
+                    <div className="relative z-10 flex items-center gap-1 pr-2 pl-2">
                       <button onClick={() => handleIncrementarMeta(m.id)} className="w-7 h-7 bg-zinc-800/80 hover:bg-zinc-700 text-white rounded flex items-center justify-center text-sm transition-colors">+</button>
                       <button onClick={() => { setMetaEditando(m); setIsGoalModalOpen(true); }} className="w-7 h-7 bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 rounded flex items-center justify-center text-xs transition-colors">...</button>
                     </div>
@@ -485,7 +487,7 @@ export default function Dashboard() {
                           </div>
                         </div>
                         <div onClick={(e) => e.stopPropagation()} className="shrink-0 pl-2 flex items-center">
-                          <input type="checkbox" checked={false} onChange={() => handleToggleConcluidaAtividade(atv.id)} className="w-4 h-4 rounded cursor-pointer bg-black/35 border-0 accent-zinc-500" />
+                          <input type="checkbox" checked={false} onChange={() => handleToggleConcluidaAtividade(atv.id, atv.horarioInicio)} className="w-4 h-4 rounded cursor-pointer bg-black/35 border-0 accent-zinc-500" />
                         </div>
                       </div>
                     ))}
@@ -626,7 +628,7 @@ export default function Dashboard() {
                             </div>
                           </div>
                           <div onClick={(e) => e.stopPropagation()} className="shrink-0 pl-2 flex items-center">
-                            <input type="checkbox" checked={true} onChange={() => handleToggleConcluidaAtividade(atv.id)} className="w-4 h-4 rounded cursor-pointer accent-zinc-500" />
+                            <input type="checkbox" checked={true} onChange={() => handleToggleConcluidaAtividade(atv.id, atv.horarioInicio)} className="w-4 h-4 rounded cursor-pointer accent-zinc-500" />
                           </div>
                         </div>
                       ))}
