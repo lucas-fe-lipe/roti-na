@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { updateProfile, deleteUser } from 'firebase/auth';
+import { doc, setDoc } from 'firebase/firestore';
+import { db } from '../services/firebase';
 import { getInitials } from '../utils/defaultAvatars';
 
 export default function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }) {
@@ -34,6 +36,13 @@ export default function EditProfileModal({ isOpen, onClose, user, onProfileUpdat
       await updateProfile(user, {
         displayName: displayName.trim()
       });
+
+      // Salva no Firestore para sincronizar na nuvem
+      const userRef = doc(db, 'users', user.uid);
+      await setDoc(userRef, {
+        displayName: displayName.trim(),
+        avatar: selectedAvatar || ''
+      }, { merge: true });
 
       if (selectedAvatar) {
         localStorage.setItem(`profile_avatar_${user.uid}`, selectedAvatar);
