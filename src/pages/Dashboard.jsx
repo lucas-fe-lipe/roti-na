@@ -59,7 +59,6 @@ export default function Dashboard() {
     return () => unsubscribeAuth();
   }, []);
 
-  // CARREGAR DADOS (Firebase ou localStorage)
   useEffect(() => {
     if (!user) {
       const tSalvas = localStorage.getItem('local_tarefas');
@@ -432,17 +431,18 @@ export default function Dashboard() {
               </div>
             </div>
 
+            {/* Metas diárias atualizadas com padding lateral reduzido em 50% e espaço entre texto e botão reduzido em 75% */}
             <div className="mt-3 flex items-center gap-3 overflow-x-auto pb-1 scrollbar-none w-full px-2 sm:px-0">
               {metas.map((m) => {
                 const percentual = Math.min(100, (m.progresso / m.meta) * 100);
                 return (
                   <div key={m.id} className="relative inline-flex items-center justify-between w-auto max-w-[280px] bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden shrink-0 h-12 shadow-md">
                     <div className="absolute top-0 left-0 bottom-0 transition-all duration-300 opacity-80 z-0" style={{ width: `${percentual}%`, backgroundColor: m.cor }}></div>
-                    <div className="relative z-10 px-3 flex flex-col justify-center overflow-hidden">
+                    <div className="relative z-10 pl-1.5 pr-0.5 flex flex-col justify-center overflow-hidden">
                       <span className="text-xs font-bold text-white truncate">{m.titulo}</span>
                       <span className="text-[10px] text-zinc-300 font-mono">{m.progresso} / {m.meta} {m.unidade}</span>
                     </div>
-                    <div className="relative z-10 flex items-center gap-1 pr-2 pl-2">
+                    <div className="relative z-10 flex items-center gap-0.5 pr-1.5 pl-0.5">
                       <button onClick={() => handleIncrementarMeta(m.id)} className="w-7 h-7 bg-zinc-800/80 hover:bg-zinc-700 text-white rounded flex items-center justify-center text-sm transition-colors">+</button>
                       <button onClick={() => { setMetaEditando(m); setIsGoalModalOpen(true); }} className="w-7 h-7 bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 rounded flex items-center justify-center text-xs transition-colors">...</button>
                     </div>
