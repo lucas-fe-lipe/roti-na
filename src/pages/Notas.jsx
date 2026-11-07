@@ -235,9 +235,24 @@ export default function Notas({ user, atividades }) {
                 <h2 className="text-lg sm:text-xl font-bold text-white flex-1 break-words leading-tight">{curso.nome} - {curso.instituicao}</h2>
                 <button onClick={() => setCursoModal({ open: true, data: curso })} className="text-xs text-zinc-500 hover:text-zinc-300 shrink-0">Editar</button>
               </div>
+
+              {/* Condicional solicitado: Se minimizado mostra o total geral, se máximo mostra o status de cada tipo de hora separado sem total geral */}
               <div className="flex flex-wrap justify-between gap-2 mt-3 text-xs sm:text-sm font-medium text-gray-300 pl-6 pr-2">
                 <span>CRA Geral: <span className={(cursoHasNotas && craGeral < 60) ? 'text-red-500' : 'text-white'}>{craGeral.toFixed(2)}</span></span>
-                <span>{totalHorasConcluidas}h / {totalHorasMeta}h ({progressoPercentual.toFixed(2)}%)</span>
+                {isMin ? (
+                  <span>{totalHorasConcluidas}h / {totalHorasMeta}h ({progressoPercentual.toFixed(2)}%)</span>
+                ) : (
+                  <div className="flex flex-wrap gap-x-4 gap-y-1">
+                    {curso.tiposHoras.map(t => {
+                      const concluidasTipo = horasConcluidasPorTipo[t.nome] || 0;
+                      return (
+                        <span key={t.id}>
+                          {t.nome}: <strong className="text-white">{concluidasTipo}h / {t.quantidade}h</strong>
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -359,20 +374,22 @@ function ModalCurso({ cursoInicial, onClose, onSave, onDelete }) {
           </div>
           
           <div className="pt-2">
-            <label className="block text-sm font-bold text-zinc-300 mb-2">Tipos de Horas & Metas</label>
+            {/* Título alterado para "Carga horária" e input do nome encurtado para caber o botão X sem rolar */}
+            <label className="block text-sm font-bold text-zinc-300 mb-2">Carga horária</label>
             {curso.tiposHoras.map(t => (
               <div key={t.id} className="flex gap-2 mb-2 items-center">
-                <input type="text" value={t.nome} onChange={e => handleTipoHoraChange(t.id, 'nome', e.target.value)} placeholder="Ex: Obrigatória" className="flex-1 bg-zinc-950 border border-zinc-700 rounded p-2 text-white text-sm" />
-                <input type="number" value={t.quantidade} onChange={e => handleTipoHoraChange(t.id, 'quantidade', e.target.value)} placeholder="Horas" className="w-24 bg-zinc-950 border border-zinc-700 rounded p-2 text-white text-sm" />
-                <button onClick={() => setCurso(p => ({...p, tiposHoras: p.tiposHoras.filter(x => x.id !== t.id)}))} className="bg-red-900/50 hover:bg-red-800 text-red-300 px-2.5 py-1.5 rounded text-sm font-bold">X</button>
+                <input type="text" value={t.nome} onChange={e => handleTipoHoraChange(t.id, 'nome', e.target.value)} placeholder="Ex: Obrigatória" className="w-[58%] sm:w-[65%] bg-zinc-950 border border-zinc-700 rounded p-2 text-white text-sm" />
+                <input type="number" value={t.quantidade} onChange={e => handleTipoHoraChange(t.id, 'quantidade', e.target.value)} placeholder="Horas" className="flex-1 bg-zinc-950 border border-zinc-700 rounded p-2 text-white text-sm" />
+                <button onClick={() => setCurso(p => ({...p, tiposHoras: p.tiposHoras.filter(x => x.id !== t.id)}))} className="text-red-500 hover:text-red-400 font-bold px-2 py-1 text-sm">X</button>
               </div>
             ))}
             <button onClick={() => setCurso(p => ({...p, tiposHoras: [...p.tiposHoras, { id: Date.now().toString(), nome: '', quantidade: '' }]}))} className="text-xs text-blue-400 hover:text-blue-300 font-medium">+ Adicionar Tipo</button>
           </div>
         </div>
 
+        {/* Botão de excluir curso sem caixa vermelha, apenas texto vermelho */}
         <div className="flex justify-between items-center pt-4 border-t border-zinc-800 mt-4">
-          {cursoInicial ? <button onClick={() => onDelete(curso.id)} className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded font-medium text-sm">Excluir</button> : <div></div>}
+          {cursoInicial ? <button onClick={() => onDelete(curso.id)} className="text-red-500 hover:text-red-400 font-bold text-sm bg-transparent border-none p-0">Excluir</button> : <div></div>}
           <div className="flex gap-2">
             <button onClick={onClose} className="px-4 py-2 rounded text-zinc-400 hover:bg-zinc-800 text-sm">Cancelar</button>
             <button onClick={() => onSave(curso)} className="px-4 py-2 bg-zinc-100 text-zinc-950 rounded hover:bg-zinc-300 font-medium text-sm">Salvar</button>
@@ -406,8 +423,9 @@ function ModalPeriodo({ periodoInicial, onClose, onSave, onDelete }) {
           </div>
         </div>
 
+        {/* Botão de excluir período sem caixa vermelha, apenas texto vermelho */}
         <div className="flex justify-between items-center pt-4 border-t border-zinc-800 mt-4">
-          {periodoInicial ? <button onClick={() => onDelete(periodo.id)} className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded font-medium text-sm">Excluir</button> : <div></div>}
+          {periodoInicial ? <button onClick={() => onDelete(periodo.id)} className="text-red-500 hover:text-red-400 font-bold text-sm bg-transparent border-none p-0">Excluir</button> : <div></div>}
           <div className="flex gap-2">
             <button onClick={onClose} className="px-4 py-2 rounded text-zinc-400 hover:bg-zinc-800 text-sm">Cancelar</button>
             <button onClick={() => onSave(periodo)} className="px-4 py-2 bg-zinc-100 text-zinc-950 rounded hover:bg-zinc-300 font-medium text-sm">Salvar</button>
