@@ -285,7 +285,7 @@ export default function Notas({ user, atividades }) {
                                   <div className="text-[10px] sm:text-xs text-gray-400 mt-0.5 flex flex-wrap gap-1 leading-tight">
                                     <span>{disc.cargaHoraria}h • {disc.tipoHora} • Nota: </span>
                                     <span className={`font-bold ${isDiscRed ? 'text-red-500' : 'text-white'}`}>
-                                      {obtidaTotal.toFixed(1)} / {maxTotal.toFixed(1)} - {percentual.toFixed(2)}%
+                                      {obtidaTotal.toFixed(2)} / {maxTotal.toFixed(2)} - {percentual.toFixed(2)}%
                                     </span>
                                   </div>
                                 </div>
@@ -472,19 +472,22 @@ function ModalDisciplina({ disciplinaInicial, tiposHoras, atividades, onClose, o
             
             <div className="space-y-1.5">
               {disc.avaliacoes.map(av => {
+                const isCalculable = av.max !== '' && av.obtida !== '' && Number(av.max) > 0;
+                const pLocal = isCalculable ? ((Number(av.obtida) / Number(av.max)) * 100).toFixed(1) + '%' : '';
                 return (
-                  <div key={av.id} className="flex gap-1.5 items-center">
+                  <div key={av.id} className="flex gap-1 items-center">
                     <input type="text" value={av.nome} onChange={e => hAv(av.id, 'nome', e.target.value)} placeholder="Nome" className="flex-1 bg-zinc-950 border border-zinc-700 rounded p-1.5 text-white text-xs" />
-                    <input type="number" value={av.max} onChange={e => hAv(av.id, 'max', e.target.value)} placeholder="Total" className="w-14 bg-zinc-950 border border-zinc-700 rounded p-1.5 text-white text-xs text-center" />
-                    <input type="number" value={av.obtida} onChange={e => hAv(av.id, 'obtida', e.target.value)} placeholder="Nota" className="w-14 bg-zinc-950 border border-zinc-700 rounded p-1.5 text-white text-xs text-center" />
-                    <button onClick={() => setDisc(p => ({...p, avaliacoes: p.avaliacoes.filter(x => x.id !== av.id)}))} className="bg-red-600 hover:bg-red-500 text-white w-6 h-6 flex items-center justify-center rounded text-xs font-bold shrink-0">X</button>
+                    <input type="number" value={av.max} onChange={e => hAv(av.id, 'max', e.target.value)} placeholder="Total" className="w-12 bg-zinc-950 border border-zinc-700 rounded p-1.5 text-white text-xs text-center" />
+                    <input type="number" value={av.obtida} onChange={e => hAv(av.id, 'obtida', e.target.value)} placeholder="Nota" className="w-12 bg-zinc-950 border border-zinc-700 rounded p-1.5 text-white text-xs text-center" />
+                    <span className="w-11 text-right text-[10px] font-bold text-zinc-400">{pLocal}</span>
+                    <button onClick={() => setDisc(p => ({...p, avaliacoes: p.avaliacoes.filter(x => x.id !== av.id)}))} className="bg-red-600 hover:bg-red-500 text-white w-5 h-5 flex items-center justify-center rounded text-xs font-bold shrink-0">X</button>
                   </div>
                 );
               })}
             </div>
             
             <div className="mt-3 text-xs font-medium text-zinc-400">
-              Nota Final: <span className={`font-bold text-sm ${isDiscRed ? 'text-red-500' : 'text-white'}`}>{obtT.toFixed(1)} / {maxT.toFixed(1)} - {percFinal.toFixed(2)}%</span>
+              Nota Final: <span className={`font-bold text-sm ${isDiscRed ? 'text-red-500' : 'text-white'}`}>{obtT.toFixed(2)} / {maxT.toFixed(2)} - {percFinal.toFixed(2)}%</span>
             </div>
           </div>
         </div>
