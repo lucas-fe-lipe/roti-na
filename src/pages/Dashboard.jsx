@@ -18,6 +18,7 @@ export default function Dashboard() {
   const [isTaskDetailOpen, setIsTaskDetailOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isRightMenuOpen, setIsRightMenuOpen] = useState(false);
+  const [isAvaliacoesOpen, setIsAvaliacoesOpen] = useState(false); // Estado das Avaliações Globais
   const [activePage, setActivePage] = useState('Grade');
   const [currentTime, setCurrentTime] = useState(new Date());
   
@@ -342,6 +343,16 @@ export default function Dashboard() {
               title="Nova Atividade"
             >
               +
+            </button>
+          )}
+
+          {activePage === 'Notas' && (
+            <button 
+              onClick={() => setIsAvaliacoesOpen(true)} 
+              className="bg-zinc-900 text-zinc-100 border border-zinc-800 w-8 h-8 flex items-center justify-center rounded hover:bg-zinc-800 transition-colors shadow-sm text-zinc-400 hover:text-white"
+              title="Avaliações"
+            >
+              <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
             </button>
           )}
 
@@ -683,7 +694,7 @@ export default function Dashboard() {
         )}
 
         {activePage === 'Notas' && (
-          <Notas user={user} atividades={atividades} />
+          <Notas user={user} atividades={atividades} isAvaliacoesOpen={isAvaliacoesOpen} setIsAvaliacoesOpen={setIsAvaliacoesOpen} />
         )}
 
         {activePage !== 'Grade' && activePage !== 'Notas' && (
