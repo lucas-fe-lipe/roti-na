@@ -119,7 +119,7 @@ export default function Dashboard() {
   }
 
   const horas = Array.from({ length: maxHour - minHour }, (_, i) => i + minHour);
-  const ROW_HEIGHT = 22; // Altura reduzida em ~15%
+  const ROW_HEIGHT = 22;
   
   const currentHour = currentTime.getHours();
   const currentMinute = currentTime.getMinutes();
@@ -333,17 +333,27 @@ export default function Dashboard() {
           <span className="text-sm font-medium truncate max-w-[150px]">{userName}</span>
         </div>
 
-        <button onClick={() => setIsRightMenuOpen(true)} className="bg-zinc-900 text-zinc-100 border border-zinc-800 px-3 py-1.5 text-lg rounded hover:bg-zinc-800 transition-colors">
-          ☰
-        </button>
+        <div className="flex items-center gap-3">
+          {activePage === 'Grade' && (
+            <button 
+              onClick={abrirNovaAtividade} 
+              className="bg-zinc-900 text-zinc-100 border border-zinc-800 w-8 h-8 flex items-center justify-center text-base font-bold rounded hover:bg-zinc-800 transition-colors shadow-sm"
+              title="Nova Atividade"
+            >
+              +
+            </button>
+          )}
+
+          <button onClick={() => setIsRightMenuOpen(true)} className="bg-zinc-900 text-zinc-100 border border-zinc-800 px-3 py-1.5 text-lg rounded hover:bg-zinc-800 transition-colors">
+            ☰
+          </button>
+        </div>
       </header>
 
-      {/* Margens laterais removidas no celular (px-0), mantidas em telas grandes (sm:px-6) */}
       <main className="flex-1 px-0 pt-0 pb-6 sm:px-6 sm:pt-2 flex flex-col items-center overflow-auto w-full">
         
         {activePage === 'Grade' && (
           <div className="w-full max-w-5xl flex flex-col pb-10">
-            {/* Largura do horário ajustada para 38px */}
             <div className="flex ml-[38px] bg-black sm:rounded-t-md shrink-0">
               {diasDaSemana.map((dia) => (
                 <div key={dia} className="flex-1 py-1.5 text-center font-bold text-[10px] text-white">
@@ -396,15 +406,15 @@ export default function Dashboard() {
                       <div 
                         key={`${atv.id}-${i}`} 
                         onClick={() => abrirDetalhesAtividade(atv)}
-                        className={`absolute rounded text-[10px] text-white overflow-hidden cursor-pointer hover:opacity-100 transition-opacity border border-black/20 px-0.5 py-0 flex flex-col justify-start ${opacityClass}`}
+                        className={`absolute rounded text-[10px] text-white overflow-hidden cursor-pointer hover:opacity-100 transition-opacity border border-black/20 px-1 py-0.5 flex flex-col justify-start break-words ${opacityClass}`}
                         style={{
                           backgroundColor: atv.cor, top: `${top}px`, height: `${height}px`,
                           left: `calc(${dayIndex} * (100% / 7))`, width: `calc(100% / 7)`
                         }}
                       >
-                        <div className="font-bold truncate leading-tight">{textoPrincipal}</div>
+                        <div className="font-bold leading-tight break-words overflow-hidden [display:-webkit-box] [-webkit-line-clamp:unset] [-webkit-box-orient:vertical]">{textoPrincipal}</div>
                         {atv.detalhes && (
-                          <div className="text-[8px] opacity-80 truncate leading-tight mt-0">{atv.detalhes}</div>
+                          <div className="text-[8px] opacity-80 leading-tight mt-0.5 break-words overflow-hidden [display:-webkit-box] [-webkit-line-clamp:2] [-webkit-box-orient:vertical]">({atv.detalhes})</div>
                         )}
                       </div>
                     );
@@ -420,7 +430,6 @@ export default function Dashboard() {
               </div>
             </div>
 
-            {/* Listas agora ocupam 100% da largura, sem o ml-[60px] */}
             <div className="mt-3 flex items-center gap-3 overflow-x-auto pb-1 scrollbar-none w-full px-2 sm:px-0">
               {metas.map((m) => {
                 const percentual = Math.min(100, (m.progresso / m.meta) * 100);
@@ -723,7 +732,6 @@ export default function Dashboard() {
       <RightMenu 
         isOpen={isRightMenuOpen} 
         onClose={() => setIsRightMenuOpen(false)} 
-        onOpenNewActivity={abrirNovaAtividade}
         onSelectPage={(page) => setActivePage(page)}
         activePage={activePage}
       />
