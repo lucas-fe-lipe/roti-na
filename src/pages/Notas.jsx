@@ -152,17 +152,22 @@ export default function Notas({ user, atividades }) {
         obtidaTotal += Number(a.obtida) || 0;
       }
     });
+    // Percentual individual mantido para exibição na disciplina (considerando pontos extras)
     const percentual = maxTotal > 0 ? (obtidaTotal / maxTotal) * 100 : 0;
-    return { maxTotal, obtidaTotal, percentual };
+    
+    // Nota normalizada considerando base 100 (limitada a 100 para o cálculo da média geral/período)
+    const notaBase100 = maxTotal > 0 ? Math.min(100, (obtidaTotal / maxTotal) * 100) : 0;
+
+    return { maxTotal, obtidaTotal, percentual, notaBase100 };
   };
 
   const calcCRA = (disciplinas, tipoMedia) => {
     let somaNotas = 0, somaPesos = 0, hasNotas = false;
     disciplinas.forEach(d => {
-      const { maxTotal, obtidaTotal, percentual } = calcAvaliacoes(d.avaliacoes);
+      const { maxTotal, notaBase100 } = calcAvaliacoes(d.avaliacoes);
       if (maxTotal > 0) hasNotas = true;
       const peso = tipoMedia === 'ponderada' ? (Number(d.cargaHoraria) || 1) : 1;
-      somaNotas += percentual * peso;
+      somaNotas += notaBase100 * peso;
       somaPesos += peso;
     });
     return { cra: somaPesos > 0 ? (somaNotas / somaPesos) : 0, hasNotas };
@@ -253,7 +258,6 @@ export default function Notas({ user, atividades }) {
                 <button onClick={() => setCursoModal({ open: true, data: curso })} className="text-xs text-zinc-500 hover:text-zinc-300 shrink-0">Editar</button>
               </div>
 
-              {/* Alterado "CRA Geral" para "Média Geral" */}
               <div className="flex flex-wrap justify-between gap-2 mt-3 text-xs sm:text-sm font-medium text-gray-300 pl-6 pr-2">
                 <span>Média Geral: <span className={(cursoHasNotas && mediaGeral < 60) ? 'text-red-500' : 'text-white'}>{mediaGeral.toFixed(2)}</span></span>
                 {isMin ? (
@@ -294,7 +298,6 @@ export default function Notas({ user, atividades }) {
                         {perAtual && <span className="bg-blue-600 text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded text-white font-bold shrink-0">ATUAL</span>}
                       </div>
                       
-                      {/* Alterado "CRA" para "Média" */}
                       <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-400 mt-2 pl-5 sm:pl-6 w-full">
                         <span>Média: <span className={`font-bold ${(perHasNotas && mediaPeriodo < 60) ? 'text-red-500' : 'text-white'}`}>{mediaPeriodo.toFixed(2)}</span> | Horas: <span className="font-bold text-white">{horasPeriodo}h</span></span>
                         <div className="flex items-center gap-1.5 shrink-0">
@@ -458,7 +461,12 @@ function ModalDisciplina({ disciplinaInicial, tiposHoras, atividades, onClose, o
   
   let maxT = 0, obtT = 0;
   disc.avaliacoes.forEach(a => { if (a.obtida !== '' && !isNaN(a.obtida)) { maxT += Number(a.max)||0; obtT += Number(a.obtida)||0; }});
+  
+  // Percentual exibido mantém o cálculo original considerando pontos extras
   const percFinal = maxT > 0 ? (obtT / maxT) * 100 : 0;
+  
+  // Nota base 100 usada na média geral/período
+  const notaFinalBase100 = maxT > 0 ? Math.min(100, (obtT / maxT) * 100) : 0;
   const isDiscRed = maxT > 0 && percFinal < 60;
 
   return (
@@ -500,7 +508,6 @@ function ModalDisciplina({ disciplinaInicial, tiposHoras, atividades, onClose, o
           <div className="pt-2 border-t border-zinc-800">
             <div className="flex justify-between items-center mb-2">
               <label className="text-sm font-bold text-zinc-300">Avaliações</label>
-              {/* Botão renomeado para "Adicionar" */}
               <button onClick={() => setDisc(p => ({...p, avaliacoes: [...p.avaliacoes, { id: Date.now().toString(), nome: `P${p.avaliacoes.length+1}`, max: '', obtida: '' }]}))} className="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-2.5 py-1 rounded text-xs border border-zinc-600 font-bold">+ Adicionar</button>
             </div>
             
@@ -516,7 +523,6 @@ function ModalDisciplina({ disciplinaInicial, tiposHoras, atividades, onClose, o
                     <input type="text" value={av.nome} onChange={e => hAv(av.id, 'nome', e.target.value)} placeholder="Nome" className="flex-1 bg-zinc-950 border border-zinc-700 rounded p-1.5 text-white text-xs" />
                     <input type="number" value={av.max} onChange={e => hAv(av.id, 'max', e.target.value)} placeholder="Total" className="w-12 bg-zinc-950 border border-zinc-700 rounded p-1.5 text-white text-xs text-center" />
                     <input type="number" value={av.obtida} onChange={e => hAv(av.id, 'obtida', e.target.value)} placeholder="Nota" className="w-12 bg-zinc-950 border border-zinc-700 rounded p-1.5 text-white text-xs text-center" />
-                    {/* Percentual agora fica vermelho se for menor que 60% */}
                     <span className={`w-11 text-right text-[10px] font-bold ${isRed ? 'text-red-500' : 'text-zinc-400'}`}>{pLocal}</span>
                     <button onClick={() => setDisc(p => ({...p, avaliacoes: p.avaliacoes.filter(x => x.id !== av.id)}))} className="text-red-500 hover:text-red-400 font-bold px-1.5 py-0.5 text-base bg-transparent border-none shrink-0">×</button>
                   </div>
@@ -525,7 +531,7 @@ function ModalDisciplina({ disciplinaInicial, tiposHoras, atividades, onClose, o
             </div>
             
             <div className="mt-3 text-xs font-medium text-zinc-400">
-              Nota Final: <span className={`font-bold text-sm ${isDiscRed ? 'text-red-500' : 'text-white'}`}>{obtT.toFixed(2)} / {maxT.toFixed(2)} - {percFinal.toFixed(2)}%</span>
+              Nota Final: <span className={`font-bold text-sm ${isDiscRed ? 'text-red-500' : 'text-white'}`}>{obtT.toFixed(2)} / {maxT.toFixed(2)} - {percFinal.toFixed(2)}% (Média base 100: {notaFinalBase100.toFixed(2)})</span>
             </div>
           </div>
         </div>
