@@ -431,8 +431,8 @@ function ModalCurso({ cursoInicial, onClose, onSave, onDelete }) {
             <label className="block text-sm font-bold text-zinc-300 mb-2">Carga horária</label>
             {curso.tiposHoras?.map(t => (
               <div key={t.id} className="flex gap-2 mb-2 items-center">
-                <input type="text" value={t.nome} onChange={e => handleTipoHoraChange(t.id, 'nome', e.target.value)} placeholder="Ex: Obrigatória" className="w-[58%] sm:w-[65%] bg-zinc-950 border border-zinc-700 rounded p-2 text-white text-sm" />
-                <input type="number" value={t.quantidade} onChange={e => handleTipoHoraChange(t.id, 'quantidade', e.target.value)} placeholder="Horas" className="flex-1 bg-zinc-950 border border-zinc-700 rounded p-2 text-white text-sm" />
+                <input type="text" value={t.nome} onChange={e => handleTipoHoraChange(t.id, 'nome', e.target.value)} placeholder="Ex: Obrigatória" className="flex-1 bg-zinc-950 border border-zinc-700 rounded p-2 text-white text-sm" />
+                <input type="number" value={t.quantidade} onChange={e => handleTipoHoraChange(t.id, 'quantidade', e.target.value)} placeholder="Horas" className="w-24 bg-zinc-950 border border-zinc-700 rounded p-2 text-white text-sm text-center" />
                 <button onClick={() => setCurso(p => ({...p, tiposHoras: p.tiposHoras.filter(x => x.id !== t.id)}))} className="text-red-500 hover:text-red-400 font-bold px-2 py-1 text-base bg-transparent border-none">×</button>
               </div>
             ))}
