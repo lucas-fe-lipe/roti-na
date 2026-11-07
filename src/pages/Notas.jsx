@@ -152,11 +152,12 @@ export default function Notas({ user, atividades }) {
         obtidaTotal += Number(a.obtida) || 0;
       }
     });
-    // Percentual individual mantido para exibição na disciplina (considerando pontos extras)
+    
+    // Percentual exibido individualmente na disciplina (mantém o cálculo original para ver pontos extras)
     const percentual = maxTotal > 0 ? (obtidaTotal / maxTotal) * 100 : 0;
     
-    // Nota normalizada considerando base 100 (limitada a 100 para o cálculo da média geral/período)
-    const notaBase100 = maxTotal > 0 ? Math.min(100, (obtidaTotal / maxTotal) * 100) : 0;
+    // A nota para a média considera diretamente o total obtido como base 100 (ex: tirou 83 = nota 83)
+    const notaBase100 = Math.min(100, obtidaTotal);
 
     return { maxTotal, obtidaTotal, percentual, notaBase100 };
   };
@@ -462,11 +463,8 @@ function ModalDisciplina({ disciplinaInicial, tiposHoras, atividades, onClose, o
   let maxT = 0, obtT = 0;
   disc.avaliacoes.forEach(a => { if (a.obtida !== '' && !isNaN(a.obtida)) { maxT += Number(a.max)||0; obtT += Number(a.obtida)||0; }});
   
-  // Percentual exibido mantém o cálculo original considerando pontos extras
   const percFinal = maxT > 0 ? (obtT / maxT) * 100 : 0;
-  
-  // Nota base 100 usada na média geral/período
-  const notaFinalBase100 = maxT > 0 ? Math.min(100, (obtT / maxT) * 100) : 0;
+  const notaFinalBase100 = Math.min(100, obtT);
   const isDiscRed = maxT > 0 && percFinal < 60;
 
   return (
