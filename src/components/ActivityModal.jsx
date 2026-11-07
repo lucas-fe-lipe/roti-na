@@ -60,7 +60,7 @@ export default function ActivityModal({ isOpen, onClose, onSave, onDelete, ativi
     const atividade = {
       id: atividadeEditada ? atividadeEditada.id : Date.now().toString(),
       nome,
-      apelido: apelido.trim(), // Opcional e mantendo a caixa digitada pelo utilizador
+      apelido: apelido.trim(),
       horarios,
       cor: corSelecionada,
       categoria: categoriaFinal,
@@ -151,7 +151,6 @@ export default function ActivityModal({ isOpen, onClose, onSave, onDelete, ativi
               </div>
               <div className="w-40">
                 <label className="block text-sm mb-1 text-zinc-400">Apelido (opcional)</label>
-                {/* Removido o limite restrito de 4 caracteres, aumentado para 30, sem uppercase forçado */}
                 <input type="text" value={apelido} onChange={e => setApelido(e.target.value)} maxLength={30} placeholder="Ex: AL" className="w-full bg-zinc-950 border border-zinc-700 rounded p-2 focus:outline-none" />
               </div>
             </div>
@@ -167,7 +166,7 @@ export default function ActivityModal({ isOpen, onClose, onSave, onDelete, ativi
                   <span className="text-zinc-500">até</span>
                   <input type="time" value={h.fim} onChange={(e) => { const n = [...horarios]; n[i].fim = e.target.value; setHorarios(n); }} className="bg-zinc-950 border border-zinc-700 rounded p-2 flex-1 [color-scheme:dark]" />
                   {horarios.length > 1 && (
-                    <button onClick={() => setHorarios(horarios.filter((_, idx) => idx !== i))} className="text-red-400 hover:text-red-300 ml-1 px-2 font-bold">&times;</button>
+                    <button onClick={() => setHorarios(horarios.filter((_, idx) => idx !== i))} className="text-red-500 hover:text-red-400 ml-1 px-2 font-bold text-base bg-transparent border-none">×</button>
                   )}
                 </div>
               ))}
