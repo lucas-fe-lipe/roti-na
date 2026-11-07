@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { collection, doc, setDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase';
+import { hojeLocalStr } from '../utils/date';
 
 export default function Notas({ user, atividades, isAvaliacoesOpen, setIsAvaliacoesOpen }) {
   const [cursos, setCursos] = useState([]);
@@ -239,7 +240,7 @@ export default function Notas({ user, atividades, isAvaliacoesOpen, setIsAvaliac
   };
 
   const isAtual = (inicio, fim) => {
-    const hoje = new Date().toISOString().split('T')[0];
+    const hoje = hojeLocalStr();
     return (inicio <= hoje && fim >= hoje);
   };
 
@@ -251,7 +252,7 @@ export default function Notas({ user, atividades, isAvaliacoesOpen, setIsAvaliac
     'Reprovado por falta': 'bg-red-600'
   };
 
-  const hoje = new Date().toISOString().split('T')[0];
+  const hoje = hojeLocalStr();
 
   const cursosConcluidos = cursos.filter(c => c.dataFim && c.dataFim < hoje).sort((a, b) => new Date(b.dataFim) - new Date(a.dataFim));
   const cursosFuturos = cursos.filter(c => c.dataInicio && c.dataInicio > hoje && (!c.dataFim || c.dataFim >= hoje)).sort((a, b) => new Date(a.dataInicio) - new Date(b.dataInicio));

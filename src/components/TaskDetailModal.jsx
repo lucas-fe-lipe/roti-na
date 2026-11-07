@@ -8,11 +8,11 @@ export default function TaskDetailModal({ isOpen, onClose, tarefa, onEdit, onDel
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
       <div className="bg-zinc-900 text-zinc-100 rounded-lg w-full max-w-md p-6 shadow-2xl space-y-4">
-        <h2 className="text-xl font-bold truncate">{tarefa.nome}</h2>
+        <h2 className="text-xl font-bold truncate">{tarefa.nome || tarefa.texto}</h2>
 
         <div className="space-y-2 text-sm text-zinc-300 bg-zinc-950 p-3 rounded border border-zinc-800">
           <div><strong className="text-zinc-400">Data:</strong> {tarefa.data || 'Sem data'}</div>
-          <div><strong className="text-zinc-400">Horário:</strong> {tarefa.horario || 'Não definido'}</div>
+          <div><strong className="text-zinc-400">Horário:</strong> {tarefa.horario || tarefa.hora || 'Não definido'}</div>
           {tarefa.detalhes && <div><strong className="text-zinc-400">Detalhes:</strong> {tarefa.detalhes}</div>}
         </div>
 
