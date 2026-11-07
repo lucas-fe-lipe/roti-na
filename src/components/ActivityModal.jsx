@@ -23,7 +23,7 @@ export default function ActivityModal({ isOpen, onClose, onSave, onDelete, ativi
       if (atividadeEditada) {
         setNome(atividadeEditada.nome);
         setApelido(atividadeEditada.apelido || '');
-        setHorarios([...atividadeEditada.horarios]);
+        setHorarios(atividadeEditada.horarios.map(h => ({ ...h })));
         setCorSelecionada(atividadeEditada.cor);
         setCategoria(categorias.includes(atividadeEditada.categoria) ? atividadeEditada.categoria : 'Outros');
         setDetalhes(atividadeEditada.detalhes || '');
@@ -159,12 +159,12 @@ export default function ActivityModal({ isOpen, onClose, onSave, onDelete, ativi
               <label className="block text-sm mb-2 text-zinc-400">Horários</label>
               {horarios.map((h, i) => (
                 <div key={i} className="flex gap-2 mb-2 items-center">
-                  <select value={h.dia} onChange={(e) => { const n = [...horarios]; n[i].dia = e.target.value; setHorarios(n); }} className="bg-zinc-950 border border-zinc-700 rounded p-2 outline-none">
+                  <select value={h.dia} onChange={(e) => { setHorarios(horarios.map((x, idx) => idx === i ? { ...x, dia: e.target.value } : x)); }} className="bg-zinc-950 border border-zinc-700 rounded p-2 outline-none">
                     {['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'].map(d => <option key={d}>{d}</option>)}
                   </select>
-                  <input type="time" value={h.inicio} onChange={(e) => { const n = [...horarios]; n[i].inicio = e.target.value; setHorarios(n); }} className="bg-zinc-950 border border-zinc-700 rounded p-2 flex-1 [color-scheme:dark]" />
+                  <input type="time" value={h.inicio} onChange={(e) => { setHorarios(horarios.map((x, idx) => idx === i ? { ...x, inicio: e.target.value } : x)); }} className="bg-zinc-950 border border-zinc-700 rounded p-2 flex-1 [color-scheme:dark]" />
                   <span className="text-zinc-500">até</span>
-                  <input type="time" value={h.fim} onChange={(e) => { const n = [...horarios]; n[i].fim = e.target.value; setHorarios(n); }} className="bg-zinc-950 border border-zinc-700 rounded p-2 flex-1 [color-scheme:dark]" />
+                  <input type="time" value={h.fim} onChange={(e) => { setHorarios(horarios.map((x, idx) => idx === i ? { ...x, fim: e.target.value } : x)); }} className="bg-zinc-950 border border-zinc-700 rounded p-2 flex-1 [color-scheme:dark]" />
                   {horarios.length > 1 && (
                     <button onClick={() => setHorarios(horarios.filter((_, idx) => idx !== i))} className="text-red-500 hover:text-red-400 ml-1 px-2 font-bold text-base bg-transparent border-none">×</button>
                   )}

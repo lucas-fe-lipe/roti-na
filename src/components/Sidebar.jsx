@@ -4,6 +4,7 @@ import { createUserWithEmailAndPassword, signInWithEmailAndPassword, GoogleAuthP
 import { doc, getDoc } from 'firebase/firestore';
 import EditProfileModal from './EditProfileModal';
 import { getInitials } from '../utils/defaultAvatars';
+import Avatar from './Avatar';
 
 export default function Sidebar({ isOpen, onClose, user, onProfileUpdated }) {
   const [isLogin, setIsLogin] = useState(true);
@@ -75,8 +76,6 @@ export default function Sidebar({ isOpen, onClose, user, onProfileUpdated }) {
   const userName = user ? (user.displayName || user.email.split('@')[0]) : '';
   const userInitials = getInitials(userName || user?.email);
 
-  const isImageAvatar = userAvatar.startsWith('<img') || userAvatar.startsWith('http') || userAvatar.startsWith('/');
-
   return (
     <>
       {isOpen && <div className="fixed inset-0 bg-black/50 z-40 transition-opacity" onClick={onClose}></div>}
@@ -98,15 +97,7 @@ export default function Sidebar({ isOpen, onClose, user, onProfileUpdated }) {
                   className="w-24 h-24 rounded-full border-4 border-zinc-700 flex items-center justify-center overflow-hidden bg-zinc-800 text-zinc-200 font-bold text-2xl shadow-xl cursor-pointer hover:border-zinc-500 transition-all"
                   title="Clique para ver em tela cheia"
                 >
-                  {userAvatar ? (
-                    isImageAvatar && !userAvatar.startsWith('<') ? (
-                      <img src={userAvatar} alt="Perfil" className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center" dangerouslySetInnerHTML={{ __html: userAvatar }} />
-                    )
-                  ) : (
-                    <span>{userInitials}</span>
-                  )}
+                  <Avatar src={userAvatar} initials={userInitials} />
                 </div>
                 <div className="text-center overflow-hidden w-full">
                   <span className="text-base font-bold text-zinc-100 truncate block">{userName}</span>
@@ -186,15 +177,7 @@ export default function Sidebar({ isOpen, onClose, user, onProfileUpdated }) {
           <div className="relative max-w-lg w-full flex flex-col items-center">
             <button className="absolute -top-12 right-0 text-white text-3xl font-light">&times;</button>
             <div className="w-64 h-64 sm:w-80 sm:h-80 rounded-full border-4 border-zinc-700 overflow-hidden bg-zinc-800 flex items-center justify-center shadow-2xl text-zinc-200 font-bold text-6xl">
-              {userAvatar ? (
-                isImageAvatar && !userAvatar.startsWith('<') ? (
-                  <img src={userAvatar} alt="Perfil Grande" className="w-full h-full object-cover" />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center scale-150" dangerouslySetInnerHTML={{ __html: userAvatar }} />
-                )
-              ) : (
-                <span>{userInitials}</span>
-              )}
+              <Avatar src={userAvatar} initials={userInitials} imgAlt="Perfil Grande" />
             </div>
             <span className="text-zinc-300 font-bold text-lg mt-6">{userName}</span>
           </div>

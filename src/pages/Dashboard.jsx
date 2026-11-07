@@ -10,6 +10,8 @@ import { auth, db } from '../services/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, doc, setDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
 import { getInitials } from '../utils/defaultAvatars';
+import { hojeLocalStr } from '../utils/date';
+import Avatar from '../components/Avatar';
 
 export default function Dashboard() {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -27,6 +29,7 @@ export default function Dashboard() {
   const [atividades, setAtividades] = useState([]);
   const [metas, setMetas] = useState([]);
   const [tarefas, setTarefas] = useState([]);
+  const [atividadesConcluidasHoje, setAtividadesConcluidasHoje] = useState({});
   const [confirmarExclusaoConcluidas, setConfirmarExclusaoConcluidas] = useState(false);
   
   const [atividadeEditando, setAtividadeEditando] = useState(null);
@@ -35,7 +38,7 @@ export default function Dashboard() {
   const [tarefaDetalhe, setTarefaDetalhe] = useState(null);
   const [modoVisualizacao, setModoVisualizacao] = useState(true);
 
-  // 'atrasadas' e 'concluidas' iniciam minimizadas. Datas iniciam maximizadas (false).
+  // 'atrasadas' e 'concluidas' iniciam como true (minimizados). As datas iniciam maximizadas por padrão (false).
   const [minimizedSections, setMinimizedSections] = useState({ concluidas: true, atrasadas: true });
 
   const [categorias, setCategorias] = useState(['Estudos', 'Trabalho', 'Treinos', 'Outros']);
@@ -222,30 +225,9 @@ export default function Dashboard() {
     }
   };
 
-  // Converte ou atualiza a atividade da grade como uma Tarefa real no Firebase ao marcar o checkbox
-  const handleToggleConcluidaAtividade = async (atv, horarioInicio) => {
-    const hojeStr = new Date().toISOString().split('T')[0];
-    const taskId = `atv-task-${atv.id}-${hojeStr}-${horarioInicio}`;
-    
-    // Procura se já existe uma tarefa correspondente a esta instância de atividade de hoje
-    const tarefaExistente = tarefas.find(t => t.id === taskId);
-
-    if (tarefaExistente) {
-      await handleToggleConcluida(tarefaExistente);
-    } else {
-      // Se não existe, cria a tarefa como concluída no Firebase/LocalStorage
-      const novaTarefa = {
-        id: taskId,
-        nome: atv.apelido || atv.nome,
-        data: hojeStr,
-        horario: horarioInicio,
-        cor: atv.cor || '#000000',
-        atividadeVinculada: atv.id,
-        detalhes: atv.detalhes || '',
-        concluida: true
-      };
-      await handleSalvarTarefa(novaTarefa);
-    }
+  const handleToggleConcluidaAtividade = (atvId, horarioInicio) => {
+    const key = `atv-${atvId}-${horarioInicio}`;
+    setAtividadesConcluidasHoje(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
   const handleExcluirTarefa = async (id) => {
@@ -260,16 +242,14 @@ export default function Dashboard() {
 
   const handleExcluirTarefasConcluidas = async () => {
     const tarefasConcluidasList = tarefas.filter(t => t.concluida);
-    for (const t of tarefasConcluidasList) {
-      if (user) {
-        await deleteDoc(doc(db, 'users', user.uid, 'tarefas', t.id));
-      }
-    }
-    if (!user) {
+    if (user) {
+      await Promise.all(tarefasConcluidasList.map(t => deleteDoc(doc(db, 'users', user.uid, 'tarefas', t.id))));
+    } else {
       const atualizadas = tarefas.filter(t => !t.concluida);
       setTarefas(atualizadas);
       localStorage.setItem('local_tarefas', JSON.stringify(atualizadas));
     }
+    setAtividadesConcluidasHoje({});
     setConfirmarExclusaoConcluidas(false);
   };
 
@@ -288,26 +268,22 @@ export default function Dashboard() {
   const userName = user ? (user.displayName || user.email.split('@')[0]) : 'Login';
   const userInitials = getInitials(userName);
 
-  const hojeStr = new Date().toISOString().split('T')[0];
+  const hojeStr = hojeLocalStr(currentTime);
   const nomeDiaHoje = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'][currentDay];
   const dataFormatadaHoje = `Hoje - ${nomeDiaHoje}, ${new Date().toLocaleDateString('pt-BR')}`;
 
-  // Mapeia as tarefas concluidas de hoje que vieram de atividades
   const atividadesDoDia = [];
   atividades.forEach(atv => {
     atv.horarios.forEach(h => {
       const diaAbreviado = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'][currentDay];
       if (h.dia === diaAbreviado) {
-        const taskId = `atv-task-${atv.id}-${hojeStr}-${h.inicio}`;
-        const tarefaCorrespondente = tarefas.find(t => t.id === taskId);
-        const concluida = !!(tarefaCorrespondente && tarefaCorrespondente.concluida);
-
+        const uniqueKey = `atv-${atv.id}-${h.inicio}`;
         atividadesDoDia.push({
           ...atv,
-          uniqueKey: taskId,
+          uniqueKey,
           horarioExibicao: h.inicio,
           horarioInicio: h.inicio,
-          concluida
+          concluida: !!atividadesConcluidasHoje[uniqueKey]
         });
       }
     });
@@ -320,9 +296,6 @@ export default function Dashboard() {
   const tarefasConcluidas = [];
 
   tarefas.forEach(t => {
-    // Se a tarefa pertencer a uma atividade de outro dia que não seja hoje, ignoramos para não misturar na grade de hoje
-    if (t.id && t.id.startsWith('atv-task-') && t.data !== hojeStr) return;
-
     if (t.concluida) {
       tarefasConcluidas.push(t);
     } else {
@@ -365,22 +338,12 @@ export default function Dashboard() {
     return `${nomeDia}, ${dia}/${mes}/${ano.slice(2)}`;
   };
 
-  const isImageAvatar = userAvatar.startsWith('<img') || userAvatar.startsWith('http') || userAvatar.startsWith('/');
-
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col">
       <header className="flex justify-between items-center px-6 py-2 border-b border-zinc-800 shrink-0">
         <div onClick={() => setIsSidebarOpen(true)} className="flex items-center gap-2 cursor-pointer hover:text-zinc-300">
           <div className="w-8 h-8 rounded-full border-2 border-zinc-700 flex items-center justify-center overflow-hidden bg-zinc-800 text-zinc-200 font-bold text-[10px]">
-            {userAvatar ? (
-              isImageAvatar && !userAvatar.startsWith('<') ? (
-                <img src={userAvatar} alt="Perfil" className="w-full h-full object-cover" />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center" dangerouslySetInnerHTML={{ __html: userAvatar }} />
-              )
-            ) : (
-              <span>{userInitials}</span>
-            )}
+            <Avatar src={userAvatar} initials={userInitials} />
           </div>
           <span className="text-sm font-medium truncate max-w-[150px]">{userName}</span>
         </div>
@@ -521,7 +484,7 @@ export default function Dashboard() {
 
             <div className="mt-3 w-full px-2 sm:px-0 flex flex-col gap-2">
               
-              {/* BLOCO DE ATRASADAS */}
+              {/* BLOCO DE ATRASADAS (Inicia minimizado) */}
               {totalAtrasadas > 0 && (
                 <div className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 shadow-lg">
                   <div className="flex justify-between items-center mb-1">
@@ -578,7 +541,7 @@ export default function Dashboard() {
                 </div>
               )}
 
-              {/* BLOCO DE HOJE */}
+              {/* BLOCO DE HOJE (Inicia maximizado) */}
               <div className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 shadow-lg">
                 <div className="flex justify-between items-center mb-1">
                   <button onClick={() => toggleMinimizar(hojeStr)} className="text-xs font-bold text-zinc-200 hover:text-white flex items-center gap-2">
@@ -618,7 +581,7 @@ export default function Dashboard() {
                             </div>
                           </div>
                           <div onClick={(e) => e.stopPropagation()} className="shrink-0 pl-2 flex items-center">
-                            <input type="checkbox" checked={false} onChange={() => handleToggleConcluidaAtividade(atv, atv.horarioInicio)} className="w-4 h-4 rounded cursor-pointer bg-black/35 border-0 accent-zinc-500" />
+                            <input type="checkbox" checked={false} onChange={() => handleToggleConcluidaAtividade(atv.id, atv.horarioInicio)} className="w-4 h-4 rounded cursor-pointer bg-black/35 border-0 accent-zinc-500" />
                           </div>
                         </div>
                       );
@@ -671,6 +634,7 @@ export default function Dashboard() {
               {datasOrdenadas.map(dataKey => {
                 if (dataKey === hojeStr || dataKey < hojeStr) return null;
                 
+                // Por padrão, se não estiver definido no state, inicia como falso (maximizado)
                 const isMinimizado = minimizedSections[dataKey] !== undefined ? minimizedSections[dataKey] : false;
                 
                 const listaTarefas = (tarefasPorData[dataKey] || []).filter(t => !t.concluida);
@@ -723,7 +687,7 @@ export default function Dashboard() {
                 );
               })}
 
-              {/* BLOCO DE CONCLUÍDAS */}
+              {/* BLOCO DE CONCLUÍDAS (Inicia minimizado) */}
               {(tarefasConcluidas.length > 0 || atividadesConcluidasHojeList.length > 0) && (
                 <div className="bg-zinc-900/50 border border-zinc-800/80 rounded-xl px-3 py-2.5 shadow-lg">
                   <div className="flex justify-between items-center mb-1">
@@ -755,7 +719,7 @@ export default function Dashboard() {
                             </div>
                           </div>
                           <div onClick={(e) => e.stopPropagation()} className="shrink-0 pl-2 flex items-center">
-                            <input type="checkbox" checked={true} onChange={() => handleToggleConcluidaAtividade(atv, atv.horarioInicio)} className="w-4 h-4 rounded cursor-pointer accent-zinc-500" />
+                            <input type="checkbox" checked={true} onChange={() => handleToggleConcluidaAtividade(atv.id, atv.horarioInicio)} className="w-4 h-4 rounded cursor-pointer accent-zinc-500" />
                           </div>
                         </div>
                       ))}
