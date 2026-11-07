@@ -200,11 +200,11 @@ export default function Notas({ user, atividades, isAvaliacoesOpen, setIsAvaliac
         if (a.obtida !== '' && !isNaN(a.obtida) && a.max !== '' && !isNaN(a.max) && Number(a.max) > 0) {
           somaPercentuais += (Number(a.obtida) / Number(a.max)) * 100;
           count++;
-          maxTotal += Number(a.max);
-          obtidaTotal += Number(a.obtida);
         }
       });
       percentual = count > 0 ? somaPercentuais / count : 0;
+      maxTotal = 100;
+      obtidaTotal = percentual;
     } else {
       avaliacoes.forEach(a => {
         if (a.obtida !== '' && !isNaN(a.obtida)) {
@@ -526,11 +526,11 @@ function ModalDisciplina({ disciplinaInicial, tiposHoras, atividades, onClose, o
       if (a.obtida !== '' && !isNaN(a.obtida) && a.max !== '' && !isNaN(a.max) && Number(a.max) > 0) {
         somaPercentuais += (Number(a.obtida) / Number(a.max)) * 100;
         count++;
-        maxT += Number(a.max);
-        obtT += Number(a.obtida);
       }
     });
     percFinal = count > 0 ? somaPercentuais / count : 0;
+    maxT = 100;
+    obtT = percFinal;
   } else {
     disc.avaliacoes.forEach(a => { 
       if (a.obtida !== '' && !isNaN(a.obtida)) { 
@@ -659,9 +659,9 @@ function ModalDisciplina({ disciplinaInicial, tiposHoras, atividades, onClose, o
 }
 
 function ModalAvaliacoesGlobal({ cursos, tarefas, onClose, onConfirmar }) {
-  const [minCorrecao, setMinCorrecao] = useState(false);
+  const [minCorrecao, setMinCorrecao] = useState(true);
   const [minProximas, setMinProximas] = useState(false);
-  const [minConcluidas, setMinConcluidas] = useState(false);
+  const [minConcluidas, setMinConcluidas] = useState(true);
   const [inputs, setInputs] = useState({});
 
   const todasAvaliacoes = [];
@@ -715,17 +715,25 @@ function ModalAvaliacoesGlobal({ cursos, tarefas, onClose, onConfirmar }) {
     return new Date(`${b.data}T${b.hora || '00:00'}:00`) - new Date(`${a.data}T${a.hora || '00:00'}:00`);
   });
 
-  const formatarData = (dataStr, horaStr) => {
+  const formatarDataCabecalho = (dataStr) => {
+    if (dataStr === 'Sem data') return 'Sem data';
+    const [y, m, day] = dataStr.split('-');
+    return `${day}/${m}`;
+  };
+
+  const formatarDataConcluida = (dataStr, horaStr) => {
     if (!dataStr) return 'Sem data';
     const [y, m, day] = dataStr.split('-');
     return `${day}/${m}${horaStr ? ` às ${horaStr}` : ''}`;
   };
 
-  const renderAvItem = (av, editavel) => (
+  const renderAvItem = (av, editavel, exibirDataCompleta = false) => (
     <div key={`${av.cursoId}_${av.id}`} className="flex items-center gap-2 mb-2 p-2.5 bg-zinc-800/40 border border-zinc-800 rounded-lg">
       <div className="flex-1 min-w-0 pr-2">
-        <div className="text-[11px] text-zinc-400 mb-0.5">{formatarData(av.data, av.hora)}</div>
-        <div className="text-sm font-bold text-white truncate leading-tight">{av.nome}</div>
+        {exibirDataCompleta && <div className="text-[11px] text-zinc-400 mb-0.5">{formatarDataConcluida(av.data, av.hora)}</div>}
+        <div className="text-sm font-bold text-white truncate leading-tight">
+          {av.hora ? `${av.hora} - ${av.nome}` : av.nome}
+        </div>
         <div className="text-xs text-zinc-500 truncate">{av.disciplinaNome}</div>
       </div>
       <div className="w-12 h-10 flex items-center justify-center bg-zinc-900 border border-zinc-700 text-zinc-300 text-xs font-bold rounded shrink-0">
@@ -767,7 +775,7 @@ function ModalAvaliacoesGlobal({ cursos, tarefas, onClose, onConfirmar }) {
             </div>
             {!minCorrecao && (
               <div className="flex flex-col">
-                {correcao.length === 0 ? <p className="text-xs text-zinc-500 italic pl-5">Nenhuma avaliação aguardando nota.</p> : correcao.map(av => renderAvItem(av, true))}
+                {correcao.length === 0 ? <p className="text-xs text-zinc-500 italic pl-5">Nenhuma avaliação aguardando nota.</p> : correcao.map(av => renderAvItem(av, true, true))}
               </div>
             )}
           </div>
@@ -778,8 +786,21 @@ function ModalAvaliacoesGlobal({ cursos, tarefas, onClose, onConfirmar }) {
               <h3 className="font-bold text-blue-400 uppercase tracking-wide text-sm">Próximas ({proximas.length})</h3>
             </div>
             {!minProximas && (
-              <div className="flex flex-col">
-                {proximas.length === 0 ? <p className="text-xs text-zinc-500 italic pl-5">Nenhuma avaliação futura.</p> : proximas.map(av => renderAvItem(av, true))}
+              <div className="flex flex-col space-y-3">
+                {proximas.length === 0 ? (
+                  <p className="text-xs text-zinc-500 italic pl-5">Nenhuma avaliação futura.</p>
+                ) : (
+                  Object.entries(proximas.map(av => ({ ...av, dataKey: av.data || 'Sem data' })).reduce((acc, av) => {
+                    if (!acc[av.dataKey]) acc[av.dataKey] = [];
+                    acc[av.dataKey].push(av);
+                    return acc;
+                  }, {})).map(([dataKey, lista]) => (
+                    <div key={dataKey} className="space-y-1.5">
+                      <div className="text-xs font-bold text-zinc-400 pl-1 uppercase tracking-wider">{formatarDataCabecalho(dataKey)}</div>
+                      {lista.map(av => renderAvItem(av, true, false))}
+                    </div>
+                  ))
+                )}
               </div>
             )}
           </div>
@@ -791,7 +812,7 @@ function ModalAvaliacoesGlobal({ cursos, tarefas, onClose, onConfirmar }) {
             </div>
             {!minConcluidas && (
               <div className="flex flex-col opacity-60">
-                {concluidas.length === 0 ? <p className="text-xs text-zinc-600 italic pl-5">Nenhuma avaliação concluída.</p> : concluidas.map(av => renderAvItem(av, false))}
+                {concluidas.length === 0 ? <p className="text-xs text-zinc-600 italic pl-5">Nenhuma avaliação concluída.</p> : concluidas.map(av => renderAvItem(av, false, true))}
               </div>
             )}
           </div>
