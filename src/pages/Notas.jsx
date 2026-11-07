@@ -183,7 +183,6 @@ export default function Notas({ user, atividades }) {
 
   const hoje = new Date().toISOString().split('T')[0];
 
-  // Ordenação correta dos Cursos
   const cursosAtuais = cursos.filter(c => c.dataInicio <= hoje && c.dataFim >= hoje)
     .sort((a, b) => new Date(a.dataFim) - new Date(b.dataFim));
   const cursosFuturos = cursos.filter(c => c.dataInicio > hoje)
@@ -220,9 +219,8 @@ export default function Notas({ user, atividades }) {
 
         let totalHorasConcluidas = Object.values(horasConcluidasPorTipo).reduce((a, b) => a + b, 0);
         const progressoPercentual = totalHorasMeta > 0 ? (totalHorasConcluidas / totalHorasMeta) * 100 : 0;
-        const { cra: craGeral, hasNotas: cursoHasNotas } = calcCRA(todasDisciplinas, 'ponderada');
+        const { cra: mediaGeral, hasNotas: cursoHasNotas } = calcCRA(todasDisciplinas, 'ponderada');
 
-        // Ordenação correta dos Períodos dentro do curso
         const periodosAtuais = (curso.periodos || []).filter(p => p.dataInicio <= hoje && p.dataFim >= hoje);
         const periodosConcluidos = (curso.periodos || []).filter(p => p.dataFim < hoje).sort((a, b) => new Date(b.dataFim) - new Date(a.dataFim));
         const periodosFuturos = (curso.periodos || []).filter(p => p.dataInicio > hoje).sort((a, b) => new Date(a.dataInicio) - new Date(b.dataInicio));
@@ -255,8 +253,9 @@ export default function Notas({ user, atividades }) {
                 <button onClick={() => setCursoModal({ open: true, data: curso })} className="text-xs text-zinc-500 hover:text-zinc-300 shrink-0">Editar</button>
               </div>
 
+              {/* Alterado "CRA Geral" para "Média Geral" */}
               <div className="flex flex-wrap justify-between gap-2 mt-3 text-xs sm:text-sm font-medium text-gray-300 pl-6 pr-2">
-                <span>CRA Geral: <span className={(cursoHasNotas && craGeral < 60) ? 'text-red-500' : 'text-white'}>{craGeral.toFixed(2)}</span></span>
+                <span>Média Geral: <span className={(cursoHasNotas && mediaGeral < 60) ? 'text-red-500' : 'text-white'}>{mediaGeral.toFixed(2)}</span></span>
                 {isMin ? (
                   <span>{totalHorasConcluidas}h / {totalHorasMeta}h ({progressoPercentual.toFixed(2)}%)</span>
                 ) : (
@@ -278,7 +277,7 @@ export default function Notas({ user, atividades }) {
               <div className="mt-4 flex flex-col gap-3">
                 {periodosOrdenados.map(periodo => {
                   const isMinPer = periodosMinimizados[periodo.id] !== false; 
-                  const { cra: craPeriodo, hasNotas: perHasNotas } = calcCRA(periodo.disciplinas || [], periodo.tipoMedia);
+                  const { cra: mediaPeriodo, hasNotas: perHasNotas } = calcCRA(periodo.disciplinas || [], periodo.tipoMedia);
                   let horasPeriodo = 0;
                   periodo.disciplinas?.forEach(d => { if (d.status === 'Concluída') horasPeriodo += Number(d.cargaHoraria) || 0; });
                   const perAtual = isAtual(periodo.dataInicio, periodo.dataFim);
@@ -295,8 +294,9 @@ export default function Notas({ user, atividades }) {
                         {perAtual && <span className="bg-blue-600 text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded text-white font-bold shrink-0">ATUAL</span>}
                       </div>
                       
+                      {/* Alterado "CRA" para "Média" */}
                       <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-400 mt-2 pl-5 sm:pl-6 w-full">
-                        <span>CRA: <span className={`font-bold ${(perHasNotas && craPeriodo < 60) ? 'text-red-500' : 'text-white'}`}>{craPeriodo.toFixed(2)}</span> | Horas: <span className="font-bold text-white">{horasPeriodo}h</span></span>
+                        <span>Média: <span className={`font-bold ${(perHasNotas && mediaPeriodo < 60) ? 'text-red-500' : 'text-white'}`}>{mediaPeriodo.toFixed(2)}</span> | Horas: <span className="font-bold text-white">{horasPeriodo}h</span></span>
                         <div className="flex items-center gap-1.5 shrink-0">
                           <button onClick={() => setPeriodoModal({ open: true, data: periodo, cursoId: curso.id })} className="bg-zinc-800 px-2 py-1 rounded hover:bg-zinc-700 text-zinc-300 text-[10px] sm:text-xs">Editar</button>
                           <button onClick={() => setDisciplinaModal({ open: true, data: null, periodoId: periodo.id, cursoId: curso.id })} className="bg-zinc-800 px-2 py-1 rounded hover:bg-zinc-700 text-zinc-200 border border-zinc-700 text-[10px] sm:text-xs">+ Disciplina</button>
@@ -397,7 +397,6 @@ function ModalCurso({ cursoInicial, onClose, onSave, onDelete }) {
               <div key={t.id} className="flex gap-2 mb-2 items-center">
                 <input type="text" value={t.nome} onChange={e => handleTipoHoraChange(t.id, 'nome', e.target.value)} placeholder="Ex: Obrigatória" className="w-[58%] sm:w-[65%] bg-zinc-950 border border-zinc-700 rounded p-2 text-white text-sm" />
                 <input type="number" value={t.quantidade} onChange={e => handleTipoHoraChange(t.id, 'quantidade', e.target.value)} placeholder="Horas" className="flex-1 bg-zinc-950 border border-zinc-700 rounded p-2 text-white text-sm" />
-                {/* Botão X padronizado como "×" sem caixa */}
                 <button onClick={() => setCurso(p => ({...p, tiposHoras: p.tiposHoras.filter(x => x.id !== t.id)}))} className="text-red-500 hover:text-red-400 font-bold px-2 py-1 text-base bg-transparent border-none">×</button>
               </div>
             ))}
@@ -501,20 +500,24 @@ function ModalDisciplina({ disciplinaInicial, tiposHoras, atividades, onClose, o
           <div className="pt-2 border-t border-zinc-800">
             <div className="flex justify-between items-center mb-2">
               <label className="text-sm font-bold text-zinc-300">Avaliações</label>
-              <button onClick={() => setDisc(p => ({...p, avaliacoes: [...p.avaliacoes, { id: Date.now().toString(), nome: `P${p.avaliacoes.length+1}`, max: '', obtida: '' }]}))} className="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-2.5 py-1 rounded text-xs border border-zinc-600 font-bold">+ Prova</button>
+              {/* Botão renomeado para "Adicionar" */}
+              <button onClick={() => setDisc(p => ({...p, avaliacoes: [...p.avaliacoes, { id: Date.now().toString(), nome: `P${p.avaliacoes.length+1}`, max: '', obtida: '' }]}))} className="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-2.5 py-1 rounded text-xs border border-zinc-600 font-bold">+ Adicionar</button>
             </div>
             
             <div className="space-y-1.5">
               {disc.avaliacoes.map(av => {
                 const isCalculable = av.max !== '' && av.obtida !== '' && Number(av.max) > 0;
-                const pLocal = isCalculable ? ((Number(av.obtida) / Number(av.max)) * 100).toFixed(1) + '%' : '';
+                const pNum = isCalculable ? (Number(av.obtida) / Number(av.max)) * 100 : 0;
+                const pLocal = isCalculable ? pNum.toFixed(1) + '%' : '';
+                const isRed = isCalculable && pNum < 60;
+
                 return (
                   <div key={av.id} className="flex gap-1 items-center">
                     <input type="text" value={av.nome} onChange={e => hAv(av.id, 'nome', e.target.value)} placeholder="Nome" className="flex-1 bg-zinc-950 border border-zinc-700 rounded p-1.5 text-white text-xs" />
                     <input type="number" value={av.max} onChange={e => hAv(av.id, 'max', e.target.value)} placeholder="Total" className="w-12 bg-zinc-950 border border-zinc-700 rounded p-1.5 text-white text-xs text-center" />
                     <input type="number" value={av.obtida} onChange={e => hAv(av.id, 'obtida', e.target.value)} placeholder="Nota" className="w-12 bg-zinc-950 border border-zinc-700 rounded p-1.5 text-white text-xs text-center" />
-                    <span className="w-11 text-right text-[10px] font-bold text-zinc-400">{pLocal}</span>
-                    {/* Botão X padronizado como "×" sem fundo */}
+                    {/* Percentual agora fica vermelho se for menor que 60% */}
+                    <span className={`w-11 text-right text-[10px] font-bold ${isRed ? 'text-red-500' : 'text-zinc-400'}`}>{pLocal}</span>
                     <button onClick={() => setDisc(p => ({...p, avaliacoes: p.avaliacoes.filter(x => x.id !== av.id)}))} className="text-red-500 hover:text-red-400 font-bold px-1.5 py-0.5 text-base bg-transparent border-none shrink-0">×</button>
                   </div>
                 );
