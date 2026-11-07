@@ -181,6 +181,17 @@ export default function Notas({ user, atividades }) {
     'Reprovado por falta': 'bg-red-600'
   };
 
+  const hoje = new Date().toISOString().split('T')[0];
+
+  // Ordenação correta dos Cursos
+  const cursosAtuais = cursos.filter(c => c.dataInicio <= hoje && c.dataFim >= hoje)
+    .sort((a, b) => new Date(a.dataFim) - new Date(b.dataFim));
+  const cursosFuturos = cursos.filter(c => c.dataInicio > hoje)
+    .sort((a, b) => new Date(a.dataInicio) - new Date(b.dataInicio));
+  const cursosConcluidos = cursos.filter(c => c.dataFim < hoje)
+    .sort((a, b) => new Date(b.dataFim) - new Date(a.dataFim));
+  const cursosOrdenados = [...cursosAtuais, ...cursosFuturos, ...cursosConcluidos];
+
   return (
     <div className="w-full max-w-full overflow-hidden flex flex-col gap-4">
       {cursos.length === 0 && (
@@ -191,10 +202,10 @@ export default function Notas({ user, atividades }) {
         </div>
       )}
 
-      {cursos.map(curso => {
+      {cursosOrdenados.map(curso => {
         const isMin = cursosMinimizados[curso.id] !== false; 
         let totalHorasMeta = 0;
-        curso.tiposHoras.forEach(t => totalHorasMeta += Number(t.quantidade));
+        curso.tiposHoras?.forEach(t => totalHorasMeta += Number(t.quantidade));
         
         let horasConcluidasPorTipo = {};
         let todasDisciplinas = [];
@@ -211,11 +222,14 @@ export default function Notas({ user, atividades }) {
         const progressoPercentual = totalHorasMeta > 0 ? (totalHorasConcluidas / totalHorasMeta) * 100 : 0;
         const { cra: craGeral, hasNotas: cursoHasNotas } = calcCRA(todasDisciplinas, 'ponderada');
 
-        const hoje = new Date().toISOString().split('T')[0];
+        // Ordenação correta dos Períodos dentro do curso
         const periodosAtuais = (curso.periodos || []).filter(p => p.dataInicio <= hoje && p.dataFim >= hoje);
-        const periodosPassados = (curso.periodos || []).filter(p => p.dataFim < hoje).sort((a, b) => new Date(b.dataFim) - new Date(a.dataFim));
+        const periodosConcluidos = (curso.periodos || []).filter(p => p.dataFim < hoje).sort((a, b) => new Date(b.dataFim) - new Date(a.dataFim));
         const periodosFuturos = (curso.periodos || []).filter(p => p.dataInicio > hoje).sort((a, b) => new Date(a.dataInicio) - new Date(b.dataInicio));
-        const periodosOrdenados = [...periodosAtuais, ...periodosPassados, ...periodosFuturos];
+        const periodosOrdenados = [...periodosAtuais, ...periodosConcluidos, ...periodosFuturos];
+
+        const anoInicio = curso.dataInicio ? curso.dataInicio.split('-')[0] : '';
+        const anoFim = curso.dataFim ? curso.dataFim.split('-')[0] : '';
 
         return (
           <div key={curso.id} className="bg-[#1a1a1a] rounded-xl p-3 sm:p-4 shadow-lg mb-2 relative overflow-hidden">
@@ -232,18 +246,22 @@ export default function Notas({ user, atividades }) {
                 <button onClick={() => toggleMinimizarCurso(curso.id)} className="text-zinc-400 hover:text-white font-bold text-sm mt-1 shrink-0">
                   {isMin ? '▶\uFE0E' : '▼\uFE0E'}
                 </button>
-                <h2 className="text-lg sm:text-xl font-bold text-white flex-1 break-words leading-tight">{curso.nome} - {curso.instituicao}</h2>
+                <div className="flex-1 min-w-0">
+                  <h2 className="text-lg sm:text-xl font-bold text-white break-words leading-tight">{curso.nome} - {curso.instituicao}</h2>
+                  {anoInicio && anoFim && (
+                    <div className="text-xs text-zinc-400 font-medium mt-0.5">{anoInicio} - {anoFim}</div>
+                  )}
+                </div>
                 <button onClick={() => setCursoModal({ open: true, data: curso })} className="text-xs text-zinc-500 hover:text-zinc-300 shrink-0">Editar</button>
               </div>
 
-              {/* Condicional solicitado: Se minimizado mostra o total geral, se máximo mostra o status de cada tipo de hora separado sem total geral */}
               <div className="flex flex-wrap justify-between gap-2 mt-3 text-xs sm:text-sm font-medium text-gray-300 pl-6 pr-2">
                 <span>CRA Geral: <span className={(cursoHasNotas && craGeral < 60) ? 'text-red-500' : 'text-white'}>{craGeral.toFixed(2)}</span></span>
                 {isMin ? (
                   <span>{totalHorasConcluidas}h / {totalHorasMeta}h ({progressoPercentual.toFixed(2)}%)</span>
                 ) : (
                   <div className="flex flex-wrap gap-x-4 gap-y-1">
-                    {curso.tiposHoras.map(t => {
+                    {curso.tiposHoras?.map(t => {
                       const concluidasTipo = horasConcluidasPorTipo[t.nome] || 0;
                       return (
                         <span key={t.id}>
@@ -374,20 +392,19 @@ function ModalCurso({ cursoInicial, onClose, onSave, onDelete }) {
           </div>
           
           <div className="pt-2">
-            {/* Título alterado para "Carga horária" e input do nome encurtado para caber o botão X sem rolar */}
             <label className="block text-sm font-bold text-zinc-300 mb-2">Carga horária</label>
-            {curso.tiposHoras.map(t => (
+            {curso.tiposHoras?.map(t => (
               <div key={t.id} className="flex gap-2 mb-2 items-center">
                 <input type="text" value={t.nome} onChange={e => handleTipoHoraChange(t.id, 'nome', e.target.value)} placeholder="Ex: Obrigatória" className="w-[58%] sm:w-[65%] bg-zinc-950 border border-zinc-700 rounded p-2 text-white text-sm" />
                 <input type="number" value={t.quantidade} onChange={e => handleTipoHoraChange(t.id, 'quantidade', e.target.value)} placeholder="Horas" className="flex-1 bg-zinc-950 border border-zinc-700 rounded p-2 text-white text-sm" />
-                <button onClick={() => setCurso(p => ({...p, tiposHoras: p.tiposHoras.filter(x => x.id !== t.id)}))} className="text-red-500 hover:text-red-400 font-bold px-2 py-1 text-sm">X</button>
+                {/* Botão X padronizado como "×" sem caixa */}
+                <button onClick={() => setCurso(p => ({...p, tiposHoras: p.tiposHoras.filter(x => x.id !== t.id)}))} className="text-red-500 hover:text-red-400 font-bold px-2 py-1 text-base bg-transparent border-none">×</button>
               </div>
             ))}
-            <button onClick={() => setCurso(p => ({...p, tiposHoras: [...p.tiposHoras, { id: Date.now().toString(), nome: '', quantidade: '' }]}))} className="text-xs text-blue-400 hover:text-blue-300 font-medium">+ Adicionar Tipo</button>
+            <button onClick={() => setCurso(p => ({...p, tiposHoras: [...(p.tiposHoras || []), { id: Date.now().toString(), nome: '', quantidade: '' }]}))} className="text-xs text-blue-400 hover:text-blue-300 font-medium">+ Adicionar Tipo</button>
           </div>
         </div>
 
-        {/* Botão de excluir curso sem caixa vermelha, apenas texto vermelho */}
         <div className="flex justify-between items-center pt-4 border-t border-zinc-800 mt-4">
           {cursoInicial ? <button onClick={() => onDelete(curso.id)} className="text-red-500 hover:text-red-400 font-bold text-sm bg-transparent border-none p-0">Excluir</button> : <div></div>}
           <div className="flex gap-2">
@@ -423,7 +440,6 @@ function ModalPeriodo({ periodoInicial, onClose, onSave, onDelete }) {
           </div>
         </div>
 
-        {/* Botão de excluir período sem caixa vermelha, apenas texto vermelho */}
         <div className="flex justify-between items-center pt-4 border-t border-zinc-800 mt-4">
           {periodoInicial ? <button onClick={() => onDelete(periodo.id)} className="text-red-500 hover:text-red-400 font-bold text-sm bg-transparent border-none p-0">Excluir</button> : <div></div>}
           <div className="flex gap-2">
@@ -498,7 +514,8 @@ function ModalDisciplina({ disciplinaInicial, tiposHoras, atividades, onClose, o
                     <input type="number" value={av.max} onChange={e => hAv(av.id, 'max', e.target.value)} placeholder="Total" className="w-12 bg-zinc-950 border border-zinc-700 rounded p-1.5 text-white text-xs text-center" />
                     <input type="number" value={av.obtida} onChange={e => hAv(av.id, 'obtida', e.target.value)} placeholder="Nota" className="w-12 bg-zinc-950 border border-zinc-700 rounded p-1.5 text-white text-xs text-center" />
                     <span className="w-11 text-right text-[10px] font-bold text-zinc-400">{pLocal}</span>
-                    <button onClick={() => setDisc(p => ({...p, avaliacoes: p.avaliacoes.filter(x => x.id !== av.id)}))} className="bg-red-600 hover:bg-red-500 text-white w-5 h-5 flex items-center justify-center rounded text-xs font-bold shrink-0">X</button>
+                    {/* Botão X padronizado como "×" sem fundo */}
+                    <button onClick={() => setDisc(p => ({...p, avaliacoes: p.avaliacoes.filter(x => x.id !== av.id)}))} className="text-red-500 hover:text-red-400 font-bold px-1.5 py-0.5 text-base bg-transparent border-none shrink-0">×</button>
                   </div>
                 );
               })}
@@ -512,7 +529,7 @@ function ModalDisciplina({ disciplinaInicial, tiposHoras, atividades, onClose, o
 
         <div className="flex justify-between items-center pt-3 border-t border-zinc-800 mt-3">
           {disciplinaInicial ? (
-            <button onClick={() => onDelete(disc.id)} className="text-red-500 hover:text-red-400 font-bold text-sm">Excluir</button>
+            <button onClick={() => onDelete(disc.id)} className="text-red-500 hover:text-red-400 font-bold text-sm bg-transparent border-none p-0">Excluir</button>
           ) : <div></div>}
           
           <div className="flex gap-2">
