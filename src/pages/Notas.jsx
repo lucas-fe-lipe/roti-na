@@ -12,7 +12,6 @@ export default function Notas({ user, atividades }) {
   const [cursosMinimizados, setCursosMinimizados] = useState({});
   const [periodosMinimizados, setPeriodosMinimizados] = useState({});
 
-  // Inicializa cursos e períodos como minimizados assim que os dados carregam
   useEffect(() => {
     const minCursos = {};
     const minPeriodos = {};
@@ -24,7 +23,7 @@ export default function Notas({ user, atividades }) {
     });
     setCursosMinimizados(minCursos);
     setPeriodosMinimizados(minPeriodos);
-  }, [cursos.length]); // Depende do tamanho para não re-renderizar em edições simples
+  }, [cursos.length]);
 
   useEffect(() => {
     if (user) {
@@ -48,7 +47,6 @@ export default function Notas({ user, atividades }) {
   const toggleMinimizarCurso = (id) => setCursosMinimizados(p => ({ ...p, [id]: !p[id] }));
   const toggleMinimizarPeriodo = (id) => setPeriodosMinimizados(p => ({ ...p, [id]: !p[id] }));
 
-  // SALVAR CURSO
   const salvarCurso = async (curso) => {
     const id = curso.id || Date.now().toString();
     const novoCurso = { ...curso, id, periodos: curso.periodos || [] };
@@ -73,7 +71,6 @@ export default function Notas({ user, atividades }) {
     }
   };
 
-  // SALVAR PERÍODO
   const salvarPeriodo = async (periodo, cursoId) => {
     const curso = cursos.find(c => c.id === cursoId);
     if (!curso) return;
@@ -107,7 +104,6 @@ export default function Notas({ user, atividades }) {
     }
   };
 
-  // SALVAR DISCIPLINA
   const salvarDisciplina = async (disciplina, periodoId, cursoId) => {
     const curso = cursos.find(c => c.id === cursoId);
     if (!curso) return;
@@ -196,7 +192,7 @@ export default function Notas({ user, atividades }) {
       )}
 
       {cursos.map(curso => {
-        const isMin = cursosMinimizados[curso.id] !== false; // Inicializa minimizado
+        const isMin = cursosMinimizados[curso.id] !== false; 
         let totalHorasMeta = 0;
         curso.tiposHoras.forEach(t => totalHorasMeta += Number(t.quantidade));
         
@@ -212,6 +208,7 @@ export default function Notas({ user, atividades }) {
         });
 
         let totalHorasConcluidas = Object.values(horasConcluidasPorTipo).reduce((a, b) => a + b, 0);
+        const progressoPercentual = totalHorasMeta > 0 ? (totalHorasConcluidas / totalHorasMeta) * 100 : 0;
         const { cra: craGeral, hasNotas: cursoHasNotas } = calcCRA(todasDisciplinas, 'ponderada');
 
         const hoje = new Date().toISOString().split('T')[0];
@@ -221,10 +218,16 @@ export default function Notas({ user, atividades }) {
         const periodosOrdenados = [...periodosAtuais, ...periodosPassados, ...periodosFuturos];
 
         return (
-          <div key={curso.id} className="bg-[#1a1a1a] rounded-xl p-3 sm:p-4 shadow-lg mb-2">
+          <div key={curso.id} className="bg-[#1a1a1a] rounded-xl p-3 sm:p-4 shadow-lg mb-2 relative overflow-hidden">
             
-            {/* CABEÇALHO DO CURSO COMPACTO E RESPONSIVO */}
-            <div className="flex flex-col">
+            <div className="absolute top-0 left-0 right-0 h-1 bg-white/5">
+              <div 
+                className="h-full bg-blue-600 transition-all duration-500" 
+                style={{ width: `${progressoPercentual}%` }}
+              />
+            </div>
+
+            <div className="flex flex-col mt-1">
               <div className="flex items-start justify-between gap-2 w-full">
                 <button onClick={() => toggleMinimizarCurso(curso.id)} className="text-zinc-400 hover:text-white font-bold text-sm mt-1 shrink-0">
                   {isMin ? '▶\uFE0E' : '▼\uFE0E'}
@@ -234,14 +237,14 @@ export default function Notas({ user, atividades }) {
               </div>
               <div className="flex flex-wrap justify-between gap-2 mt-3 text-xs sm:text-sm font-medium text-gray-300 pl-6 pr-2">
                 <span>CRA Geral: <span className={(cursoHasNotas && craGeral < 60) ? 'text-red-500' : 'text-white'}>{craGeral.toFixed(2)}</span></span>
-                <span>{totalHorasConcluidas}h / {totalHorasMeta}h ({(totalHorasMeta > 0 ? (totalHorasConcluidas/totalHorasMeta)*100 : 0).toFixed(2)}%)</span>
+                <span>{totalHorasConcluidas}h / {totalHorasMeta}h ({progressoPercentual.toFixed(2)}%)</span>
               </div>
             </div>
 
             {!isMin && (
               <div className="mt-4 flex flex-col gap-3">
                 {periodosOrdenados.map(periodo => {
-                  const isMinPer = periodosMinimizados[periodo.id] !== false; // Inicializa minimizado
+                  const isMinPer = periodosMinimizados[periodo.id] !== false; 
                   const { cra: craPeriodo, hasNotas: perHasNotas } = calcCRA(periodo.disciplinas || [], periodo.tipoMedia);
                   let horasPeriodo = 0;
                   periodo.disciplinas?.forEach(d => { if (d.status === 'Concluída') horasPeriodo += Number(d.cargaHoraria) || 0; });
@@ -250,7 +253,6 @@ export default function Notas({ user, atividades }) {
                   return (
                     <div key={periodo.id} className="bg-zinc-900 border border-zinc-800 rounded-lg p-3 w-full">
                       
-                      {/* CABEÇALHO DO PERÍODO COMPACTO */}
                       <div className="flex flex-wrap items-center gap-2">
                         <button onClick={() => toggleMinimizarPeriodo(periodo.id)} className="text-zinc-400 hover:text-white font-bold text-xs shrink-0">
                           {isMinPer ? '▶\uFE0E' : '▼\uFE0E'}
@@ -277,7 +279,6 @@ export default function Notas({ user, atividades }) {
                             return (
                               <div key={disc.id} onClick={() => setDisciplinaModal({ open: true, data: disc, periodoId: periodo.id, cursoId: curso.id })} className="bg-zinc-800/40 p-2.5 sm:p-3 rounded-lg flex justify-between items-center border border-zinc-800/60 cursor-pointer hover:border-zinc-700 transition-colors w-full">
                                 
-                                {/* DADOS DA DISCIPLINA - COM QUEBRA DE LINHA CORRETA */}
                                 <div className="flex-1 min-w-0 pr-2">
                                   <h4 className="font-bold text-white text-xs sm:text-sm truncate w-full">{disc.nome}</h4>
                                   {disc.professor && <div className="text-[10px] sm:text-xs text-gray-500 mt-0.5 truncate w-full">Prof: {disc.professor}</div>}
@@ -289,7 +290,6 @@ export default function Notas({ user, atividades }) {
                                   </div>
                                 </div>
 
-                                {/* ETIQUETA À DIREITA */}
                                 <div className={`${statusCores[disc.status] || 'bg-zinc-700'} text-white text-[8px] sm:text-[9px] font-bold px-1.5 sm:px-2 py-1 sm:py-1.5 rounded ml-1 shrink-0 uppercase tracking-wide`}>
                                   {disc.status}
                                 </div>
@@ -338,7 +338,6 @@ export default function Notas({ user, atividades }) {
   );
 }
 
-// OS COMPONENTES ModalCurso, ModalPeriodo e ModalDisciplina CONTINUAM EXATAMENTE IGUAIS
 function ModalCurso({ cursoInicial, onClose, onSave, onDelete }) {
   const [curso, setCurso] = useState(cursoInicial || { nome: '', instituicao: '', dataInicio: '', dataFim: '', tiposHoras: [{ id: Date.now().toString(), nome: 'Obrigatória', quantidade: '' }] });
 
