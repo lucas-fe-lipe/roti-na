@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { auth } from '../services/firebase';
+import { auth, db } from '../services/firebase';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
 import EditProfileModal from './EditProfileModal';
 import { getInitials } from '../utils/defaultAvatars';
 
@@ -13,10 +14,35 @@ export default function Sidebar({ isOpen, onClose, user, onProfileUpdated }) {
   const [userAvatar, setUserAvatar] = useState('');
   const [isFullScreenImageOpen, setIsFullScreenImageOpen] = useState(false);
 
-  useEffect(() => {
+  // Função para buscar os dados atualizados do perfil (Firestore + LocalStorage)
+  const fetchUserData = async () => {
     if (user) {
-      const savedAvatar = localStorage.getItem(`profile_avatar_${user.uid}`) || '';
-      setUserAvatar(savedAvatar);
+      let avatar = '';
+      try {
+        const userDocRef = doc(db, 'users', user.uid);
+        const userDoc = await getDoc(userDocRef);
+        if (userDoc.exists() && userDoc.data().avatar !== undefined) {
+          avatar = userDoc.data().avatar;
+          if (avatar) {
+            localStorage.setItem(`profile_avatar_${user.uid}`, avatar);
+          } else {
+            localStorage.removeItem(`profile_avatar_${user.uid}`);
+          }
+        }
+      } catch (e) {
+        console.error("Erro ao buscar avatar do Firestore:", e);
+      }
+
+      if (!avatar) {
+        avatar = localStorage.getItem(`profile_avatar_${user.uid}`) || '';
+      }
+      setUserAvatar(avatar);
+    }
+  };
+
+  useEffect(() => {
+    if (user && isOpen) {
+      fetchUserData();
     }
   }, [user, isOpen]);
 
@@ -175,7 +201,15 @@ export default function Sidebar({ isOpen, onClose, user, onProfileUpdated }) {
         </div>
       )}
 
-      <EditProfileModal isOpen={isEditProfileOpen} onClose={() => setIsEditProfileOpen(false)} user={user} onProfileUpdated={onProfileUpdated} />
+      <EditProfileModal 
+        isOpen={isEditProfileOpen} 
+        onClose={() => setIsEditProfileOpen(false)} 
+        user={user} 
+        onProfileUpdated={() => {
+          fetchUserData();
+          if (onProfileUpdated) onProfileUpdated();
+        }} 
+      />
     </>
   );
 }
