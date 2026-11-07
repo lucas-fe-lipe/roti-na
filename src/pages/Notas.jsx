@@ -154,18 +154,29 @@ export default function Notas({ user, atividades }) {
     });
     
     const percentual = maxTotal > 0 ? (obtidaTotal / maxTotal) * 100 : 0;
-    const notaBase100 = Math.min(100, obtidaTotal);
+    
+    // Regra dos 100 pontos para o cálculo da média do período e geral
+    const cappedMax = Math.min(100, maxTotal);
+    const cappedObtida = Math.min(100, obtidaTotal);
+    const notaBase = cappedMax > 0 ? (cappedObtida / cappedMax) * 100 : 0;
 
-    return { maxTotal, obtidaTotal, percentual, notaBase100 };
+    return { maxTotal, obtidaTotal, percentual, notaBase };
   };
 
-  const calcCRA = (disciplinas, tipoMedia) => {
+  const calcCRA = (disciplinas, tipoMedia, isGeral = false) => {
     let somaNotas = 0, somaPesos = 0, hasNotas = false;
     disciplinas.forEach(d => {
-      const { maxTotal, notaBase100 } = calcAvaliacoes(d.avaliacoes);
+      // Ignora disciplinas em andamento para a Média Geral
+      if (isGeral && (d.status === 'A Cursar' || d.status === 'Cursando')) return;
+
+      const { maxTotal, notaBase } = calcAvaliacoes(d.avaliacoes);
+      
+      // Para a Média do Período, ignora a disciplina se ela está em andamento E não teve nota lançada (evita derrubar a média para 0)
+      if (!isGeral && maxTotal === 0 && (d.status === 'A Cursar' || d.status === 'Cursando')) return;
+
       if (maxTotal > 0) hasNotas = true;
       const peso = tipoMedia === 'ponderada' ? (Number(d.cargaHoraria) || 1) : 1;
-      somaNotas += notaBase100 * peso;
+      somaNotas += notaBase * peso;
       somaPesos += peso;
     });
     return { cra: somaPesos > 0 ? (somaNotas / somaPesos) : 0, hasNotas };
@@ -222,7 +233,9 @@ export default function Notas({ user, atividades }) {
 
         let totalHorasConcluidas = Object.values(horasConcluidasPorTipo).reduce((a, b) => a + b, 0);
         const progressoPercentual = totalHorasMeta > 0 ? (totalHorasConcluidas / totalHorasMeta) * 100 : 0;
-        const { cra: mediaGeral, hasNotas: cursoHasNotas } = calcCRA(todasDisciplinas, 'ponderada');
+        
+        // Média Geral (calcula usando isGeral = true para ignorar 'A Cursar' e 'Cursando')
+        const { cra: mediaGeral, hasNotas: cursoHasNotas } = calcCRA(todasDisciplinas, 'ponderada', true);
 
         const periodosAtuais = (curso.periodos || []).filter(p => p.dataInicio <= hoje && p.dataFim >= hoje);
         const periodosConcluidos = (curso.periodos || []).filter(p => p.dataFim < hoje).sort((a, b) => new Date(b.dataFim) - new Date(a.dataFim));
@@ -279,7 +292,8 @@ export default function Notas({ user, atividades }) {
               <div className="mt-4 flex flex-col gap-3">
                 {periodosOrdenados.map(periodo => {
                   const isMinPer = periodosMinimizados[periodo.id] !== false; 
-                  const { cra: mediaPeriodo, hasNotas: perHasNotas } = calcCRA(periodo.disciplinas || [], periodo.tipoMedia);
+                  // Média do Período (calcula usando isGeral = false para considerar 'Cursando')
+                  const { cra: mediaPeriodo, hasNotas: perHasNotas } = calcCRA(periodo.disciplinas || [], periodo.tipoMedia, false);
                   let horasPeriodo = 0;
                   periodo.disciplinas?.forEach(d => { if (d.status === 'Concluída') horasPeriodo += Number(d.cargaHoraria) || 0; });
                   const perAtual = isAtual(periodo.dataInicio, periodo.dataFim);
