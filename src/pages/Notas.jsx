@@ -12,6 +12,20 @@ export default function Notas({ user, atividades }) {
   const [cursosMinimizados, setCursosMinimizados] = useState({});
   const [periodosMinimizados, setPeriodosMinimizados] = useState({});
 
+  // Inicializa cursos e períodos como minimizados assim que os dados carregam
+  useEffect(() => {
+    const minCursos = {};
+    const minPeriodos = {};
+    cursos.forEach(c => {
+      minCursos[c.id] = true;
+      c.periodos?.forEach(p => {
+        minPeriodos[p.id] = true;
+      });
+    });
+    setCursosMinimizados(minCursos);
+    setPeriodosMinimizados(minPeriodos);
+  }, [cursos.length]); // Depende do tamanho para não re-renderizar em edições simples
+
   useEffect(() => {
     if (user) {
       const unsub = onSnapshot(collection(db, 'users', user.uid, 'cursos'), (snap) => {
@@ -166,13 +180,13 @@ export default function Notas({ user, atividades }) {
   const statusCores = {
     'A Cursar': 'bg-zinc-700',
     'Cursando': 'bg-blue-600',
-    'Concluída': 'bg-green-700', // Verde mais fechado igual ao exemplo
+    'Concluída': 'bg-green-700',
     'Reprovado': 'bg-red-600',
     'Reprovado por falta': 'bg-red-600'
   };
 
   return (
-    <div className="w-full max-w-5xl flex flex-col gap-4">
+    <div className="w-full max-w-full overflow-hidden flex flex-col gap-4">
       {cursos.length === 0 && (
         <div className="flex justify-start">
           <button onClick={() => setCursoModal({ open: true, data: null })} className="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-4 py-2 rounded font-medium text-sm transition-colors">
@@ -182,7 +196,7 @@ export default function Notas({ user, atividades }) {
       )}
 
       {cursos.map(curso => {
-        const isMin = cursosMinimizados[curso.id];
+        const isMin = cursosMinimizados[curso.id] !== false; // Inicializa minimizado
         let totalHorasMeta = 0;
         curso.tiposHoras.forEach(t => totalHorasMeta += Number(t.quantidade));
         
@@ -207,75 +221,76 @@ export default function Notas({ user, atividades }) {
         const periodosOrdenados = [...periodosAtuais, ...periodosPassados, ...periodosFuturos];
 
         return (
-          <div key={curso.id} className="bg-[#1a1a1a] rounded-xl p-4 shadow-lg mb-2">
+          <div key={curso.id} className="bg-[#1a1a1a] rounded-xl p-3 sm:p-4 shadow-lg mb-2">
             
-            {/* CABEÇALHO DO CURSO COMPACTO */}
+            {/* CABEÇALHO DO CURSO COMPACTO E RESPONSIVO */}
             <div className="flex flex-col">
-              <div className="flex items-center gap-2">
-                <button onClick={() => toggleMinimizarCurso(curso.id)} className="text-zinc-400 hover:text-white font-bold text-sm">
+              <div className="flex items-start justify-between gap-2 w-full">
+                <button onClick={() => toggleMinimizarCurso(curso.id)} className="text-zinc-400 hover:text-white font-bold text-sm mt-1 shrink-0">
                   {isMin ? '▶\uFE0E' : '▼\uFE0E'}
                 </button>
-                <h2 className="text-xl font-bold text-white flex-1 truncate">{curso.nome} - {curso.instituicao}</h2>
-                <button onClick={() => setCursoModal({ open: true, data: curso })} className="text-xs text-zinc-500 hover:text-zinc-300">Editar</button>
+                <h2 className="text-lg sm:text-xl font-bold text-white flex-1 break-words leading-tight">{curso.nome} - {curso.instituicao}</h2>
+                <button onClick={() => setCursoModal({ open: true, data: curso })} className="text-xs text-zinc-500 hover:text-zinc-300 shrink-0">Editar</button>
               </div>
-              <div className="flex justify-between mt-3 text-sm font-medium text-gray-300 px-6">
+              <div className="flex flex-wrap justify-between gap-2 mt-3 text-xs sm:text-sm font-medium text-gray-300 pl-6 pr-2">
                 <span>CRA Geral: <span className={(cursoHasNotas && craGeral < 60) ? 'text-red-500' : 'text-white'}>{craGeral.toFixed(2)}</span></span>
                 <span>{totalHorasConcluidas}h / {totalHorasMeta}h ({(totalHorasMeta > 0 ? (totalHorasConcluidas/totalHorasMeta)*100 : 0).toFixed(2)}%)</span>
               </div>
             </div>
 
             {!isMin && (
-              <div className="mt-5 flex flex-col gap-4">
+              <div className="mt-4 flex flex-col gap-3">
                 {periodosOrdenados.map(periodo => {
-                  const isMinPer = periodosMinimizados[periodo.id];
+                  const isMinPer = periodosMinimizados[periodo.id] !== false; // Inicializa minimizado
                   const { cra: craPeriodo, hasNotas: perHasNotas } = calcCRA(periodo.disciplinas || [], periodo.tipoMedia);
                   let horasPeriodo = 0;
                   periodo.disciplinas?.forEach(d => { if (d.status === 'Concluída') horasPeriodo += Number(d.cargaHoraria) || 0; });
                   const perAtual = isAtual(periodo.dataInicio, periodo.dataFim);
 
                   return (
-                    <div key={periodo.id} className="bg-zinc-900 border border-zinc-800 rounded-lg p-3">
+                    <div key={periodo.id} className="bg-zinc-900 border border-zinc-800 rounded-lg p-3 w-full">
                       
-                      {/* CABEÇALHO DO PERÍODO COMPACTO EM LINHA */}
+                      {/* CABEÇALHO DO PERÍODO COMPACTO */}
                       <div className="flex flex-wrap items-center gap-2">
-                        <button onClick={() => toggleMinimizarPeriodo(periodo.id)} className="text-zinc-400 hover:text-white font-bold text-xs">
+                        <button onClick={() => toggleMinimizarPeriodo(periodo.id)} className="text-zinc-400 hover:text-white font-bold text-xs shrink-0">
                           {isMinPer ? '▶\uFE0E' : '▼\uFE0E'}
                         </button>
-                        <span className="font-bold text-white text-base">{periodo.nome}</span>
-                        <span className="text-xs text-gray-500 hidden sm:inline">({periodo.dataInicio} até {periodo.dataFim})</span>
-                        {perAtual && <span className="bg-blue-600 text-[10px] px-2 py-0.5 rounded text-white font-bold">ATUAL</span>}
+                        <span className="font-bold text-white text-sm sm:text-base truncate">{periodo.nome}</span>
+                        <span className="text-[10px] sm:text-xs text-gray-500">({periodo.dataInicio} até {periodo.dataFim})</span>
+                        {perAtual && <span className="bg-blue-600 text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded text-white font-bold shrink-0">ATUAL</span>}
                       </div>
                       
-                      <div className="flex flex-wrap items-center gap-3 text-xs text-gray-400 mt-2 px-5">
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-400 mt-2 pl-5 sm:pl-6 w-full">
                         <span>CRA: <span className={`font-bold ${(perHasNotas && craPeriodo < 60) ? 'text-red-500' : 'text-white'}`}>{craPeriodo.toFixed(2)}</span> | Horas: <span className="font-bold text-white">{horasPeriodo}h</span></span>
-                        <div className="flex items-center gap-2 ml-auto">
-                          <button onClick={() => setPeriodoModal({ open: true, data: periodo, cursoId: curso.id })} className="bg-zinc-800 px-2 py-1 rounded hover:bg-zinc-700 text-zinc-300">Editar</button>
-                          <button onClick={() => setDisciplinaModal({ open: true, data: null, periodoId: periodo.id, cursoId: curso.id })} className="bg-zinc-800 px-2 py-1 rounded hover:bg-zinc-700 text-zinc-200 border border-zinc-700">+ Disciplina</button>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button onClick={() => setPeriodoModal({ open: true, data: periodo, cursoId: curso.id })} className="bg-zinc-800 px-2 py-1 rounded hover:bg-zinc-700 text-zinc-300 text-[10px] sm:text-xs">Editar</button>
+                          <button onClick={() => setDisciplinaModal({ open: true, data: null, periodoId: periodo.id, cursoId: curso.id })} className="bg-zinc-800 px-2 py-1 rounded hover:bg-zinc-700 text-zinc-200 border border-zinc-700 text-[10px] sm:text-xs">+ Disciplina</button>
                         </div>
                       </div>
 
                       {!isMinPer && (
-                        <div className="mt-3 flex flex-col gap-2 px-1">
+                        <div className="mt-3 flex flex-col gap-2">
                           {periodo.disciplinas?.map(disc => {
                             const { maxTotal, obtidaTotal, percentual } = calcAvaliacoes(disc.avaliacoes);
                             const isDiscRed = maxTotal > 0 && percentual < 60;
                             
                             return (
-                              <div key={disc.id} onClick={() => setDisciplinaModal({ open: true, data: disc, periodoId: periodo.id, cursoId: curso.id })} className="bg-zinc-800/40 p-3 rounded-lg flex justify-between items-center border border-zinc-800/60 cursor-pointer hover:border-zinc-700 transition-colors">
+                              <div key={disc.id} onClick={() => setDisciplinaModal({ open: true, data: disc, periodoId: periodo.id, cursoId: curso.id })} className="bg-zinc-800/40 p-2.5 sm:p-3 rounded-lg flex justify-between items-center border border-zinc-800/60 cursor-pointer hover:border-zinc-700 transition-colors w-full">
                                 
-                                {/* DADOS DA DISCIPLINA */}
-                                <div className="flex-1 overflow-hidden pr-2">
-                                  <h4 className="font-bold text-white text-sm truncate">{disc.nome}</h4>
-                                  {disc.professor && <div className="text-xs text-gray-500 mt-1 truncate">Prof: {disc.professor}</div>}
-                                  <div className="text-xs text-gray-400 mt-0.5 truncate">
-                                    {disc.cargaHoraria}h • {disc.tipoHora} • Nota: <span className={`font-bold ${isDiscRed ? 'text-red-500' : 'text-white'}`}>
+                                {/* DADOS DA DISCIPLINA - COM QUEBRA DE LINHA CORRETA */}
+                                <div className="flex-1 min-w-0 pr-2">
+                                  <h4 className="font-bold text-white text-xs sm:text-sm truncate w-full">{disc.nome}</h4>
+                                  {disc.professor && <div className="text-[10px] sm:text-xs text-gray-500 mt-0.5 truncate w-full">Prof: {disc.professor}</div>}
+                                  <div className="text-[10px] sm:text-xs text-gray-400 mt-0.5 flex flex-wrap gap-1 leading-tight">
+                                    <span>{disc.cargaHoraria}h • {disc.tipoHora} • Nota: </span>
+                                    <span className={`font-bold ${isDiscRed ? 'text-red-500' : 'text-white'}`}>
                                       {obtidaTotal.toFixed(1)} / {maxTotal.toFixed(1)} - {percentual.toFixed(2)}%
                                     </span>
                                   </div>
                                 </div>
 
                                 {/* ETIQUETA À DIREITA */}
-                                <div className={`${statusCores[disc.status] || 'bg-zinc-700'} text-white text-[9px] font-bold px-2 py-1.5 rounded ml-2 shrink-0 uppercase tracking-wide`}>
+                                <div className={`${statusCores[disc.status] || 'bg-zinc-700'} text-white text-[8px] sm:text-[9px] font-bold px-1.5 sm:px-2 py-1 sm:py-1.5 rounded ml-1 shrink-0 uppercase tracking-wide`}>
                                   {disc.status}
                                 </div>
                                 
@@ -288,8 +303,8 @@ export default function Notas({ user, atividades }) {
                   );
                 })}
 
-                <div className="flex justify-start mt-2">
-                  <button onClick={() => setPeriodoModal({ open: true, data: null, cursoId: curso.id })} className="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-4 py-2 rounded text-xs font-medium transition-colors border border-zinc-700">
+                <div className="flex justify-start mt-1">
+                  <button onClick={() => setPeriodoModal({ open: true, data: null, cursoId: curso.id })} className="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-3 py-1.5 rounded text-xs font-medium transition-colors border border-zinc-700">
                     + Adicionar Período
                   </button>
                 </div>
@@ -323,6 +338,7 @@ export default function Notas({ user, atividades }) {
   );
 }
 
+// OS COMPONENTES ModalCurso, ModalPeriodo e ModalDisciplina CONTINUAM EXATAMENTE IGUAIS
 function ModalCurso({ cursoInicial, onClose, onSave, onDelete }) {
   const [curso, setCurso] = useState(cursoInicial || { nome: '', instituicao: '', dataInicio: '', dataFim: '', tiposHoras: [{ id: Date.now().toString(), nome: 'Obrigatória', quantidade: '' }] });
 
