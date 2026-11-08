@@ -14,6 +14,10 @@ import { getInitials } from '../utils/defaultAvatars';
 import { hojeLocalStr } from '../utils/date';
 import Avatar from '../components/Avatar';
 
+// Atividades da grade não são tarefas. Ao concluir uma, guardamos uma "tarefa marcadora" (id atv-task-...)
+// só para lembrar que ela foi feita naquele dia. Esses marcadores nunca aparecem nas listas de tarefas.
+const ehMarcadorDeAtividade = (t) => !!t.id && t.id.startsWith('atv-task-');
+
 export default function Dashboard() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isGoalModalOpen, setIsGoalModalOpen] = useState(false);
@@ -30,7 +34,6 @@ export default function Dashboard() {
   const [atividades, setAtividades] = useState([]);
   const [metas, setMetas] = useState([]);
   const [tarefas, setTarefas] = useState([]);
-  const [atividadesConcluidasHoje, setAtividadesConcluidasHoje] = useState({});
   const [confirmarExclusaoConcluidas, setConfirmarExclusaoConcluidas] = useState(false);
   
   const [atividadeEditando, setAtividadeEditando] = useState(null);
@@ -226,9 +229,33 @@ export default function Dashboard() {
     }
   };
 
-  const handleToggleConcluidaAtividade = (atvId, horarioInicio) => {
-    const key = `atv-${atvId}-${horarioInicio}`;
-    setAtividadesConcluidasHoje(prev => ({ ...prev, [key]: !prev[key] }));
+  const handleToggleConcluidaAtividade = async (atvId, horarioInicio) => {
+    const hojeStr = hojeLocalStr(currentTime);
+    const taskId = `atv-task-${atvId}-${hojeStr}-${horarioInicio}`;
+    const atvObj = atividades.find(a => a.id === atvId);
+    if (!atvObj) return;
+
+    const tarefaExistente = tarefas.find(t => t.id === taskId);
+
+    if (tarefaExistente && tarefaExistente.concluida) {
+      // desmarcar: apaga o marcador (não deixa lixo no banco)
+      await handleExcluirTarefa(taskId);
+    } else if (tarefaExistente) {
+      // marcador antigo que ficou como "não concluído"
+      await handleToggleConcluida(tarefaExistente);
+    } else {
+      const novaTarefa = {
+        id: taskId,
+        nome: atvObj.apelido || atvObj.nome,
+        data: hojeStr,
+        horario: horarioInicio,
+        cor: atvObj.cor || '#000000',
+        atividadeVinculada: atvObj.id,
+        detalhes: atvObj.detalhes || '',
+        concluida: true
+      };
+      await handleSalvarTarefa(novaTarefa);
+    }
   };
 
   const handleExcluirTarefa = async (id) => {
@@ -242,15 +269,18 @@ export default function Dashboard() {
   };
 
   const handleExcluirTarefasConcluidas = async () => {
-    const tarefasConcluidasList = tarefas.filter(t => t.concluida);
+    // apaga as tarefas/avaliações concluídas e também marcadores de atividades de dias anteriores.
+    // Os marcadores de HOJE ficam, para as atividades de hoje continuarem concluídas.
+    const hoje = hojeLocalStr(currentTime);
+    const apagar = tarefas.filter(t => ehMarcadorDeAtividade(t) ? t.data !== hoje : t.concluida);
     if (user) {
-      await Promise.all(tarefasConcluidasList.map(t => deleteDoc(doc(db, 'users', user.uid, 'tarefas', t.id))));
+      await Promise.all(apagar.map(t => deleteDoc(doc(db, 'users', user.uid, 'tarefas', t.id))));
     } else {
-      const atualizadas = tarefas.filter(t => !t.concluida);
+      const ids = new Set(apagar.map(t => t.id));
+      const atualizadas = tarefas.filter(t => !ids.has(t.id));
       setTarefas(atualizadas);
       localStorage.setItem('local_tarefas', JSON.stringify(atualizadas));
     }
-    setAtividadesConcluidasHoje({});
     setConfirmarExclusaoConcluidas(false);
   };
 
@@ -278,13 +308,16 @@ export default function Dashboard() {
     atv.horarios.forEach(h => {
       const diaAbreviado = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'][currentDay];
       if (h.dia === diaAbreviado) {
-        const uniqueKey = `atv-${atv.id}-${h.inicio}`;
+        const taskId = `atv-task-${atv.id}-${hojeStr}-${h.inicio}`;
+        const tarefaCorrespondente = tarefas.find(t => t.id === taskId);
+        const concluida = !!(tarefaCorrespondente && tarefaCorrespondente.concluida);
+
         atividadesDoDia.push({
           ...atv,
-          uniqueKey,
+          uniqueKey: taskId,
           horarioExibicao: h.inicio,
           horarioInicio: h.inicio,
-          concluida: !!atividadesConcluidasHoje[uniqueKey]
+          concluida
         });
       }
     });
@@ -297,6 +330,8 @@ export default function Dashboard() {
   const tarefasConcluidas = [];
 
   tarefas.forEach(t => {
+    if (ehMarcadorDeAtividade(t)) return;
+
     if (t.concluida) {
       tarefasConcluidas.push(t);
     } else {
@@ -485,7 +520,7 @@ export default function Dashboard() {
 
             <div className="mt-3 w-full px-2 sm:px-0 flex flex-col gap-2">
               
-              {/* BLOCO DE ATRASADAS (Inicia minimizado) */}
+              {/* BLOCO DE ATRASADAS */}
               {totalAtrasadas > 0 && (
                 <div className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 shadow-lg">
                   <div className="flex justify-between items-center mb-1">
@@ -542,7 +577,7 @@ export default function Dashboard() {
                 </div>
               )}
 
-              {/* BLOCO DE HOJE (Inicia maximizado) */}
+              {/* BLOCO DE HOJE */}
               <div className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 shadow-lg">
                 <div className="flex justify-between items-center mb-1">
                   <button onClick={() => toggleMinimizar(hojeStr)} className="text-xs font-bold text-zinc-200 hover:text-white flex items-center gap-2">
@@ -635,7 +670,6 @@ export default function Dashboard() {
               {datasOrdenadas.map(dataKey => {
                 if (dataKey === hojeStr || dataKey < hojeStr) return null;
                 
-                // Por padrão, se não estiver definido no state, inicia como falso (maximizado)
                 const isMinimizado = minimizedSections[dataKey] !== undefined ? minimizedSections[dataKey] : false;
                 
                 const listaTarefas = (tarefasPorData[dataKey] || []).filter(t => !t.concluida);
@@ -688,7 +722,7 @@ export default function Dashboard() {
                 );
               })}
 
-              {/* BLOCO DE CONCLUÍDAS (Inicia minimizado) */}
+              {/* BLOCO DE CONCLUÍDAS */}
               {(tarefasConcluidas.length > 0 || atividadesConcluidasHojeList.length > 0) && (
                 <div className="bg-zinc-900/50 border border-zinc-800/80 rounded-xl px-3 py-2.5 shadow-lg">
                   <div className="flex justify-between items-center mb-1">

@@ -30,13 +30,6 @@ export default function RightMenu({ isOpen, onClose, onSelectPage, activePage })
           >
             Treinos
           </button>
-
-          <button 
-            onClick={() => { onSelectPage('Trabalhos'); onClose(); }} 
-            className={`py-2 text-sm font-medium text-left transition-colors ${activePage === 'Trabalhos' ? 'text-white font-bold' : 'text-zinc-400 hover:text-zinc-200'}`}
-          >
-            Trabalhos
-          </button>
         </div>
       </div>
     </div>
