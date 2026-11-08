@@ -67,7 +67,7 @@ export default function EditProfileModal({ isOpen, onClose, user, onProfileUpdat
       await deleteUser(user);
       onClose();
     } catch (err) {
-      setErro('Erro ao excluir conta. Inicie sessão novamente para confirmar a ação.');
+      setErro('Erro ao excluir conta. Entre novamente na conta e tente de novo.');
     }
   };
 
@@ -82,12 +82,12 @@ export default function EditProfileModal({ isOpen, onClose, user, onProfileUpdat
 
         <form onSubmit={handleSalvar} className="space-y-4">
           <div>
-            <label className="block text-sm mb-1 text-zinc-400">Nome de Utilizador</label>
+            <label className="block text-sm mb-1 text-zinc-400">Nome de usuário</label>
             <input 
               type="text" 
               value={displayName} 
               onChange={e => setDisplayName(e.target.value)} 
-              placeholder="O seu nome" 
+              placeholder="Seu nome" 
               className="w-full bg-zinc-950 border border-zinc-700 rounded p-2 focus:outline-none focus:border-zinc-500 text-zinc-100" 
             />
           </div>

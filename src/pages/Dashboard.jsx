@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import ActivityModal from '../components/ActivityModal';
 import GoalModal from '../components/GoalModal';
 import TaskModal from '../components/TaskModal';
@@ -12,6 +12,8 @@ import { collection, doc, onSnapshot } from 'firebase/firestore';
 import { salvarDoc, apagarDoc, avisarErroLeitura, registrarSchema } from '../services/db';
 import { getInitials } from '../utils/defaultAvatars';
 import { hojeLocalStr } from '../utils/date';
+import { diaDaMeta, progressoAtual } from '../utils/metas';
+import { notificar } from '../utils/toast';
 import Avatar from '../components/Avatar';
 
 // Atividades da grade não são tarefas. Ao concluir uma, guardamos uma "tarefa marcadora" (id atv-task-...)
@@ -132,6 +134,13 @@ export default function Dashboard() {
         const endM = parseInt(h.fim.split(':')[1]);
         const calcEnd = endM > 0 ? endH + 1 : endH;
         
+        if (h.fim <= h.inicio) {
+          // atravessa a meia-noite: ocupa até 24h e recomeça às 00h no dia seguinte
+          if (startH < minHour) minHour = startH;
+          maxHour = 24;
+          minHour = 0;
+          return;
+        }
         if (startH < minHour) minHour = startH;
         if (calcEnd > maxHour) maxHour = calcEnd;
       });
@@ -156,14 +165,18 @@ export default function Dashboard() {
     if (user) {
       await salvarDoc(doc(db, 'users', user.uid, 'atividades', novaAtividade.id), novaAtividade);
     } else {
-      const existe = atividades.find(a => a.id === novaAtividade.id);
-      const atualizadas = existe ? atividades.map(a => a.id === novaAtividade.id ? novaAtividade : a) : [...atividades, novaAtividade];
-      setAtividades(atualizadas);
-      localStorage.setItem('local_atividades', JSON.stringify(atualizadas));
+      setAtividades((atuais) => {
+        const existe = atuais.some(a => a.id === novaAtividade.id);
+        const atualizadas = existe ? atuais.map(a => a.id === novaAtividade.id ? novaAtividade : a) : [...atuais, novaAtividade];
+        localStorage.setItem('local_atividades', JSON.stringify(atualizadas));
+        return atualizadas;
+      });
     }
   };
 
   const handleExcluirAtividade = async (id) => {
+    const anterior = atividades.find(a => a.id === id);
+    if (anterior) notificar('Atividade excluída.', 'info', { rotulo: 'Desfazer', fn: () => handleSalvarAtividade(anterior) });
     if (user) {
       await apagarDoc(doc(db, 'users', user.uid, 'atividades', id));
     } else {
@@ -173,45 +186,54 @@ export default function Dashboard() {
     }
   };
 
-  const handleSalvarMeta = async (novaMeta) => {
+  const persistirMeta = async (meta) => {
     if (user) {
-      await salvarDoc(doc(db, 'users', user.uid, 'metas', novaMeta.id), novaMeta);
+      return await salvarDoc(doc(db, 'users', user.uid, 'metas', meta.id), meta);
     } else {
-      const existe = metas.find(m => m.id === novaMeta.id);
-      const atualizadas = existe ? metas.map(m => m.id === novaMeta.id ? novaMeta : m) : [...metas, novaMeta];
-      setMetas(atualizadas);
-      localStorage.setItem('local_metas', JSON.stringify(atualizadas));
+      setMetas((atuais) => {
+        const existe = atuais.some(m => m.id === meta.id);
+        const atualizadas = existe ? atuais.map(m => m.id === meta.id ? meta : m) : [...atuais, meta];
+        localStorage.setItem('local_metas', JSON.stringify(atualizadas));
+        return atualizadas;
+      });
+      return true;
     }
+  };
+
+  const handleSalvarMeta = async (novaMeta) => {
+    const existente = metas.find(m => m.id === novaMeta.id);
+    const agora = new Date();
+    let meta = { ...(existente || {}), ...novaMeta };
+    if (!existente) {
+      meta.diaReferencia = diaDaMeta(agora, meta.horarioReset);
+    } else if ((existente.horarioReset || '00:00') !== (meta.horarioReset || '00:00')) {
+      // mudou o horário de reset: mantém o progresso de hoje e recalcula o "dia da meta"
+      meta = { ...meta, progresso: progressoAtual(existente, agora), diaReferencia: diaDaMeta(agora, meta.horarioReset) };
+    }
+    await persistirMeta(meta);
   };
 
   const handleIncrementarMeta = async (metaId) => {
     const metaAtual = metas.find(m => m.id === metaId);
     if (!metaAtual) return;
-    const novoProgresso = Number((metaAtual.progresso + metaAtual.incremento).toFixed(2));
-    const atualizada = { ...metaAtual, progresso: novoProgresso > metaAtual.meta ? metaAtual.meta : novoProgresso };
-    if (user) {
-      await salvarDoc(doc(db, 'users', user.uid, 'metas', metaId), atualizada);
-    } else {
-      const atualizadas = metas.map(m => m.id === metaId ? atualizada : m);
-      setMetas(atualizadas);
-      localStorage.setItem('local_metas', JSON.stringify(atualizadas));
-    }
+    const agora = new Date();
+    const base = progressoAtual(metaAtual, agora);
+    const novoProgresso = Number((base + metaAtual.incremento).toFixed(2));
+    await persistirMeta({
+      ...metaAtual,
+      progresso: novoProgresso > metaAtual.meta ? metaAtual.meta : novoProgresso,
+      diaReferencia: diaDaMeta(agora, metaAtual.horarioReset),
+    });
   };
 
   const handleZerarMeta = async (metaId) => {
     const metaAtual = metas.find(m => m.id === metaId);
     if (!metaAtual) return;
-    const atualizada = { ...metaAtual, progresso: 0 };
-    if (user) {
-      await salvarDoc(doc(db, 'users', user.uid, 'metas', metaId), atualizada);
-    } else {
-      const atualizadas = metas.map(m => m.id === metaId ? atualizada : m);
-      setMetas(atualizadas);
-      localStorage.setItem('local_metas', JSON.stringify(atualizadas));
-    }
+    await persistirMeta({ ...metaAtual, progresso: 0, diaReferencia: diaDaMeta(new Date(), metaAtual.horarioReset) });
   };
 
   const handleExcluirMeta = async (metaId) => {
+    const anterior = metas.find(m => m.id === metaId);
     if (user) {
       await apagarDoc(doc(db, 'users', user.uid, 'metas', metaId));
     } else {
@@ -219,16 +241,36 @@ export default function Dashboard() {
       setMetas(atualizadas);
       localStorage.setItem('local_metas', JSON.stringify(atualizadas));
     }
+    if (anterior) notificar('Meta excluída.', 'info', { rotulo: 'Desfazer', fn: () => persistirMeta(anterior) });
   };
+
+  // Reset automático: quando o "dia da meta" vira (no horário de reset de cada meta), o progresso volta a zero.
+  const resetsEmAndamento = useRef(new Set());
+  useEffect(() => {
+    metas.forEach((m) => {
+      const chave = diaDaMeta(currentTime, m.horarioReset);
+      if (m.diaReferencia === chave) return;
+      if (m.diaReferencia && m.diaReferencia > chave) return; // relógio voltou: não mexe
+      const marca = `${m.id}|${chave}`;
+      if (resetsEmAndamento.current.has(marca)) return;
+      resetsEmAndamento.current.add(marca);
+      // sem diaReferencia (meta antiga): só registra o dia, sem zerar o progresso
+      const progresso = m.diaReferencia ? 0 : m.progresso;
+      persistirMeta({ ...m, progresso, diaReferencia: chave });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [metas, currentTime]);
 
   const handleSalvarTarefa = async (novaTarefa) => {
     if (user) {
       await salvarDoc(doc(db, 'users', user.uid, 'tarefas', novaTarefa.id), novaTarefa);
     } else {
-      const existe = tarefas.find(t => t.id === novaTarefa.id);
-      const atualizadas = existe ? tarefas.map(t => t.id === novaTarefa.id ? novaTarefa : t) : [...tarefas, novaTarefa];
-      setTarefas(atualizadas);
-      localStorage.setItem('local_tarefas', JSON.stringify(atualizadas));
+      setTarefas((atuais) => {
+        const existe = atuais.some(t => t.id === novaTarefa.id);
+        const atualizadas = existe ? atuais.map(t => t.id === novaTarefa.id ? novaTarefa : t) : [...atuais, novaTarefa];
+        localStorage.setItem('local_tarefas', JSON.stringify(atualizadas));
+        return atualizadas;
+      });
     }
   };
 
@@ -282,6 +324,12 @@ export default function Dashboard() {
     }
   };
 
+  const excluirTarefaComDesfazer = async (id) => {
+    const anterior = tarefas.find(t => t.id === id);
+    await handleExcluirTarefa(id);
+    if (anterior) notificar('Tarefa excluída.', 'info', { rotulo: 'Desfazer', fn: () => handleSalvarTarefa(anterior) });
+  };
+
   const handleExcluirTarefasConcluidas = async () => {
     // apaga as tarefas/avaliações concluídas e também marcadores de atividades de dias anteriores.
     // Os marcadores de HOJE ficam, para as atividades de hoje continuarem concluídas.
@@ -296,6 +344,12 @@ export default function Dashboard() {
       localStorage.setItem('local_tarefas', JSON.stringify(atualizadas));
     }
     setConfirmarExclusaoConcluidas(false);
+    if (apagar.length > 0) {
+      notificar(`${apagar.length} ${apagar.length === 1 ? 'item excluído' : 'itens excluídos'}.`, 'info', {
+        rotulo: 'Desfazer',
+        fn: () => Promise.all(apagar.map(t => handleSalvarTarefa(t))),
+      });
+    }
   };
 
   const abrirNovaAtividade = () => {
@@ -405,6 +459,45 @@ export default function Dashboard() {
     ...tarefasConcluidas.map(t => ({ tipo: 'tarefa', min: horaParaMinutos(t.horario || t.hora), t })),
   ]);
 
+  // ---------- grade: segmentos por dia, com colunas lado a lado quando há sobreposição ----------
+  const segmentosGrade = [];
+  atividades.forEach((atv) => {
+    (atv.horarios || []).forEach((h, i) => {
+      if (!h.inicio || !h.fim) return;
+      const dayIndex = diasDaSemana.indexOf(h.dia);
+      if (dayIndex === -1) return;
+      const ini = horaParaMinutos(h.inicio);
+      const fim = horaParaMinutos(h.fim);
+      if (fim > ini) {
+        segmentosGrade.push({ atv, chave: `${atv.id}-${i}`, dayIndex, ini, fim, lane: 0, cols: 1 });
+      } else {
+        // atravessa a meia-noite: até 24h no dia e o restante no dia seguinte
+        segmentosGrade.push({ atv, chave: `${atv.id}-${i}`, dayIndex, ini, fim: 1440, lane: 0, cols: 1 });
+        if (fim > 0) segmentosGrade.push({ atv, chave: `${atv.id}-${i}-b`, dayIndex: (dayIndex + 1) % 7, ini: 0, fim, lane: 0, cols: 1 });
+      }
+    });
+  });
+  for (let d = 0; d < 7; d++) {
+    const doDia = segmentosGrade.filter(x => x.dayIndex === d).sort((a, b) => a.ini - b.ini || a.fim - b.fim);
+    let grupo = [];
+    let fimGrupo = -1;
+    let lanes = [];
+    const fecharGrupo = () => { grupo.forEach(x => { x.cols = Math.max(1, lanes.length); }); grupo = []; lanes = []; };
+    doDia.forEach((seg) => {
+      if (grupo.length > 0 && seg.ini >= fimGrupo) { fecharGrupo(); fimGrupo = -1; }
+      let lane = lanes.findIndex(fimLane => fimLane <= seg.ini);
+      if (lane === -1) { lane = lanes.length; lanes.push(seg.fim); } else { lanes[lane] = seg.fim; }
+      seg.lane = lane;
+      grupo.push(seg);
+      fimGrupo = Math.max(fimGrupo, seg.fim);
+    });
+    fecharGrupo();
+  }
+
+  // progresso do dia: atividades de hoje + tarefas de hoje (feitas / total)
+  const feitasHoje = atividadesConcluidasHojeList.length + tarefasConcluidas.filter(t => t.data === hojeStr).length;
+  const totalHoje = feitasHoje + itensHoje.length;
+
   const renderAtividadeHoje = (atv) => {
                       const agora = new Date();
                       let isAtrasadoAtv = false;
@@ -434,7 +527,7 @@ export default function Dashboard() {
                             </div>
                           </div>
                           <div onClick={(e) => e.stopPropagation()} className="shrink-0 pl-2 flex items-center">
-                            <input type="checkbox" checked={false} onChange={() => handleToggleConcluidaAtividade(atv.id, atv.horarioInicio)} className="w-4 h-4 rounded cursor-pointer bg-black/35 border-0 accent-zinc-500" />
+                            <input type="checkbox" aria-label="Marcar como concluída" checked={false} onChange={() => handleToggleConcluidaAtividade(atv.id, atv.horarioInicio)} className="w-4 h-4 rounded cursor-pointer bg-black/35 border-0 accent-zinc-500" />
                           </div>
                         </div>
                       );
@@ -475,7 +568,7 @@ export default function Dashboard() {
                             </div>
                           </div>
                           <div onClick={(e) => e.stopPropagation()} className="shrink-0 pl-2 flex items-center">
-                            <input type="checkbox" checked={false} onChange={() => handleToggleConcluida(t)} className="w-4 h-4 rounded cursor-pointer bg-black/35 border-0 accent-zinc-500" />
+                            <input type="checkbox" aria-label="Marcar como concluída" checked={false} onChange={() => handleToggleConcluida(t)} className="w-4 h-4 rounded cursor-pointer bg-black/35 border-0 accent-zinc-500" />
                           </div>
                         </div>
                       );
@@ -497,7 +590,7 @@ export default function Dashboard() {
                             </div>
                           </div>
                           <div onClick={(e) => e.stopPropagation()} className="shrink-0 pl-2 flex items-center">
-                            <input type="checkbox" checked={true} onChange={() => handleToggleConcluidaAtividade(atv.id, atv.horarioInicio)} className="w-4 h-4 rounded cursor-pointer accent-zinc-500" />
+                            <input type="checkbox" aria-label="Desmarcar conclusão" checked={true} onChange={() => handleToggleConcluidaAtividade(atv.id, atv.horarioInicio)} className="w-4 h-4 rounded cursor-pointer accent-zinc-500" />
                           </div>
                         </div>
   );
@@ -528,7 +621,7 @@ export default function Dashboard() {
                             </div>
 
                             <div onClick={(e) => e.stopPropagation()} className="shrink-0 pl-2 flex items-center">
-                              <input type="checkbox" checked={t.concluida} onChange={() => handleToggleConcluida(t)} className="w-4 h-4 rounded cursor-pointer accent-zinc-500" />
+                              <input type="checkbox" aria-label="Desmarcar conclusão" checked={t.concluida} onChange={() => handleToggleConcluida(t)} className="w-4 h-4 rounded cursor-pointer accent-zinc-500" />
                             </div>
                           </div>
                         );
@@ -549,7 +642,8 @@ export default function Dashboard() {
             <button 
               onClick={abrirNovaAtividade} 
               className="bg-zinc-900 text-zinc-100 border border-zinc-800 w-8 h-8 flex items-center justify-center text-base font-bold rounded hover:bg-zinc-800 transition-colors shadow-sm"
-              title="Nova Atividade"
+              aria-label="Nova atividade"
+              title="Nova atividade"
             >
               +
             </button>
@@ -565,7 +659,7 @@ export default function Dashboard() {
             </button>
           )}
 
-          <button onClick={() => setIsRightMenuOpen(true)} className="bg-zinc-900 text-zinc-100 border border-zinc-800 px-3 py-1.5 text-lg rounded hover:bg-zinc-800 transition-colors">
+          <button aria-label="Abrir menu" onClick={() => setIsRightMenuOpen(true)} className="bg-zinc-900 text-zinc-100 border border-zinc-800 px-3 py-1.5 text-lg rounded hover:bg-zinc-800 transition-colors">
             ☰
           </button>
         </div>
@@ -575,6 +669,11 @@ export default function Dashboard() {
         
         {activePage === 'Grade' && (
           <div className="w-full max-w-5xl flex flex-col pb-10">
+            {atividades.length === 0 && (
+              <p className="text-xs text-zinc-500 text-center py-2">
+                Sua grade está vazia. Toque no + no topo para adicionar a primeira atividade.
+              </p>
+            )}
             <div className="flex ml-[38px] bg-black sm:rounded-t-md shrink-0">
               {diasDaSemana.map((dia) => (
                 <div key={dia} className="flex-1 py-1.5 text-center font-bold text-[10px] text-white">
@@ -610,37 +709,33 @@ export default function Dashboard() {
                   </div>
                 ))}
 
-                {atividades.map((atv) => 
-                  (atv.horarios || []).map((h, i) => {
-                    const [startH, startM] = h.inicio.split(':').map(Number);
-                    const [endH, endM] = h.fim.split(':').map(Number);
-                    const dayIndex = diasDaSemana.findIndex(d => d === h.dia);
-                    
-                    if (dayIndex === -1) return null;
+                {segmentosGrade.map((seg) => {
+                  const { atv } = seg;
+                  const top = ((seg.ini / 60) - minHour) * ROW_HEIGHT;
+                  const height = ((seg.fim - seg.ini) / 60) * ROW_HEIGHT;
+                  const opacityClass = currentDay === seg.dayIndex ? 'opacity-100' : 'opacity-70';
+                  const textoPrincipal = atv.apelido ? atv.apelido : atv.nome;
+                  const hh = (min) => `${String(Math.floor(min / 60) % 24).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
 
-                    const top = ((startH - minHour) * ROW_HEIGHT) + ((startM / 60) * ROW_HEIGHT);
-                    const height = ((endH - startH) * ROW_HEIGHT) + (((endM - startM) / 60) * ROW_HEIGHT);
-                    const opacityClass = currentDay === dayIndex ? 'opacity-100' : 'opacity-70';
-                    const textoPrincipal = atv.apelido ? atv.apelido : atv.nome;
-
-                    return (
-                      <div 
-                        key={`${atv.id}-${i}`} 
-                        onClick={() => abrirDetalhesAtividade(atv)}
-                        className={`absolute rounded text-[10px] text-white overflow-hidden cursor-pointer hover:opacity-100 transition-opacity border border-black/20 px-0.5 py-0 flex flex-col justify-start break-words ${opacityClass}`}
-                        style={{
-                          backgroundColor: atv.cor, top: `${top}px`, height: `${height}px`,
-                          left: `calc(${dayIndex} * (100% / 7))`, width: `calc(100% / 7)`
-                        }}
-                      >
-                        <div className="font-bold leading-none break-words">{textoPrincipal}</div>
-                        {atv.detalhes && (
-                          <div className="text-[8px] opacity-80 leading-none mt-0.5 whitespace-pre-line break-words">{atv.detalhes}</div>
-                        )}
-                      </div>
-                    );
-                  })
-                )}
+                  return (
+                    <div 
+                      key={seg.chave} 
+                      onClick={() => abrirDetalhesAtividade(atv)}
+                      title={`${atv.apelido || atv.nome || ''} · ${hh(seg.ini)}–${hh(seg.fim)}`}
+                      className={`absolute rounded text-[10px] text-white overflow-hidden cursor-pointer hover:opacity-100 transition-opacity border border-black/20 px-0.5 py-0 flex flex-col justify-start break-words ${opacityClass}`}
+                      style={{
+                        backgroundColor: atv.cor, top: `${top}px`, height: `${height}px`,
+                        left: `calc(${seg.dayIndex} * (100% / 7) + ${seg.lane} * (100% / 7) / ${seg.cols})`,
+                        width: `calc((100% / 7) / ${seg.cols})`
+                      }}
+                    >
+                      <div className="font-bold leading-none break-words">{textoPrincipal}</div>
+                      {atv.detalhes && (
+                        <div className="text-[8px] opacity-80 leading-none mt-0.5 whitespace-pre-line break-words">{atv.detalhes}</div>
+                      )}
+                    </div>
+                  );
+                })}
 
                 {showTimeLine && (
                   <div className="absolute left-0 right-0 flex items-center z-10 pointer-events-none" style={{ top: `${timeLineTop}px` }}>
@@ -653,17 +748,18 @@ export default function Dashboard() {
 
             <div className="mt-3 flex items-center gap-3 overflow-x-auto pb-1 scrollbar-none w-full px-2 sm:px-0">
               {metas.map((m) => {
-                const percentual = Math.min(100, (m.progresso / m.meta) * 100);
+                const progressoExibido = progressoAtual(m, currentTime);
+                const percentual = Math.min(100, (progressoExibido / m.meta) * 100);
                 return (
                   <div key={m.id} className="relative inline-flex items-center justify-between w-auto max-w-[280px] bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden shrink-0 h-12 shadow-md">
                     <div className="absolute top-0 left-0 bottom-0 transition-all duration-300 opacity-80 z-0" style={{ width: `${percentual}%`, backgroundColor: m.cor }}></div>
                     <div className="relative z-10 pl-1.5 pr-0.5 flex flex-col justify-center overflow-hidden">
                       <span className="text-xs font-bold text-white truncate">{m.titulo}</span>
-                      <span className="text-[10px] text-zinc-300 font-mono">{m.progresso} / {m.meta} {m.unidade}</span>
+                      <span className="text-[10px] text-zinc-300 font-mono">{progressoExibido} / {m.meta} {m.unidade}</span>
                     </div>
                     <div className="relative z-10 flex items-center gap-0.5 pr-1.5 pl-0.5">
-                      <button onClick={() => handleIncrementarMeta(m.id)} className="w-7 h-7 bg-zinc-800/80 hover:bg-zinc-700 text-white rounded flex items-center justify-center text-sm transition-colors">+</button>
-                      <button onClick={() => { setMetaEditando(m); setIsGoalModalOpen(true); }} className="w-7 h-7 bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 rounded flex items-center justify-center text-xs transition-colors">...</button>
+                      <button aria-label={`Adicionar a ${m.titulo}`} onClick={() => handleIncrementarMeta(m.id)} className="w-7 h-7 bg-zinc-800/80 hover:bg-zinc-700 text-white rounded flex items-center justify-center text-sm transition-colors">+</button>
+                      <button aria-label={`Editar ${m.titulo}`} onClick={() => { setMetaEditando(m); setIsGoalModalOpen(true); }} className="w-7 h-7 bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 rounded flex items-center justify-center text-xs transition-colors">...</button>
                     </div>
                   </div>
                 );
@@ -724,7 +820,7 @@ export default function Dashboard() {
                                     </div>
                                   </div>
                                   <div onClick={(e) => e.stopPropagation()} className="shrink-0 pl-2 flex items-center">
-                                    <input type="checkbox" checked={false} onChange={() => handleToggleConcluida(t)} className="w-4 h-4 rounded cursor-pointer bg-black/35 border-0 accent-zinc-500" />
+                                    <input type="checkbox" aria-label="Marcar como concluída" checked={false} onChange={() => handleToggleConcluida(t)} className="w-4 h-4 rounded cursor-pointer bg-black/35 border-0 accent-zinc-500" />
                                   </div>
                                 </div>
                               );
@@ -742,13 +838,21 @@ export default function Dashboard() {
                 <div className="flex justify-between items-center mb-1">
                   <button onClick={() => toggleMinimizar(hojeStr)} className="text-xs font-bold text-zinc-200 hover:text-white flex items-center gap-2">
                     <span>{minimizedSections[hojeStr] ? '▶\uFE0E' : '▼\uFE0E'}</span> {dataFormatadaHoje}
+                    {totalHoje > 0 && <span className="text-[10px] font-medium text-zinc-400">({feitasHoje}/{totalHoje})</span>}
                   </button>
-                  <button onClick={() => { setTarefaEditando(null); setIsTaskModalOpen(true); }} className="w-6 h-6 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded flex items-center justify-center text-xs transition-colors">+</button>
+                  <button aria-label="Nova tarefa" title="Nova tarefa" onClick={() => { setTarefaEditando(null); setIsTaskModalOpen(true); }} className="w-6 h-6 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded flex items-center justify-center text-xs transition-colors">+</button>
                 </div>
 
                 {!minimizedSections[hojeStr] && (
                   <div className="space-y-1.5 mt-2">
                     {itensHoje.map(item => item.tipo === 'atv' ? renderAtividadeHoje(item.atv) : renderTarefaHoje(item.t))}
+                    {itensHoje.length === 0 && (
+                      <p className="text-xs text-zinc-500 text-center py-3">
+                        {totalHoje > 0
+                          ? 'Tudo feito por hoje. Bom trabalho!'
+                          : 'Nada para hoje ainda. Toque no + para adicionar uma tarefa.'}
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
@@ -797,7 +901,7 @@ export default function Dashboard() {
                                 </div>
                               </div>
                               <div onClick={(e) => e.stopPropagation()} className="shrink-0 pl-2 flex items-center">
-                                <input type="checkbox" checked={false} onChange={() => handleToggleConcluida(t)} className="w-4 h-4 rounded cursor-pointer bg-black/35 border-0 accent-zinc-500" />
+                                <input type="checkbox" aria-label="Marcar como concluída" checked={false} onChange={() => handleToggleConcluida(t)} className="w-4 h-4 rounded cursor-pointer bg-black/35 border-0 accent-zinc-500" />
                               </div>
                             </div>
                           );
@@ -884,7 +988,7 @@ export default function Dashboard() {
         isOpen={isTaskModalOpen}
         onClose={() => setIsTaskModalOpen(false)}
         onSave={handleSalvarTarefa}
-        onDelete={handleExcluirTarefa}
+        onDelete={excluirTarefaComDesfazer}
         taskEditada={tarefaEditando}
         atividades={atividades}
       />
@@ -892,7 +996,7 @@ export default function Dashboard() {
         isOpen={isTaskDetailOpen}
         onClose={() => setIsTaskDetailOpen(false)}
         tarefa={tarefaDetalhe}
-        onDelete={handleExcluirTarefa}
+        onDelete={excluirTarefaComDesfazer}
         onEdit={(t) => { setTarefaEditando(t); setIsTaskModalOpen(true); }}
       />
       <Sidebar 
