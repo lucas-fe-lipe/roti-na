@@ -23,6 +23,13 @@ export default function RightMenu({ isOpen, onClose, onSelectPage, activePage })
           >
             Notas
           </button>
+
+          <button 
+            onClick={() => { onSelectPage('Treinos'); onClose(); }} 
+            className={`py-2 text-sm font-medium text-left transition-colors ${activePage === 'Treinos' ? 'text-white font-bold' : 'text-zinc-400 hover:text-zinc-200'}`}
+          >
+            Treinos
+          </button>
         </div>
       </div>
     </div>

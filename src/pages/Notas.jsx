@@ -67,9 +67,12 @@ export default function Notas({ user, atividades, isAvaliacoesOpen, setIsAvaliac
           texto: `${av.nome} - ${disciplinaAtualizada.nome}`,
           data: av.data,
           hora: av.hora || '',
-          concluida: false,
           tipo: 'avaliacao'
         };
+        // só define concluida=false quando a tarefa ainda não existe; senão editar a disciplina
+        // desmarcaria uma avaliação que você já tinha concluído na lista de tarefas
+        const jaExiste = user ? tarefas.some(t => t.id === taskId) : tarefasLocais.some(t => t.id === taskId);
+        if (!jaExiste) taskData.concluida = false;
         
         if (user) {
           await setDoc(doc(db, 'users', user.uid, 'tarefas', taskId), taskData, { merge: true });
