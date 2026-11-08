@@ -6,6 +6,7 @@ import TaskDetailModal from '../components/TaskDetailModal';
 import Sidebar from '../components/Sidebar';
 import RightMenu from '../components/RightMenu';
 import Notas from './Notas';
+import Treino from './Treino';
 import { auth, db } from '../services/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, doc, setDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
@@ -224,7 +225,6 @@ export default function Dashboard() {
     }
   };
 
-  // Correção: Agora atualiza/cria a tarefa correspondente no Firebase/localStorage ao marcar a atividade
   const handleToggleConcluidaAtividade = async (atvId, horarioInicio) => {
     const hojeStr = hojeLocalStr(currentTime);
     const taskId = `atv-task-${atvId}-${hojeStr}-${horarioInicio}`;
@@ -318,7 +318,6 @@ export default function Dashboard() {
   const tarefasConcluidas = [];
 
   tarefas.forEach(t => {
-    // Ignora instâncias de atividades antigas de outros dias na lista principal de hoje
     if (t.id && t.id.startsWith('atv-task-') && t.data !== hojeStr) return;
 
     if (t.concluida) {
@@ -509,7 +508,7 @@ export default function Dashboard() {
 
             <div className="mt-3 w-full px-2 sm:px-0 flex flex-col gap-2">
               
-              {/* BLOCO DE ATRASADAS (Inicia minimizado) */}
+              {/* BLOCO DE ATRASADAS */}
               {totalAtrasadas > 0 && (
                 <div className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 shadow-lg">
                   <div className="flex justify-between items-center mb-1">
@@ -566,7 +565,7 @@ export default function Dashboard() {
                 </div>
               )}
 
-              {/* BLOCO DE HOJE (Inicia maximizado) */}
+              {/* BLOCO DE HOJE */}
               <div className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 shadow-lg">
                 <div className="flex justify-between items-center mb-1">
                   <button onClick={() => toggleMinimizar(hojeStr)} className="text-xs font-bold text-zinc-200 hover:text-white flex items-center gap-2">
@@ -711,7 +710,7 @@ export default function Dashboard() {
                 );
               })}
 
-              {/* BLOCO DE CONCLUÍDAS (Inicia minimizado) */}
+              {/* BLOCO DE CONCLUÍDAS */}
               {(tarefasConcluidas.length > 0 || atividadesConcluidasHojeList.length > 0) && (
                 <div className="bg-zinc-900/50 border border-zinc-800/80 rounded-xl px-3 py-2.5 shadow-lg">
                   <div className="flex justify-between items-center mb-1">
@@ -792,7 +791,11 @@ export default function Dashboard() {
           <Notas user={user} atividades={atividades} isAvaliacoesOpen={isAvaliacoesOpen} setIsAvaliacoesOpen={setIsAvaliacoesOpen} />
         )}
 
-        {activePage !== 'Grade' && activePage !== 'Notas' && (
+        {activePage === 'Treinos' && (
+          <Treino user={user} />
+        )}
+
+        {activePage !== 'Grade' && activePage !== 'Notas' && activePage !== 'Treinos' && (
           <div className="w-full max-w-5xl flex flex-col items-center justify-center flex-1 text-zinc-400 gap-4">
             <h2 className="text-2xl font-bold text-zinc-100">{activePage}</h2>
             <p>Página em construção...</p>
