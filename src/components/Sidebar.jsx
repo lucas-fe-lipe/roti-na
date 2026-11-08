@@ -1,10 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { auth, db } from '../services/firebase';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import EditProfileModal from './EditProfileModal';
 import { getInitials } from '../utils/defaultAvatars';
 import Avatar from './Avatar';
+import { montarBackup, baixarBackup, lerBackup, importarBackup } from '../utils/backup';
+import { notificar } from '../utils/toast';
 
 export default function Sidebar({ isOpen, onClose, user, onProfileUpdated }) {
   const [isLogin, setIsLogin] = useState(true);
@@ -14,6 +16,45 @@ export default function Sidebar({ isOpen, onClose, user, onProfileUpdated }) {
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
   const [userAvatar, setUserAvatar] = useState('');
   const [isFullScreenImageOpen, setIsFullScreenImageOpen] = useState(false);
+  const [backupPendente, setBackupPendente] = useState(null);
+  const [ocupado, setOcupado] = useState(false);
+  const arquivoRef = useRef(null);
+
+  const handleExportar = async () => {
+    setOcupado(true);
+    try {
+      baixarBackup(await montarBackup(user));
+      notificar('Backup baixado.', 'sucesso');
+    } catch (e) {
+      console.error(e);
+      notificar('Não foi possível gerar o backup.', 'erro');
+    }
+    setOcupado(false);
+  };
+
+  const handleEscolherArquivo = async (e) => {
+    const arquivo = e.target.files?.[0];
+    e.target.value = '';
+    if (!arquivo) return;
+    if (arquivo.size > 5 * 1024 * 1024) return notificar('Arquivo grande demais (máximo 5 MB).', 'erro');
+    const resultado = lerBackup(await arquivo.text());
+    if (!resultado.ok) return notificar(resultado.erro, 'erro');
+    setBackupPendente(resultado);
+  };
+
+  const handleConfirmarImportar = async () => {
+    setOcupado(true);
+    try {
+      const total = await importarBackup(user, backupPendente.backup);
+      notificar(`${total} itens importados.`, 'sucesso');
+      setBackupPendente(null);
+      if (!user) setTimeout(() => window.location.reload(), 800);
+    } catch (e) {
+      console.error(e);
+      notificar('Falha ao importar. Nada foi apagado; tente novamente.', 'erro');
+    }
+    setOcupado(false);
+  };
 
   // Função para buscar os dados atualizados do perfil (Firestore + LocalStorage)
   const fetchUserData = async () => {
@@ -168,6 +209,29 @@ export default function Sidebar({ isOpen, onClose, user, onProfileUpdated }) {
               </form>
             </>
           )}
+
+          <div className="mt-auto pt-6 border-t border-zinc-800 flex flex-col gap-2">
+            <span className="text-xs uppercase tracking-wide text-zinc-500">Meus dados</span>
+            <button onClick={handleExportar} disabled={ocupado} className="w-full text-left px-4 py-2.5 rounded bg-zinc-800/50 hover:bg-zinc-800 text-sm text-zinc-200 transition-colors disabled:opacity-50">
+              Exportar backup (JSON)
+            </button>
+            {backupPendente ? (
+              <div className="rounded border border-zinc-700 bg-zinc-950 p-3 text-xs text-zinc-300 flex flex-col gap-2">
+                <span>
+                  Importar {backupPendente.resumo.atividades} atividades, {backupPendente.resumo.tarefas} tarefas, {backupPendente.resumo.metas} metas e {backupPendente.resumo.cursos} cursos? Itens com o mesmo código serão substituídos; nada é apagado.
+                </span>
+                <div className="flex gap-2">
+                  <button onClick={handleConfirmarImportar} disabled={ocupado} className="px-3 py-1.5 bg-zinc-100 text-zinc-950 rounded font-medium disabled:opacity-50">Importar</button>
+                  <button onClick={() => setBackupPendente(null)} className="px-3 py-1.5 text-zinc-400 hover:text-white">Cancelar</button>
+                </div>
+              </div>
+            ) : (
+              <button onClick={() => arquivoRef.current?.click()} disabled={ocupado} className="w-full text-left px-4 py-2.5 rounded bg-zinc-800/50 hover:bg-zinc-800 text-sm text-zinc-200 transition-colors disabled:opacity-50">
+                Importar backup
+              </button>
+            )}
+            <input ref={arquivoRef} type="file" accept="application/json,.json" onChange={handleEscolherArquivo} className="hidden" />
+          </div>
         </div>
       </div>
 
