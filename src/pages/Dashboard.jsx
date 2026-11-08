@@ -6,6 +6,7 @@ import TaskDetailModal from '../components/TaskDetailModal';
 import Sidebar from '../components/Sidebar';
 import RightMenu from '../components/RightMenu';
 import Notas from './Notas';
+import Treinos from './Treinos';
 import { auth, db } from '../services/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, doc, setDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
@@ -790,7 +791,9 @@ export default function Dashboard() {
           <Notas user={user} atividades={atividades} isAvaliacoesOpen={isAvaliacoesOpen} setIsAvaliacoesOpen={setIsAvaliacoesOpen} />
         )}
 
-        {activePage !== 'Grade' && activePage !== 'Notas' && (
+        {activePage === 'Treinos' && <Treinos user={user} />}
+
+        {activePage !== 'Grade' && activePage !== 'Notas' && activePage !== 'Treinos' && (
           <div className="w-full max-w-5xl flex flex-col items-center justify-center flex-1 text-zinc-400 gap-4">
             <h2 className="text-2xl font-bold text-zinc-100">{activePage}</h2>
             <p>Página em construção...</p>
