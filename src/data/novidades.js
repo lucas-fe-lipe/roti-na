@@ -1,8 +1,19 @@
 // Notas de atualização. Para anunciar algo novo: adicione um item NO TOPO da lista
 // e atualize VERSAO_ATUAL com a mesma versão. O selo "novo" aparece até a pessoa abrir a página.
-export const VERSAO_ATUAL = '1.2';
+export const VERSAO_ATUAL = '1.3';
 
 export const NOVIDADES = [
+  {
+    versao: '1.3',
+    data: '2026-11-08',
+    titulo: 'Exportar para o Google Agenda',
+    itens: [
+      'Menu da conta → "Exportar para o Google Agenda": gera um arquivo .ics com atividades (com data de início e fim), tarefas e avaliações.',
+      'Opção "só o que ainda não foi exportado" e escolha de lembrete.',
+      'Avaliações da página Notas agora aparecem em preto na lista de tarefas.',
+      'Novidades e Configurações foram para a parte de baixo do menu.',
+    ],
+  },
   {
     versao: '1.2',
     data: '2026-11-08',

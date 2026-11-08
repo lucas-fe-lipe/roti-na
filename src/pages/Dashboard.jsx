@@ -462,7 +462,7 @@ export default function Dashboard() {
   const totalHoje = feitasHoje + itensHoje.length;
 
   const abrirTarefa = (t) => { setTarefaDetalhe(t); setIsTaskDetailOpen(true); };
-  const corDaTarefa = (t) => t.cor || (t.tipo === 'avaliacao' ? '#1e3a8a' : '#000000');
+  const corDaTarefa = (t) => t.cor || '#000000';
 
   const renderAtividadeHoje = (atv) => (
     <ItemRow
@@ -869,6 +869,8 @@ export default function Dashboard() {
         onClose={() => setIsSidebarOpen(false)} 
         user={user} 
         onProfileUpdated={atualizarAvatarPerfil}
+        atividades={atividades}
+        tarefas={tarefas}
       />
       <RightMenu 
         isOpen={isRightMenuOpen} 

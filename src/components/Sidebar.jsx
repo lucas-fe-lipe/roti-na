@@ -7,8 +7,9 @@ import { getInitials } from '../utils/defaultAvatars';
 import Avatar from './Avatar';
 import { montarBackup, baixarBackup, lerBackup, importarBackup } from '../utils/backup';
 import { notificar } from '../utils/toast';
+import ExportModal from './ExportModal';
 
-export default function Sidebar({ isOpen, onClose, user, onProfileUpdated }) {
+export default function Sidebar({ isOpen, onClose, user, onProfileUpdated, atividades = [], tarefas = [] }) {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -17,6 +18,7 @@ export default function Sidebar({ isOpen, onClose, user, onProfileUpdated }) {
   const [userAvatar, setUserAvatar] = useState('');
   const [isFullScreenImageOpen, setIsFullScreenImageOpen] = useState(false);
   const [backupPendente, setBackupPendente] = useState(null);
+  const [isExportOpen, setIsExportOpen] = useState(false);
   const [ocupado, setOcupado] = useState(false);
   const arquivoRef = useRef(null);
 
@@ -212,6 +214,9 @@ export default function Sidebar({ isOpen, onClose, user, onProfileUpdated }) {
 
           <div className="mt-auto pt-6 border-t border-zinc-800 flex flex-col gap-2">
             <span className="text-xs uppercase tracking-wide text-zinc-500">Meus dados</span>
+            <button onClick={() => setIsExportOpen(true)} className="w-full text-left px-4 py-2.5 rounded bg-zinc-800/50 hover:bg-zinc-800 text-sm text-zinc-200 transition-colors">
+              Exportar para o Google Agenda
+            </button>
             <button onClick={handleExportar} disabled={ocupado} className="w-full text-left px-4 py-2.5 rounded bg-zinc-800/50 hover:bg-zinc-800 text-sm text-zinc-200 transition-colors disabled:opacity-50">
               Exportar backup (JSON)
             </button>
@@ -234,6 +239,8 @@ export default function Sidebar({ isOpen, onClose, user, onProfileUpdated }) {
           </div>
         </div>
       </div>
+
+      <ExportModal aberto={isExportOpen} onFechar={() => setIsExportOpen(false)} user={user} atividades={atividades} tarefas={tarefas} />
 
       {/* MODAL DE TELA CHEIA PARA A FOTO */}
       {isFullScreenImageOpen && (
