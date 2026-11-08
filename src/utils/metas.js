@@ -1,4 +1,4 @@
-import { hojeLocalStr } from './date';
+import { hojeLocalStr } from './date.js';
 
 // "Dia da meta": o dia só vira no horário de reset configurado (ex.: 04:00).
 // Antes desse horário, ainda vale o dia anterior. Retorna YYYY-MM-DD.

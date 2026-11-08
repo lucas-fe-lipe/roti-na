@@ -30,6 +30,10 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      # Testes das funções de data/horário: se falharem, o site não é publicado
+      - name: Testes
+        run: npm test
+
       # PASSO NOVO: Criar o .env com as chaves secretas do GitHub
       - name: Criar ficheiro .env
         run: |

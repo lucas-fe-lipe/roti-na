@@ -26,3 +26,16 @@ Para aplicar: Firebase Console → Firestore Database → aba **Regras** → col
 ## Backup
 
 Menu lateral (ícone do perfil) → **Meus dados** → exportar/importar um arquivo JSON com atividades, tarefas, metas e cursos.
+
+## Testes
+
+```bash
+npm test
+```
+
+Roda os testes das funções de data, horário e metas (`tests/utils.test.js`). O deploy só publica se eles passarem.
+
+## Configurações e Novidades
+
+- Página **Configurações**: liga/desliga páginas e blocos (salvo em `users/{uid}.config` e no aparelho).
+- Página **Novidades**: edite `src/data/novidades.js` (novo item no topo + `VERSAO_ATUAL`) para mostrar o selo "novo".
