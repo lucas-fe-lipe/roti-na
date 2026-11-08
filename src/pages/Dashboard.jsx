@@ -14,6 +14,10 @@ import { getInitials } from '../utils/defaultAvatars';
 import { hojeLocalStr } from '../utils/date';
 import Avatar from '../components/Avatar';
 
+// Atividades da grade não são tarefas. Ao concluir uma, guardamos uma "tarefa marcadora" (id atv-task-...)
+// só para lembrar que ela foi feita naquele dia. Esses marcadores nunca aparecem nas listas de tarefas.
+const ehMarcadorDeAtividade = (t) => !!t.id && t.id.startsWith('atv-task-');
+
 export default function Dashboard() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isGoalModalOpen, setIsGoalModalOpen] = useState(false);
@@ -233,7 +237,11 @@ export default function Dashboard() {
 
     const tarefaExistente = tarefas.find(t => t.id === taskId);
 
-    if (tarefaExistente) {
+    if (tarefaExistente && tarefaExistente.concluida) {
+      // desmarcar: apaga o marcador (não deixa lixo no banco)
+      await handleExcluirTarefa(taskId);
+    } else if (tarefaExistente) {
+      // marcador antigo que ficou como "não concluído"
       await handleToggleConcluida(tarefaExistente);
     } else {
       const novaTarefa = {
@@ -261,11 +269,15 @@ export default function Dashboard() {
   };
 
   const handleExcluirTarefasConcluidas = async () => {
-    const tarefasConcluidasList = tarefas.filter(t => t.concluida);
+    // apaga as tarefas/avaliações concluídas e também marcadores de atividades de dias anteriores.
+    // Os marcadores de HOJE ficam, para as atividades de hoje continuarem concluídas.
+    const hoje = hojeLocalStr(currentTime);
+    const apagar = tarefas.filter(t => ehMarcadorDeAtividade(t) ? t.data !== hoje : t.concluida);
     if (user) {
-      await Promise.all(tarefasConcluidasList.map(t => deleteDoc(doc(db, 'users', user.uid, 'tarefas', t.id))));
+      await Promise.all(apagar.map(t => deleteDoc(doc(db, 'users', user.uid, 'tarefas', t.id))));
     } else {
-      const atualizadas = tarefas.filter(t => !t.concluida);
+      const ids = new Set(apagar.map(t => t.id));
+      const atualizadas = tarefas.filter(t => !ids.has(t.id));
       setTarefas(atualizadas);
       localStorage.setItem('local_tarefas', JSON.stringify(atualizadas));
     }
@@ -318,7 +330,7 @@ export default function Dashboard() {
   const tarefasConcluidas = [];
 
   tarefas.forEach(t => {
-    if (t.id && t.id.startsWith('atv-task-') && t.data !== hojeStr) return;
+    if (ehMarcadorDeAtividade(t)) return;
 
     if (t.concluida) {
       tarefasConcluidas.push(t);
