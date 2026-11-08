@@ -29,7 +29,6 @@ export default function Dashboard() {
   const [atividades, setAtividades] = useState([]);
   const [metas, setMetas] = useState([]);
   const [tarefas, setTarefas] = useState([]);
-  const [atividadesConcluidasHoje, setAtividadesConcluidasHoje] = useState({});
   const [confirmarExclusaoConcluidas, setConfirmarExclusaoConcluidas] = useState(false);
   
   const [atividadeEditando, setAtividadeEditando] = useState(null);
@@ -225,9 +224,30 @@ export default function Dashboard() {
     }
   };
 
-  const handleToggleConcluidaAtividade = (atvId, horarioInicio) => {
-    const key = `atv-${atvId}-${horarioInicio}`;
-    setAtividadesConcluidasHoje(prev => ({ ...prev, [key]: !prev[key] }));
+  // Correção: Agora atualiza/cria a tarefa correspondente no Firebase/localStorage ao marcar a atividade
+  const handleToggleConcluidaAtividade = async (atvId, horarioInicio) => {
+    const hojeStr = hojeLocalStr(currentTime);
+    const taskId = `atv-task-${atvId}-${hojeStr}-${horarioInicio}`;
+    const atvObj = atividades.find(a => a.id === atvId);
+    if (!atvObj) return;
+
+    const tarefaExistente = tarefas.find(t => t.id === taskId);
+
+    if (tarefaExistente) {
+      await handleToggleConcluida(tarefaExistente);
+    } else {
+      const novaTarefa = {
+        id: taskId,
+        nome: atvObj.apelido || atvObj.nome,
+        data: hojeStr,
+        horario: horarioInicio,
+        cor: atvObj.cor || '#000000',
+        atividadeVinculada: atvObj.id,
+        detalhes: atvObj.detalhes || '',
+        concluida: true
+      };
+      await handleSalvarTarefa(novaTarefa);
+    }
   };
 
   const handleExcluirTarefa = async (id) => {
@@ -249,7 +269,6 @@ export default function Dashboard() {
       setTarefas(atualizadas);
       localStorage.setItem('local_tarefas', JSON.stringify(atualizadas));
     }
-    setAtividadesConcluidasHoje({});
     setConfirmarExclusaoConcluidas(false);
   };
 
@@ -277,13 +296,16 @@ export default function Dashboard() {
     atv.horarios.forEach(h => {
       const diaAbreviado = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'][currentDay];
       if (h.dia === diaAbreviado) {
-        const uniqueKey = `atv-${atv.id}-${h.inicio}`;
+        const taskId = `atv-task-${atv.id}-${hojeStr}-${h.inicio}`;
+        const tarefaCorrespondente = tarefas.find(t => t.id === taskId);
+        const concluida = !!(tarefaCorrespondente && tarefaCorrespondente.concluida);
+
         atividadesDoDia.push({
           ...atv,
-          uniqueKey,
+          uniqueKey: taskId,
           horarioExibicao: h.inicio,
           horarioInicio: h.inicio,
-          concluida: !!atividadesConcluidasHoje[uniqueKey]
+          concluida
         });
       }
     });
@@ -296,6 +318,9 @@ export default function Dashboard() {
   const tarefasConcluidas = [];
 
   tarefas.forEach(t => {
+    // Ignora instâncias de atividades antigas de outros dias na lista principal de hoje
+    if (t.id && t.id.startsWith('atv-task-') && t.data !== hojeStr) return;
+
     if (t.concluida) {
       tarefasConcluidas.push(t);
     } else {
@@ -634,7 +659,6 @@ export default function Dashboard() {
               {datasOrdenadas.map(dataKey => {
                 if (dataKey === hojeStr || dataKey < hojeStr) return null;
                 
-                // Por padrão, se não estiver definido no state, inicia como falso (maximizado)
                 const isMinimizado = minimizedSections[dataKey] !== undefined ? minimizedSections[dataKey] : false;
                 
                 const listaTarefas = (tarefasPorData[dataKey] || []).filter(t => !t.concluida);
