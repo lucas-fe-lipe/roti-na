@@ -8,7 +8,8 @@ import RightMenu from '../components/RightMenu';
 import Notas from './Notas';
 import { auth, db } from '../services/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
-import { collection, doc, setDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
+import { collection, doc, onSnapshot } from 'firebase/firestore';
+import { salvarDoc, apagarDoc, avisarErroLeitura, registrarSchema } from '../services/db';
 import { getInitials } from '../utils/defaultAvatars';
 import { hojeLocalStr } from '../utils/date';
 import Avatar from '../components/Avatar';
@@ -46,6 +47,8 @@ export default function Dashboard() {
 
   const [categorias, setCategorias] = useState(['Estudos', 'Trabalho', 'Treinos', 'Outros']);
   const coresUsadas = Array.from(new Set(atividades.map(a => a.cor)));
+  // categorias personalizadas vêm das próprias atividades salvas (assim não somem ao recarregar)
+  const categoriasTodas = Array.from(new Set([...categorias, ...atividades.map(a => a.categoria).filter(Boolean)]));
 
   const atualizarAvatarPerfil = () => {
     if (auth.currentUser) {
@@ -59,6 +62,7 @@ export default function Dashboard() {
       setUser(currentUser);
       if (currentUser) {
         atualizarAvatarPerfil();
+        registrarSchema(currentUser);
       } else {
         setUserAvatar('');
       }
@@ -71,23 +75,24 @@ export default function Dashboard() {
       const tSalvas = localStorage.getItem('local_tarefas');
       const aSalvas = localStorage.getItem('local_atividades');
       const mSalvas = localStorage.getItem('local_metas');
-      if (tSalvas) setTarefas(JSON.parse(tSalvas));
-      if (aSalvas) setAtividades(JSON.parse(aSalvas));
-      if (mSalvas) setMetas(JSON.parse(mSalvas));
+      const lerLista = (txt) => { try { const l = JSON.parse(txt); return Array.isArray(l) ? l : []; } catch { return []; } };
+      if (tSalvas) setTarefas(lerLista(tSalvas));
+      if (aSalvas) setAtividades(lerLista(aSalvas));
+      if (mSalvas) setMetas(lerLista(mSalvas));
       return;
     }
     
     const unsubAtv = onSnapshot(collection(db, 'users', user.uid, 'atividades'), (snap) => {
       setAtividades(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
+    }, avisarErroLeitura);
 
     const unsubMetas = onSnapshot(collection(db, 'users', user.uid, 'metas'), (snap) => {
       setMetas(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
+    }, avisarErroLeitura);
 
     const unsubTarefas = onSnapshot(collection(db, 'users', user.uid, 'tarefas'), (snap) => {
       setTarefas(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
+    }, avisarErroLeitura);
 
     return () => {
       unsubAtv();
@@ -95,6 +100,16 @@ export default function Dashboard() {
       unsubTarefas();
     };
   }, [user]);
+
+  // Sem login, a página Notas grava tarefas (avaliações) direto no localStorage;
+  // ao voltar para a Rotina, relemos para a lista "Hoje" refletir essas mudanças.
+  useEffect(() => {
+    if (user || activePage !== 'Grade') return;
+    try {
+      const t = JSON.parse(localStorage.getItem('local_tarefas') || '[]');
+      if (Array.isArray(t)) setTarefas(t);
+    } catch { /* ignora dados locais corrompidos */ }
+  }, [activePage, user]);
 
   useEffect(() => {
     const interval = setInterval(() => setCurrentTime(new Date()), 60000);
@@ -110,7 +125,7 @@ export default function Dashboard() {
     minHour = 24;
     maxHour = 0;
     atividades.forEach(atv => {
-      atv.horarios.forEach(h => {
+      (atv.horarios || []).forEach(h => {
         if (!h.inicio || !h.fim) return;
         const startH = parseInt(h.inicio.split(':')[0]);
         const endH = parseInt(h.fim.split(':')[0]);
@@ -139,7 +154,7 @@ export default function Dashboard() {
       setCategorias([...categorias, novaAtividade.categoria]);
     }
     if (user) {
-      await setDoc(doc(db, 'users', user.uid, 'atividades', novaAtividade.id), novaAtividade);
+      await salvarDoc(doc(db, 'users', user.uid, 'atividades', novaAtividade.id), novaAtividade);
     } else {
       const existe = atividades.find(a => a.id === novaAtividade.id);
       const atualizadas = existe ? atividades.map(a => a.id === novaAtividade.id ? novaAtividade : a) : [...atividades, novaAtividade];
@@ -150,7 +165,7 @@ export default function Dashboard() {
 
   const handleExcluirAtividade = async (id) => {
     if (user) {
-      await deleteDoc(doc(db, 'users', user.uid, 'atividades', id));
+      await apagarDoc(doc(db, 'users', user.uid, 'atividades', id));
     } else {
       const atualizadas = atividades.filter(a => a.id !== id);
       setAtividades(atualizadas);
@@ -160,7 +175,7 @@ export default function Dashboard() {
 
   const handleSalvarMeta = async (novaMeta) => {
     if (user) {
-      await setDoc(doc(db, 'users', user.uid, 'metas', novaMeta.id), novaMeta);
+      await salvarDoc(doc(db, 'users', user.uid, 'metas', novaMeta.id), novaMeta);
     } else {
       const existe = metas.find(m => m.id === novaMeta.id);
       const atualizadas = existe ? metas.map(m => m.id === novaMeta.id ? novaMeta : m) : [...metas, novaMeta];
@@ -175,7 +190,7 @@ export default function Dashboard() {
     const novoProgresso = Number((metaAtual.progresso + metaAtual.incremento).toFixed(2));
     const atualizada = { ...metaAtual, progresso: novoProgresso > metaAtual.meta ? metaAtual.meta : novoProgresso };
     if (user) {
-      await setDoc(doc(db, 'users', user.uid, 'metas', metaId), atualizada);
+      await salvarDoc(doc(db, 'users', user.uid, 'metas', metaId), atualizada);
     } else {
       const atualizadas = metas.map(m => m.id === metaId ? atualizada : m);
       setMetas(atualizadas);
@@ -188,7 +203,7 @@ export default function Dashboard() {
     if (!metaAtual) return;
     const atualizada = { ...metaAtual, progresso: 0 };
     if (user) {
-      await setDoc(doc(db, 'users', user.uid, 'metas', metaId), atualizada);
+      await salvarDoc(doc(db, 'users', user.uid, 'metas', metaId), atualizada);
     } else {
       const atualizadas = metas.map(m => m.id === metaId ? atualizada : m);
       setMetas(atualizadas);
@@ -198,7 +213,7 @@ export default function Dashboard() {
 
   const handleExcluirMeta = async (metaId) => {
     if (user) {
-      await deleteDoc(doc(db, 'users', user.uid, 'metas', metaId));
+      await apagarDoc(doc(db, 'users', user.uid, 'metas', metaId));
     } else {
       const atualizadas = metas.filter(m => m.id !== metaId);
       setMetas(atualizadas);
@@ -208,7 +223,7 @@ export default function Dashboard() {
 
   const handleSalvarTarefa = async (novaTarefa) => {
     if (user) {
-      await setDoc(doc(db, 'users', user.uid, 'tarefas', novaTarefa.id), novaTarefa);
+      await salvarDoc(doc(db, 'users', user.uid, 'tarefas', novaTarefa.id), novaTarefa);
     } else {
       const existe = tarefas.find(t => t.id === novaTarefa.id);
       const atualizadas = existe ? tarefas.map(t => t.id === novaTarefa.id ? novaTarefa : t) : [...tarefas, novaTarefa];
@@ -220,7 +235,7 @@ export default function Dashboard() {
   const handleToggleConcluida = async (tarefa) => {
     const atualizada = { ...tarefa, concluida: !tarefa.concluida };
     if (user) {
-      await setDoc(doc(db, 'users', user.uid, 'tarefas', tarefa.id), atualizada);
+      await salvarDoc(doc(db, 'users', user.uid, 'tarefas', tarefa.id), atualizada);
     } else {
       const atualizadas = tarefas.map(t => t.id === tarefa.id ? atualizada : t);
       setTarefas(atualizadas);
@@ -259,7 +274,7 @@ export default function Dashboard() {
 
   const handleExcluirTarefa = async (id) => {
     if (user) {
-      await deleteDoc(doc(db, 'users', user.uid, 'tarefas', id));
+      await apagarDoc(doc(db, 'users', user.uid, 'tarefas', id));
     } else {
       const atualizadas = tarefas.filter(t => t.id !== id);
       setTarefas(atualizadas);
@@ -273,7 +288,7 @@ export default function Dashboard() {
     const hoje = hojeLocalStr(currentTime);
     const apagar = tarefas.filter(t => ehMarcadorDeAtividade(t) ? t.data !== hoje : t.concluida);
     if (user) {
-      await Promise.all(apagar.map(t => deleteDoc(doc(db, 'users', user.uid, 'tarefas', t.id))));
+      await Promise.all(apagar.map(t => apagarDoc(doc(db, 'users', user.uid, 'tarefas', t.id))));
     } else {
       const ids = new Set(apagar.map(t => t.id));
       const atualizadas = tarefas.filter(t => !ids.has(t.id));
@@ -304,7 +319,7 @@ export default function Dashboard() {
 
   const atividadesDoDia = [];
   atividades.forEach(atv => {
-    atv.horarios.forEach(h => {
+    (atv.horarios || []).forEach(h => {
       const diaAbreviado = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'][currentDay];
       if (h.dia === diaAbreviado) {
         const taskId = `atv-task-${atv.id}-${hojeStr}-${h.inicio}`;
@@ -596,7 +611,7 @@ export default function Dashboard() {
                 ))}
 
                 {atividades.map((atv) => 
-                  atv.horarios.map((h, i) => {
+                  (atv.horarios || []).map((h, i) => {
                     const [startH, startM] = h.inicio.split(':').map(Number);
                     const [endH, endM] = h.fim.split(':').map(Number);
                     const dayIndex = diasDaSemana.findIndex(d => d === h.dia);
@@ -853,7 +868,7 @@ export default function Dashboard() {
         onSave={handleSalvarAtividade} 
         onDelete={handleExcluirAtividade} 
         atividadeEditada={atividadeEditando} 
-        categorias={categorias}
+        categorias={categoriasTodas}
         coresUsadas={coresUsadas}
         modoVisualizacaoInicial={modoVisualizacao}
       />

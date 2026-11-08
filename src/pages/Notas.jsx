@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { collection, doc, setDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
+import { collection, doc, onSnapshot } from 'firebase/firestore';
+import { salvarDoc, apagarDoc, avisarErroLeitura } from '../services/db';
 import { db } from '../services/firebase';
 import { hojeLocalStr } from '../utils/date';
 
@@ -31,10 +32,10 @@ export default function Notas({ user, atividades, isAvaliacoesOpen, setIsAvaliac
     if (user) {
       const unsubCursos = onSnapshot(collection(db, 'users', user.uid, 'cursos'), (snap) => {
         setCursos(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      });
+      }, avisarErroLeitura);
       const unsubTarefas = onSnapshot(collection(db, 'users', user.uid, 'tarefas'), (snap) => {
         setTarefas(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      });
+      }, avisarErroLeitura);
       return () => { unsubCursos(); unsubTarefas(); };
     } else {
       const salvos = localStorage.getItem('local_cursos');
@@ -51,13 +52,14 @@ export default function Notas({ user, atividades, isAvaliacoesOpen, setIsAvaliac
 
   const syncAvaliacoesComTarefas = async (disciplinaAtualizada, cursoId, periodoId) => {
     let tarefasLocais = user ? [] : JSON.parse(localStorage.getItem('local_tarefas') || '[]');
+    const desejadas = new Set();
     
     for (const av of disciplinaAtualizada.avaliacoes) {
       const taskId = `av_${cursoId}_${periodoId}_${disciplinaAtualizada.id}_${av.id}`;
       
       if (av.obtida !== '' && !isNaN(av.obtida)) {
         if (user) {
-          await deleteDoc(doc(db, 'users', user.uid, 'tarefas', taskId)).catch(() => {});
+          await apagarDoc(doc(db, 'users', user.uid, 'tarefas', taskId)).catch(() => {});
         } else {
           tarefasLocais = tarefasLocais.filter(t => t.id !== taskId);
         }
@@ -71,11 +73,12 @@ export default function Notas({ user, atividades, isAvaliacoesOpen, setIsAvaliac
         };
         // só define concluida=false quando a tarefa ainda não existe; senão editar a disciplina
         // desmarcaria uma avaliação que você já tinha concluído na lista de tarefas
+        desejadas.add(taskId);
         const jaExiste = user ? tarefas.some(t => t.id === taskId) : tarefasLocais.some(t => t.id === taskId);
         if (!jaExiste) taskData.concluida = false;
         
         if (user) {
-          await setDoc(doc(db, 'users', user.uid, 'tarefas', taskId), taskData, { merge: true });
+          await salvarDoc(doc(db, 'users', user.uid, 'tarefas', taskId), taskData, { merge: true });
         } else {
           const idx = tarefasLocais.findIndex(t => t.id === taskId);
           if (idx >= 0) tarefasLocais[idx] = { ...tarefasLocais[idx], ...taskData };
@@ -83,9 +86,27 @@ export default function Notas({ user, atividades, isAvaliacoesOpen, setIsAvaliac
         }
       }
     }
-    if (!user) {
+    // remove tarefas de avaliações que foram apagadas ou ficaram sem data nesta disciplina
+    const prefixoDisc = `av_${cursoId}_${periodoId}_${disciplinaAtualizada.id}_`;
+    if (user) {
+      const orfas = tarefas.filter(t => t.id.startsWith(prefixoDisc) && !desejadas.has(t.id));
+      await Promise.all(orfas.map(t => apagarDoc(doc(db, 'users', user.uid, 'tarefas', t.id))));
+    } else {
+      tarefasLocais = tarefasLocais.filter(t => !(t.id.startsWith(prefixoDisc) && !desejadas.has(t.id)));
       setTarefas(tarefasLocais);
       localStorage.setItem('local_tarefas', JSON.stringify(tarefasLocais));
+    }
+  };
+
+  // apaga as tarefas de avaliação ligadas a um curso/período/disciplina que foi excluído
+  const removerTarefasDeAvaliacao = async (prefixo) => {
+    if (user) {
+      const orfas = tarefas.filter(t => t.id.startsWith(prefixo));
+      await Promise.all(orfas.map(t => apagarDoc(doc(db, 'users', user.uid, 'tarefas', t.id))));
+    } else {
+      const locais = JSON.parse(localStorage.getItem('local_tarefas') || '[]').filter(t => !t.id.startsWith(prefixo));
+      setTarefas(locais);
+      localStorage.setItem('local_tarefas', JSON.stringify(locais));
     }
   };
 
@@ -96,7 +117,7 @@ export default function Notas({ user, atividades, isAvaliacoesOpen, setIsAvaliac
     const id = curso.id || Date.now().toString();
     const novoCurso = { ...curso, id, periodos: curso.periodos || [] };
     
-    if (user) await setDoc(doc(db, 'users', user.uid, 'cursos', id), novoCurso);
+    if (user) await salvarDoc(doc(db, 'users', user.uid, 'cursos', id), novoCurso);
     else {
       const existe = cursos.find(c => c.id === id);
       const atualizados = existe ? cursos.map(c => c.id === id ? novoCurso : c) : [...cursos, novoCurso];
@@ -107,8 +128,9 @@ export default function Notas({ user, atividades, isAvaliacoesOpen, setIsAvaliac
 
   const excluirCurso = async (id) => {
     if(window.confirm('Tem certeza que deseja excluir o curso inteiro?')) {
-      if (user) await deleteDoc(doc(db, 'users', user.uid, 'cursos', id));
+      if (user) await apagarDoc(doc(db, 'users', user.uid, 'cursos', id));
       else persistirLocal(cursos.filter(c => c.id !== id));
+      await removerTarefasDeAvaliacao(`av_${id}_`);
     }
   };
 
@@ -124,7 +146,7 @@ export default function Notas({ user, atividades, isAvaliacoesOpen, setIsAvaliac
     else novosPeriodos.push(novoPeriodo);
 
     const cursoAtualizado = { ...curso, periodos: novosPeriodos };
-    if (user) await setDoc(doc(db, 'users', user.uid, 'cursos', cursoId), cursoAtualizado);
+    if (user) await salvarDoc(doc(db, 'users', user.uid, 'cursos', cursoId), cursoAtualizado);
     else persistirLocal(cursos.map(c => c.id === cursoId ? cursoAtualizado : c));
     setPeriodoModal({ open: false, data: null, cursoId: null });
   };
@@ -134,8 +156,9 @@ export default function Notas({ user, atividades, isAvaliacoesOpen, setIsAvaliac
       const curso = cursos.find(c => c.id === cursoId);
       const novosPeriodos = curso.periodos.filter(p => p.id !== periodoId);
       const cursoAtualizado = { ...curso, periodos: novosPeriodos };
-      if (user) await setDoc(doc(db, 'users', user.uid, 'cursos', cursoId), cursoAtualizado);
+      if (user) await salvarDoc(doc(db, 'users', user.uid, 'cursos', cursoId), cursoAtualizado);
       else persistirLocal(cursos.map(c => c.id === cursoId ? cursoAtualizado : c));
+      await removerTarefasDeAvaliacao(`av_${cursoId}_${periodoId}_`);
     }
   };
 
@@ -156,7 +179,7 @@ export default function Notas({ user, atividades, isAvaliacoesOpen, setIsAvaliac
     novosPeriodos[pIndex].disciplinas = novasDisciplinas;
     const cursoAtualizado = { ...curso, periodos: novosPeriodos };
 
-    if (user) await setDoc(doc(db, 'users', user.uid, 'cursos', cursoId), cursoAtualizado);
+    if (user) await salvarDoc(doc(db, 'users', user.uid, 'cursos', cursoId), cursoAtualizado);
     else persistirLocal(cursos.map(c => c.id === cursoId ? cursoAtualizado : c));
     
     await syncAvaliacoesComTarefas(novaDisciplina, cursoId, periodoId);
@@ -170,8 +193,9 @@ export default function Notas({ user, atividades, isAvaliacoesOpen, setIsAvaliac
       const pIndex = novosPeriodos.findIndex(p => p.id === periodoId);
       novosPeriodos[pIndex].disciplinas = novosPeriodos[pIndex].disciplinas.filter(d => d.id !== disciplinaId);
       const cursoAtualizado = { ...curso, periodos: novosPeriodos };
-      if (user) await setDoc(doc(db, 'users', user.uid, 'cursos', cursoId), cursoAtualizado);
+      if (user) await salvarDoc(doc(db, 'users', user.uid, 'cursos', cursoId), cursoAtualizado);
       else persistirLocal(cursos.map(c => c.id === cursoId ? cursoAtualizado : c));
+      await removerTarefasDeAvaliacao(`av_${cursoId}_${periodoId}_${disciplinaId}_`);
     }
   };
 
@@ -188,7 +212,7 @@ export default function Notas({ user, atividades, isAvaliacoesOpen, setIsAvaliac
     
     curso.periodos[periodoIndex].disciplinas[discIndex] = disciplina;
     
-    if (user) await setDoc(doc(db, 'users', user.uid, 'cursos', curso.id), curso);
+    if (user) await salvarDoc(doc(db, 'users', user.uid, 'cursos', curso.id), curso);
     else persistirLocal(cursos.map(c => c.id === curso.id ? curso : c));
     
     await syncAvaliacoesComTarefas(disciplina, curso.id, curso.periodos[periodoIndex].id);

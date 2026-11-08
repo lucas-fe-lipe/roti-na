@@ -23,7 +23,7 @@ export default function ActivityModal({ isOpen, onClose, onSave, onDelete, ativi
       if (atividadeEditada) {
         setNome(atividadeEditada.nome);
         setApelido(atividadeEditada.apelido || '');
-        setHorarios(atividadeEditada.horarios.map(h => ({ ...h })));
+        setHorarios((atividadeEditada.horarios || []).map(h => ({ ...h })));
         setCorSelecionada(atividadeEditada.cor);
         setCategoria(categorias.includes(atividadeEditada.categoria) ? atividadeEditada.categoria : 'Outros');
         setDetalhes(atividadeEditada.detalhes || '');
@@ -110,7 +110,7 @@ export default function ActivityModal({ isOpen, onClose, onSave, onDelete, ativi
             <div>
               <span className="text-xs text-zinc-400 block mb-1">Horários</span>
               <div className="space-y-1 bg-zinc-950 p-3 rounded">
-                {atividadeEditada.horarios.map((h, i) => (
+                {(atividadeEditada.horarios || []).map((h, i) => (
                   <div key={i} className="text-sm text-zinc-300">
                     <span className="font-bold">{h.dia}:</span> {h.inicio} até {h.fim}
                   </div>
