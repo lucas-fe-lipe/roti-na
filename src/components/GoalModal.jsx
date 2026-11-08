@@ -83,12 +83,13 @@ export default function GoalModal({ isOpen, onClose, onSave, onDelete, onReset, 
               <input type="number" step="any" value={incremento} onChange={e => setIncremento(e.target.value)} placeholder="0.6" className="w-full bg-zinc-950 border border-zinc-700 rounded p-2 text-zinc-100 focus:outline-none" />
             </div>
             <div className="w-36">
-              <label className="block text-sm mb-1 text-zinc-400">Horário Reset</label>
+              <label className="block text-sm mb-1 text-zinc-400">Reiniciar às</label>
               <input type="time" value={horarioReset} onChange={e => setHorarioReset(e.target.value)} className="w-full bg-zinc-950 border border-zinc-700 rounded p-2 text-zinc-100 focus:outline-none [color-scheme:dark]" />
             </div>
           </div>
 
           <div>
+            <p className="text-[11px] text-zinc-500 -mt-1 mb-3">O progresso volta a zero todo dia no horário "Reiniciar às". Ex.: 04:00 para quem dorme depois da meia-noite.</p>
             <label className="block text-sm mb-1 text-zinc-400">Cor do Progresso</label>
             <input type="color" value={cor} onChange={e => setCor(e.target.value)} className="w-full h-10 rounded cursor-pointer bg-transparent border border-zinc-700 p-1" />
           </div>

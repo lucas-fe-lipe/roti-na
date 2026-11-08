@@ -48,11 +48,11 @@ export default function ActivityModal({ isOpen, onClose, onSave, onDelete, ativi
     if (horarios.some(h => !h.inicio || !h.fim)) return setErro('Preencha os horários de início e fim.');
     
     for (let h of horarios) {
-      if (h.inicio >= h.fim) return setErro(`Horário inválido em ${h.dia}: O fim deve ser posterior ao início.`);
+      if (h.inicio === h.fim) return setErro(`Horário inválido em ${h.dia}: início e fim não podem ser iguais.`);
     }
 
     if (categoria === 'Criar nova categoria...' && !novaCategoria.trim()) {
-      return setErro('Introduza o nome da nova categoria.');
+      return setErro('Digite o nome da nova categoria.');
     }
 
     const categoriaFinal = categoria === 'Criar nova categoria...' ? novaCategoria.trim() : categoria;
@@ -112,7 +112,7 @@ export default function ActivityModal({ isOpen, onClose, onSave, onDelete, ativi
               <div className="space-y-1 bg-zinc-950 p-3 rounded">
                 {(atividadeEditada.horarios || []).map((h, i) => (
                   <div key={i} className="text-sm text-zinc-300">
-                    <span className="font-bold">{h.dia}:</span> {h.inicio} até {h.fim}
+                    <span className="font-bold">{h.dia}:</span> {h.inicio} até {h.fim}{h.fim < h.inicio ? ' (dia seguinte)' : ''}
                   </div>
                 ))}
               </div>
@@ -168,6 +168,7 @@ export default function ActivityModal({ isOpen, onClose, onSave, onDelete, ativi
                   {horarios.length > 1 && (
                     <button onClick={() => setHorarios(horarios.filter((_, idx) => idx !== i))} className="text-red-500 hover:text-red-400 ml-1 px-2 font-bold text-base bg-transparent border-none">×</button>
                   )}
+                  {h.inicio && h.fim && h.fim < h.inicio && <span className="text-[10px] text-zinc-500 whitespace-nowrap">dia seguinte</span>}
                 </div>
               ))}
               <button onClick={() => setHorarios([...horarios, { ...horarios[horarios.length - 1] }])} className="text-sm text-zinc-400 hover:text-white mt-1">+ Adicionar horário</button>

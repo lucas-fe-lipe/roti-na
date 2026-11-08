@@ -3,6 +3,7 @@ import { collection, doc, onSnapshot } from 'firebase/firestore';
 import { salvarDoc, apagarDoc, avisarErroLeitura } from '../services/db';
 import { db } from '../services/firebase';
 import { hojeLocalStr } from '../utils/date';
+import ConfirmModal from '../components/ConfirmModal';
 
 export default function Notas({ user, atividades, isAvaliacoesOpen, setIsAvaliacoesOpen }) {
   const [cursos, setCursos] = useState([]);
@@ -12,21 +13,23 @@ export default function Notas({ user, atividades, isAvaliacoesOpen, setIsAvaliac
   const [periodoModal, setPeriodoModal] = useState({ open: false, data: null, cursoId: null });
   const [disciplinaModal, setDisciplinaModal] = useState({ open: false, data: null, periodoId: null, cursoId: null });
 
+  const [confirmacao, setConfirmacao] = useState(null); // { titulo, mensagem, executar }
   const [cursosMinimizados, setCursosMinimizados] = useState({});
   const [periodosMinimizados, setPeriodosMinimizados] = useState({});
 
+  // Cursos/períodos novos começam minimizados; os que já existiam mantêm o estado escolhido.
   useEffect(() => {
-    const minCursos = {};
-    const minPeriodos = {};
-    cursos.forEach(c => {
-      minCursos[c.id] = true;
-      c.periodos?.forEach(p => {
-        minPeriodos[p.id] = true;
-      });
+    setCursosMinimizados(prev => {
+      const novo = { ...prev };
+      cursos.forEach(c => { if (!(c.id in novo)) novo[c.id] = true; });
+      return novo;
     });
-    setCursosMinimizados(minCursos);
-    setPeriodosMinimizados(minPeriodos);
-  }, [cursos.length]);
+    setPeriodosMinimizados(prev => {
+      const novo = { ...prev };
+      cursos.forEach(c => c.periodos?.forEach(p => { if (!(p.id in novo)) novo[p.id] = true; }));
+      return novo;
+    });
+  }, [cursos]);
 
   useEffect(() => {
     if (user) {
@@ -126,8 +129,12 @@ export default function Notas({ user, atividades, isAvaliacoesOpen, setIsAvaliac
     setCursoModal({ open: false, data: null });
   };
 
-  const excluirCurso = async (id) => {
-    if(window.confirm('Tem certeza que deseja excluir o curso inteiro?')) {
+  const excluirCurso = (id) => {
+    setConfirmacao({ titulo: 'Excluir curso', mensagem: 'Excluir o curso inteiro, com todos os períodos, disciplinas e avaliações?', executar: () => executarExcluirCurso(id) });
+  };
+
+  const executarExcluirCurso = async (id) => {
+    {
       if (user) await apagarDoc(doc(db, 'users', user.uid, 'cursos', id));
       else persistirLocal(cursos.filter(c => c.id !== id));
       await removerTarefasDeAvaliacao(`av_${id}_`);
@@ -151,8 +158,12 @@ export default function Notas({ user, atividades, isAvaliacoesOpen, setIsAvaliac
     setPeriodoModal({ open: false, data: null, cursoId: null });
   };
 
-  const excluirPeriodo = async (periodoId, cursoId) => {
-    if(window.confirm('Excluir este período?')) {
+  const excluirPeriodo = (periodoId, cursoId) => {
+    setConfirmacao({ titulo: 'Excluir período', mensagem: 'Excluir este período e suas disciplinas?', executar: () => executarExcluirPeriodo(periodoId, cursoId) });
+  };
+
+  const executarExcluirPeriodo = async (periodoId, cursoId) => {
+    {
       const curso = cursos.find(c => c.id === cursoId);
       const novosPeriodos = curso.periodos.filter(p => p.id !== periodoId);
       const cursoAtualizado = { ...curso, periodos: novosPeriodos };
@@ -186,8 +197,12 @@ export default function Notas({ user, atividades, isAvaliacoesOpen, setIsAvaliac
     setDisciplinaModal({ open: false, data: null, periodoId: null, cursoId: null });
   };
 
-  const excluirDisciplina = async (disciplinaId, periodoId, cursoId) => {
-    if(window.confirm('Excluir esta disciplina?')) {
+  const excluirDisciplina = (disciplinaId, periodoId, cursoId) => {
+    setConfirmacao({ titulo: 'Excluir disciplina', mensagem: 'Excluir esta disciplina e suas avaliações?', executar: () => executarExcluirDisciplina(disciplinaId, periodoId, cursoId) });
+  };
+
+  const executarExcluirDisciplina = async (disciplinaId, periodoId, cursoId) => {
+    {
       const curso = cursos.find(c => c.id === cursoId);
       let novosPeriodos = [...curso.periodos];
       const pIndex = novosPeriodos.findIndex(p => p.id === periodoId);
@@ -436,6 +451,13 @@ export default function Notas({ user, atividades, isAvaliacoesOpen, setIsAvaliac
         </button>
       </div>
 
+      <ConfirmModal
+        aberto={!!confirmacao}
+        titulo={confirmacao?.titulo}
+        mensagem={confirmacao?.mensagem}
+        onCancelar={() => setConfirmacao(null)}
+        onConfirmar={() => { const f = confirmacao.executar; setConfirmacao(null); f(); }}
+      />
       {cursoModal.open && <ModalCurso cursoInicial={cursoModal.data} onClose={() => setCursoModal({ open: false, data: null })} onSave={salvarCurso} onDelete={excluirCurso} />}
       {periodoModal.open && <ModalPeriodo periodoInicial={periodoModal.data} onClose={() => setPeriodoModal({ open: false, data: null, cursoId: null })} onSave={(p) => salvarPeriodo(p, periodoModal.cursoId)} onDelete={(id) => excluirPeriodo(id, periodoModal.cursoId)} />}
       {disciplinaModal.open && (
