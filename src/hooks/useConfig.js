@@ -7,6 +7,7 @@ import { salvarDoc } from '../services/db';
 export const CONFIG_PADRAO = {
   paginas: { notas: true },
   blocos: { metas: true, atrasadas: true, concluidas: true, progressoDia: true, linhaAgora: true },
+  integracoes: { googleAutoSync: false },
   novidadesVista: '',
 };
 
@@ -15,6 +16,7 @@ const mesclar = (salva) => ({
   ...(salva || {}),
   paginas: { ...CONFIG_PADRAO.paginas, ...(salva?.paginas || {}) },
   blocos: { ...CONFIG_PADRAO.blocos, ...(salva?.blocos || {}) },
+  integracoes: { ...CONFIG_PADRAO.integracoes, ...(salva?.integracoes || {}) },
 });
 
 const chaveLocal = (user) => `config_${user ? user.uid : 'local'}`;
@@ -56,6 +58,7 @@ export default function useConfig(user) {
       ...parcial,
       paginas: { ...atual.paginas, ...(parcial.paginas || {}) },
       blocos: { ...atual.blocos, ...(parcial.blocos || {}) },
+      integracoes: { ...atual.integracoes, ...(parcial.integracoes || {}) },
     });
     setConfig(nova);
     try { localStorage.setItem(chaveLocal(user), JSON.stringify(nova)); } catch { /* sem armazenamento */ }

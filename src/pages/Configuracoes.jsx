@@ -25,8 +25,10 @@ function Grupo({ titulo, children }) {
   );
 }
 
+import { integracaoConfigurada } from '../services/googleAgenda';
+
 export default function Configuracoes({ config, atualizarConfig, onVoltar }) {
-  const { paginas, blocos } = config;
+  const { paginas, blocos, integracoes } = config;
   return (
     <div className="w-full max-w-xl flex flex-col gap-4 px-3 sm:px-0 pt-3 pb-10">
       <div className="flex items-center justify-between">
@@ -45,6 +47,17 @@ export default function Configuracoes({ config, atualizarConfig, onVoltar }) {
         <Interruptor rotulo="Progresso do dia" descricao="Mostra (feitas/total) ao lado de Hoje." ligado={blocos.progressoDia} onChange={(v) => atualizarConfig({ blocos: { progressoDia: v } })} />
         <Interruptor rotulo="Linha do horário atual" descricao={'Linha que marca "agora" na grade semanal.'} ligado={blocos.linhaAgora} onChange={(v) => atualizarConfig({ blocos: { linhaAgora: v } })} />
       </Grupo>
+
+      {integracaoConfigurada() && (
+        <Grupo titulo="Google Agenda">
+          <Interruptor
+            rotulo="Sincronizar automaticamente"
+            descricao="Envia para a agenda roti-na o que você criar, mudar ou excluir, com o app aberto. Exige a primeira sincronização em Exportar."
+            ligado={integracoes.googleAutoSync}
+            onChange={(v) => atualizarConfig({ integracoes: { googleAutoSync: v } })}
+          />
+        </Grupo>
+      )}
 
       <p className="text-xs text-zinc-600 px-1">
         Desligar um bloco só o esconde: nenhum dado é apagado. Com login, as configurações acompanham sua conta em qualquer aparelho.

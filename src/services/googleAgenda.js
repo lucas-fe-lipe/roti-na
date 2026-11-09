@@ -38,9 +38,47 @@ export function precarregarGIS() {
 
 let tokenEmMemoria = null; // { valor, expiraEm }
 
+// Token ainda válido (o Google dá 1 hora), ou null.
+export function tokenValido() {
+  return tokenEmMemoria && tokenEmMemoria.expiraEm > Date.now() + 60000 ? tokenEmMemoria.valor : null;
+}
+
+const guardarToken = (resp) => {
+  tokenEmMemoria = { valor: resp.access_token, expiraEm: Date.now() + (Number(resp.expires_in) || 3600) * 1000 };
+  return resp.access_token;
+};
+
+// Renovação sem pop-up (só funciona se o navegador permitir). Devolve o token ou null.
+export async function pedirTokenSilencioso() {
+  const atual = tokenValido();
+  if (atual) return atual;
+  try { await carregarGIS(); } catch { return null; }
+  return new Promise((resolve) => {
+    const limite = setTimeout(() => resolve(null), 8000);
+    const cliente = window.google.accounts.oauth2.initTokenClient({
+      client_id: CLIENT_ID,
+      scope: ESCOPO,
+      prompt: 'none',
+      callback: (resp) => { clearTimeout(limite); resolve(resp.access_token ? guardarToken(resp) : null); },
+      error_callback: () => { clearTimeout(limite); resolve(null); },
+    });
+    cliente.requestAccessToken({ prompt: 'none' });
+  });
+}
+
+// Só uma sincronização por vez (manual ou automática).
+let sincronizacaoEmAndamento = false;
+export function iniciarSincronizacao() {
+  if (sincronizacaoEmAndamento) return false;
+  sincronizacaoEmAndamento = true;
+  return true;
+}
+export function terminarSincronizacao() { sincronizacaoEmAndamento = false; }
+
 // Precisa ser chamada logo após um clique (senão o navegador bloqueia o pop-up).
 export async function pedirToken() {
-  if (tokenEmMemoria && tokenEmMemoria.expiraEm > Date.now() + 60000) return tokenEmMemoria.valor;
+  const atual = tokenValido();
+  if (atual) return atual;
   await carregarGIS();
   return new Promise((resolve, reject) => {
     const cliente = window.google.accounts.oauth2.initTokenClient({
@@ -51,8 +89,7 @@ export async function pedirToken() {
           reject(new Error(resp.error === 'access_denied' ? 'Permissão negada no Google.' : `Erro no login do Google (${resp.error || 'sem token'}).`));
           return;
         }
-        tokenEmMemoria = { valor: resp.access_token, expiraEm: Date.now() + (Number(resp.expires_in) || 3600) * 1000 };
-        resolve(resp.access_token);
+        resolve(guardarToken(resp));
       },
       error_callback: (e) => reject(new Error(e?.type === 'popup_closed' ? 'A janela do Google foi fechada antes de terminar.' : 'Não foi possível abrir o login do Google (pop-up bloqueado?).')),
     });
@@ -182,18 +219,18 @@ export async function carregarMapa(user) {
   try {
     if (user) {
       const snap = await getDoc(refMapa(user));
-      return snap.exists() ? { calendarId: snap.data().calendarId || '', itens: snap.data().itens || {} } : { calendarId: '', itens: {} };
+      return snap.exists() ? { calendarId: snap.data().calendarId || '', itens: snap.data().itens || {}, opcoes: snap.data().opcoes || null } : { calendarId: '', itens: {}, opcoes: null };
     }
     const salvo = JSON.parse(localStorage.getItem(CHAVE_LOCAL) || 'null');
-    return salvo ? { calendarId: salvo.calendarId || '', itens: salvo.itens || {} } : { calendarId: '', itens: {} };
+    return salvo ? { calendarId: salvo.calendarId || '', itens: salvo.itens || {}, opcoes: salvo.opcoes || null } : { calendarId: '', itens: {}, opcoes: null };
   } catch (e) {
     console.error('Erro ao ler o mapa do Google Agenda:', e);
-    return { calendarId: '', itens: {} };
+    return { calendarId: '', itens: {}, opcoes: null };
   }
 }
 
 export async function salvarMapa(user, mapa) {
-  if (user) return salvarDoc(refMapa(user), { calendarId: mapa.calendarId, itens: mapa.itens, atualizadoEm: new Date().toISOString() });
+  if (user) return salvarDoc(refMapa(user), { calendarId: mapa.calendarId, itens: mapa.itens, opcoes: mapa.opcoes || null, atualizadoEm: new Date().toISOString() });
   try {
     localStorage.setItem(CHAVE_LOCAL, JSON.stringify(mapa));
     return true;

@@ -1,8 +1,17 @@
 // Notas de atualização. Para anunciar algo novo: adicione um item NO TOPO da lista
 // e atualize VERSAO_ATUAL com a mesma versão. O selo "novo" aparece até a pessoa abrir a página.
-export const VERSAO_ATUAL = '1.4';
+export const VERSAO_ATUAL = '1.5';
 
 export const NOVIDADES = [
+  {
+    versao: '1.5',
+    data: '2026-11-08',
+    titulo: 'Google Agenda automático',
+    itens: [
+      'Nova opção "Sincronizar automaticamente" (em Exportar e em Configurações): o que você criar, mudar ou excluir vai sozinho para a agenda roti-na, com o app aberto.',
+      'A cada hora o Google pede para reconectar: aparece um aviso com o botão "Reconectar".',
+    ],
+  },
   {
     versao: '1.4',
     data: '2026-11-08',

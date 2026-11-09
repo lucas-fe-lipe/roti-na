@@ -4,6 +4,7 @@ import Configuracoes from './Configuracoes';
 import Novidades from './Novidades';
 import useDados from '../hooks/useDados';
 import useConfig from '../hooks/useConfig';
+import useGoogleAutoSync from '../hooks/useGoogleAutoSync';
 import { VERSAO_ATUAL } from '../data/novidades';
 import { horaParaMinutos, ordenarPorHorario, horarioJaPassou } from '../utils/horario';
 import ActivityModal from '../components/ActivityModal';
@@ -43,6 +44,7 @@ export default function Dashboard() {
   const { atividades, setAtividades, metas, setMetas, tarefas, setTarefas } = useDados(user, activePage);
   const { config, atualizarConfig } = useConfig(user);
   const temNovidade = config.novidadesVista !== VERSAO_ATUAL;
+  useGoogleAutoSync({ user, atividades, tarefas, ativo: config.integracoes.googleAutoSync });
   const [confirmarExclusaoConcluidas, setConfirmarExclusaoConcluidas] = useState(false);
   
   const [atividadeEditando, setAtividadeEditando] = useState(null);
@@ -871,6 +873,8 @@ export default function Dashboard() {
         onProfileUpdated={atualizarAvatarPerfil}
         atividades={atividades}
         tarefas={tarefas}
+        config={config}
+        atualizarConfig={atualizarConfig}
       />
       <RightMenu 
         isOpen={isRightMenuOpen} 

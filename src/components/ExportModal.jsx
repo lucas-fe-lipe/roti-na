@@ -6,7 +6,7 @@ import { calcularPlano } from '../utils/agendaPlano';
 import { notificar } from '../utils/toast';
 import {
   integracaoConfigurada, precarregarGIS, pedirToken, garantirAgenda, executarPlano,
-  carregarMapa, salvarMapa, mensagemDeErro, NOME_AGENDA,
+  carregarMapa, salvarMapa, mensagemDeErro, NOME_AGENDA, iniciarSincronizacao, terminarSincronizacao,
 } from '../services/googleAgenda';
 
 const somarDias = (dataStr, dias) => {
@@ -19,7 +19,7 @@ const lerRegistro = (user) => {
   try { return JSON.parse(localStorage.getItem(chaveRegistro(user)) || '{}') || {}; } catch { return {}; }
 };
 
-export default function ExportModal({ aberto, onFechar, user, atividades, tarefas }) {
+export default function ExportModal({ aberto, onFechar, user, atividades, tarefas, config, atualizarConfig }) {
   const hoje = hojeLocalStr(new Date());
   const googleOk = integracaoConfigurada();
   const [destino, setDestino] = useState(googleOk ? 'google' : 'ics');
@@ -109,6 +109,10 @@ export default function ExportModal({ aberto, onFechar, user, atividades, tarefa
       setConfirmouRemocao(true);
       return;
     }
+    if (!iniciarSincronizacao()) {
+      notificar('Já há uma sincronização em andamento. Tente de novo em instantes.', 'info');
+      return;
+    }
     setSincronizando(true);
     setFalhas([]);
     let mapaAtual = mapa;
@@ -133,10 +137,13 @@ export default function ExportModal({ aberto, onFechar, user, atividades, tarefa
       console.error(e);
       notificar(mensagemDeErro(e), 'erro');
     } finally {
-      if (mapaAtual) {
-        await salvarMapa(user, mapaAtual); // guarda o que deu certo, mesmo se algo falhou
-        setMapa({ calendarId: mapaAtual.calendarId, itens: { ...mapaAtual.itens } });
+      if (mapaAtual && mapaAtual.calendarId) {
+        // guarda o que deu certo (e as opções usadas, para a sincronização automática)
+        mapaAtual.opcoes = { incluirAtividades, inicio, fim, incluirTarefas, incluirAvaliacoes, lembrete };
+        await salvarMapa(user, mapaAtual);
+        setMapa({ calendarId: mapaAtual.calendarId, itens: { ...mapaAtual.itens }, opcoes: mapaAtual.opcoes });
       }
+      terminarSincronizacao();
       setSincronizando(false);
     }
   };
@@ -218,6 +225,16 @@ export default function ExportModal({ aberto, onFechar, user, atividades, tarefa
                     <span className="block text-xs text-zinc-500">Desmarque para só enviar o que ainda não está na agenda.</span>
                   </span>
                 </label>
+
+                {config && atualizarConfig && (
+                  <label className="flex items-start gap-2 cursor-pointer">
+                    <input type="checkbox" checked={config.integracoes.googleAutoSync} onChange={(e) => atualizarConfig({ integracoes: { googleAutoSync: e.target.checked } })} className="w-4 h-4 mt-0.5 accent-zinc-300" />
+                    <span>
+                      Sincronizar automaticamente
+                      <span className="block text-xs text-zinc-500">Depois da primeira sincronização, envia sozinho o que você criar, mudar ou excluir enquanto o app estiver aberto. A cada hora o Google pode pedir para reconectar (um toque).</span>
+                    </span>
+                  </label>
+                )}
 
                 <div className="rounded bg-zinc-950 border border-zinc-800 p-3 text-xs text-zinc-300 space-y-1">
                   {!previaGoogle ? (

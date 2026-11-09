@@ -9,7 +9,7 @@ import { montarBackup, baixarBackup, lerBackup, importarBackup } from '../utils/
 import { notificar } from '../utils/toast';
 import ExportModal from './ExportModal';
 
-export default function Sidebar({ isOpen, onClose, user, onProfileUpdated, atividades = [], tarefas = [] }) {
+export default function Sidebar({ isOpen, onClose, user, onProfileUpdated, atividades = [], tarefas = [], config, atualizarConfig }) {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -240,7 +240,7 @@ export default function Sidebar({ isOpen, onClose, user, onProfileUpdated, ativi
         </div>
       </div>
 
-      <ExportModal aberto={isExportOpen} onFechar={() => setIsExportOpen(false)} user={user} atividades={atividades} tarefas={tarefas} />
+      <ExportModal aberto={isExportOpen} onFechar={() => setIsExportOpen(false)} user={user} atividades={atividades} tarefas={tarefas} config={config} atualizarConfig={atualizarConfig} />
 
       {/* MODAL DE TELA CHEIA PARA A FOTO */}
       {isFullScreenImageOpen && (
