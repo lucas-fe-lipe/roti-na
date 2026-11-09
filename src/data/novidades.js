@@ -1,8 +1,18 @@
 // Notas de atualização. Para anunciar algo novo: adicione um item NO TOPO da lista
 // e atualize VERSAO_ATUAL com a mesma versão. O selo "novo" aparece até a pessoa abrir a página.
-export const VERSAO_ATUAL = '1.3';
+export const VERSAO_ATUAL = '1.4';
 
 export const NOVIDADES = [
+  {
+    versao: '1.4',
+    data: '2026-11-08',
+    titulo: 'Sincronização com o Google Agenda',
+    itens: [
+      'Menu da conta → Exportar para o Google Agenda → "Sincronizar com o Google": cria a agenda "roti-na" na sua conta e envia atividades, tarefas e avaliações.',
+      'Só envia o que ainda não está na agenda e, se você quiser, atualiza o que mudou e remove o que foi excluído ou concluído.',
+      'O Google passa a avisar os lembretes, inclusive com o app fechado. O app só enxerga a agenda "roti-na".',
+    ],
+  },
   {
     versao: '1.3',
     data: '2026-11-08',

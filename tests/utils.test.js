@@ -102,7 +102,7 @@ test('ICS: tarefas com horário, sem horário, sem data, concluídas e marcadore
   assert.equal(r.contagem.semData, 1);
   assert.match(r.texto, /DTSTART;TZID=America\/Sao_Paulo:20261110T165000/);
   assert.match(r.texto, /DTSTART;VALUE=DATE:20261118/);
-  assert.match(r.texto, /TRIGGER:PT9H/);
+  assert.match(r.texto, /TRIGGER:-PT15H/);
   assert.match(r.texto, /SUMMARY:P2 - Cálculo/);
 });
 
@@ -124,4 +124,94 @@ test('ICS: escapa vírgula/ponto e vírgula e dobra linhas longas (75 bytes)', (
   });
   assert.match(texto, /SUMMARY:Ler\; resumir\\, revisar/);
   texto.split('\r\n').forEach((l) => assert.ok(new TextEncoder().encode(l).length <= 75, l));
+});
+
+import { montarItens } from '../src/utils/agendaItens.js';
+import { calcularPlano, paraEventoGoogle } from '../src/utils/agendaPlano.js';
+
+const base = {
+  atividades: [{ id: 'a1', nome: 'Capoeira', horarios: [{ dia: 'SEG', inicio: '19:00', fim: '20:30' }] }],
+  tarefas: [
+    { id: 't1', nome: 'Estudar', data: '2026-11-10', horario: '16:50' },
+    { id: 'av1', texto: 'P2', data: '2026-11-12', tipo: 'avaliacao' },
+  ],
+  incluirAtividades: true, inicio: '2026-11-09', fim: '2026-12-14',
+  incluirTarefas: true, incluirAvaliacoes: true, lembreteMin: 10,
+};
+const TODAS = ['atividade', 'tarefa', 'avaliacao'];
+const mapaDe = (itens) => ({ calendarId: 'cal', itens: Object.fromEntries(itens.map((i, n) => [i.chave, { eventId: `e${n}`, assinatura: i.assinatura, categoria: i.categoria }])) });
+
+test('plano: primeira sincronização cria tudo', () => {
+  const { itens } = montarItens(base);
+  const p = calcularPlano(itens, { itens: {} }, { categorias: TODAS });
+  assert.equal(p.criar.length, 3);
+  assert.equal(p.atualizar.length + p.remover.length + p.iguais, 0);
+});
+
+test('plano: nada mudou -> tudo igual', () => {
+  const { itens } = montarItens(base);
+  const p = calcularPlano(itens, mapaDe(itens), { categorias: TODAS });
+  assert.equal(p.iguais, 3);
+  assert.equal(p.criar.length + p.atualizar.length + p.remover.length, 0);
+});
+
+test('plano: tarefa alterada atualiza, tarefa excluída ou concluída remove, nova cria', () => {
+  const { itens } = montarItens(base);
+  const mapa = mapaDe(itens);
+  const novo = montarItens({
+    ...base,
+    tarefas: [
+      { id: 't1', nome: 'Estudar', data: '2026-11-10', horario: '17:00' }, // mudou
+      { id: 'av1', texto: 'P2', data: '2026-11-12', tipo: 'avaliacao', concluida: true }, // concluída
+      { id: 't2', nome: 'Nova', data: '2026-11-11' }, // nova
+    ],
+  }).itens;
+  const p = calcularPlano(novo, mapa, { categorias: TODAS });
+  assert.deepEqual(p.atualizar.map((x) => x.item.chave), ['tar:t1']);
+  assert.deepEqual(p.remover.map((x) => x.chave), ['tar:av1']);
+  assert.deepEqual(p.criar.map((x) => x.chave), ['tar:t2']);
+  assert.equal(p.iguais, 1);
+});
+
+test('plano: não remove categorias desmarcadas nem quando "remover" está desligado', () => {
+  const { itens } = montarItens(base);
+  const mapa = mapaDe(itens);
+  const semTarefas = montarItens({ ...base, incluirTarefas: false, incluirAvaliacoes: false }).itens;
+  const p1 = calcularPlano(semTarefas, mapa, { categorias: ['atividade'] });
+  assert.equal(p1.remover.length, 0);
+  const p2 = calcularPlano([], mapa, { categorias: TODAS, remover: false });
+  assert.equal(p2.remover.length, 0);
+  const p3 = calcularPlano([], mapa, { categorias: TODAS });
+  assert.equal(p3.remover.length, 3);
+});
+
+test('plano: "atualizar" desligado só cria o que é novo', () => {
+  const { itens } = montarItens(base);
+  const mapa = mapaDe(itens);
+  const alterados = montarItens({ ...base, lembreteMin: 30 }).itens;
+  const p = calcularPlano(alterados, mapa, { categorias: TODAS, atualizar: false });
+  assert.equal(p.atualizar.length, 0);
+  assert.equal(p.iguais, 3);
+});
+
+test('evento Google: atividade semanal, tarefa com horário e dia inteiro', () => {
+  const { itens } = montarItens(base);
+  const [atv, tar, av] = itens;
+  const ea = paraEventoGoogle(atv);
+  assert.equal(ea.start.dateTime, '2026-11-09T19:00:00');
+  assert.equal(ea.end.dateTime, '2026-11-09T20:30:00');
+  assert.equal(ea.start.timeZone, 'America/Sao_Paulo');
+  assert.deepEqual(ea.recurrence, ['RRULE:FREQ=WEEKLY;BYDAY=MO;UNTIL=20261215T025959Z']);
+  assert.deepEqual(ea.reminders.overrides, [{ method: 'popup', minutes: 10 }]);
+  assert.equal(ea.extendedProperties.private.rotiNaChave, 'atv:a1:0');
+  const et = paraEventoGoogle(tar);
+  assert.equal(et.start.dateTime, '2026-11-10T16:50:00');
+  assert.equal(et.end.dateTime, '2026-11-10T17:20:00');
+  assert.equal(et.recurrence, undefined);
+  const ev = paraEventoGoogle(av);
+  assert.deepEqual(ev.start, { date: '2026-11-12' });
+  assert.deepEqual(ev.end, { date: '2026-11-13' });
+  assert.deepEqual(ev.reminders.overrides, [{ method: 'popup', minutes: 900 }]);
+  const sem = paraEventoGoogle({ ...tar, lembreteMin: null });
+  assert.deepEqual(sem.reminders, { useDefault: false, overrides: [] });
 });
