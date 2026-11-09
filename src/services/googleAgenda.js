@@ -7,7 +7,9 @@ import { db } from './firebase';
 import { salvarDoc } from './db';
 import { paraEventoGoogle } from '../utils/agendaPlano';
 
-export const NOME_AGENDA = 'roti-na';
+export const NOME_AGENDA = 'roti-na'; // agenda das atividades
+export const NOME_AGENDA_AVALIACOES = 'roti-na avaliações';
+export const NOMES_AGENDAS = { atividades: NOME_AGENDA, avaliacoes: NOME_AGENDA_AVALIACOES };
 const ESCOPO = 'https://www.googleapis.com/auth/calendar.app.created';
 const API = 'https://www.googleapis.com/calendar/v3';
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
@@ -138,19 +140,27 @@ export function mensagemDeErro(e) {
   return e?.message || 'Erro desconhecido ao falar com o Google.';
 }
 
-// ---------- agenda "roti-na" ----------
-// Garante que a agenda existe na conta da pessoa. Se ela foi apagada no Google, cria outra e zera o mapa.
-export async function garantirAgenda(token, mapa, fusoHorario) {
-  if (mapa?.calendarId) {
-    try {
-      await chamar(token, 'GET', `/calendars/${encodeURIComponent(mapa.calendarId)}`);
-      return mapa;
-    } catch (e) {
-      if (!(e instanceof ErroGoogle) || (e.status !== 404 && e.status !== 410)) throw e;
+// ---------- agendas "roti-na" e "roti-na avaliações" ----------
+// mapa = { agendas: { atividades: id, avaliacoes: id }, calendarId (= agendas.atividades, mantido por compatibilidade), itens, opcoes }
+// Garante que as agendas necessárias existem na conta da pessoa. Se uma foi apagada no Google, cria outra
+// e esquece os eventos que estavam nela (serão criados de novo).
+export async function garantirAgendas(token, mapa, fusoHorario, necessarias = ['atividades', 'avaliacoes']) {
+  const agendas = { ...(mapa?.agendas || {}) };
+  const itens = { ...(mapa?.itens || {}) };
+  for (const chave of necessarias) {
+    if (agendas[chave]) {
+      try {
+        await chamar(token, 'GET', `/calendars/${encodeURIComponent(agendas[chave])}`);
+        continue;
+      } catch (e) {
+        if (!(e instanceof ErroGoogle) || (e.status !== 404 && e.status !== 410)) throw e;
+      }
+      Object.keys(itens).forEach((k) => { if ((itens[k].agenda || 'atividades') === chave) delete itens[k]; });
     }
+    const nova = await chamar(token, 'POST', '/calendars', { summary: NOMES_AGENDAS[chave], timeZone: fusoHorario });
+    agendas[chave] = nova.id;
   }
-  const nova = await chamar(token, 'POST', '/calendars', { summary: NOME_AGENDA, timeZone: fusoHorario });
-  return { calendarId: nova.id, itens: {} };
+  return { ...mapa, agendas, calendarId: agendas.atividades || '', itens };
 }
 
 async function emLotes(lista, simultaneos, fn) {
@@ -164,15 +174,30 @@ async function emLotes(lista, simultaneos, fn) {
   await Promise.all(trabalhadores);
 }
 
-// Executa o plano (criar / atualizar / remover). Altera `mapa.itens` e devolve o resumo.
+// Executa o plano (remover / criar / atualizar). Altera `mapa.itens` e devolve o resumo.
+// A remoção vem primeiro para que "mover" um item de uma agenda para outra funcione (remove e cria de novo).
 export async function executarPlano(token, plano, mapa, fusoHorario) {
-  const cal = encodeURIComponent(mapa.calendarId);
+  const calDe = (agenda) => encodeURIComponent(mapa.agendas?.[agenda || 'atividades'] || mapa.calendarId);
   const resumo = { criados: 0, atualizados: 0, removidos: 0, falhas: [] };
 
   const criar = async (item) => {
-    const ev = await chamar(token, 'POST', `/calendars/${cal}/events`, paraEventoGoogle(item, fusoHorario));
-    mapa.itens[item.chave] = { eventId: ev.id, assinatura: item.assinatura, categoria: item.categoria };
+    const ev = await chamar(token, 'POST', `/calendars/${calDe(item.agenda)}/events`, paraEventoGoogle(item, fusoHorario));
+    mapa.itens[item.chave] = { eventId: ev.id, assinatura: item.assinatura, categoria: item.categoria, agenda: item.agenda || 'atividades' };
   };
+
+  await emLotes(plano.remover, 4, async ({ chave, eventId, agenda, mover }) => {
+    try {
+      try {
+        await chamar(token, 'DELETE', `/calendars/${calDe(agenda)}/events/${encodeURIComponent(eventId)}`);
+      } catch (e) {
+        if (!(e instanceof ErroGoogle) || (e.status !== 404 && e.status !== 410)) throw e; // já não existe: ok
+      }
+      delete mapa.itens[chave];
+      if (!mover) resumo.removidos += 1;
+    } catch (e) {
+      resumo.falhas.push(`${chave}: ${mensagemDeErro(e)}`);
+    }
+  });
 
   await emLotes(plano.criar, 4, async (item) => {
     try { await criar(item); resumo.criados += 1; } catch (e) { resumo.falhas.push(`${item.titulo}: ${mensagemDeErro(e)}`); }
@@ -181,8 +206,8 @@ export async function executarPlano(token, plano, mapa, fusoHorario) {
   await emLotes(plano.atualizar, 4, async ({ item, eventId }) => {
     try {
       try {
-        const ev = await chamar(token, 'PUT', `/calendars/${cal}/events/${encodeURIComponent(eventId)}`, paraEventoGoogle(item, fusoHorario));
-        mapa.itens[item.chave] = { eventId: ev.id, assinatura: item.assinatura, categoria: item.categoria };
+        const ev = await chamar(token, 'PUT', `/calendars/${calDe(item.agenda)}/events/${encodeURIComponent(eventId)}`, paraEventoGoogle(item, fusoHorario));
+        mapa.itens[item.chave] = { eventId: ev.id, assinatura: item.assinatura, categoria: item.categoria, agenda: item.agenda || 'atividades' };
       } catch (e) {
         // o evento foi apagado direto no Google: cria de novo
         if (e instanceof ErroGoogle && (e.status === 404 || e.status === 410)) await criar(item);
@@ -194,20 +219,6 @@ export async function executarPlano(token, plano, mapa, fusoHorario) {
     }
   });
 
-  await emLotes(plano.remover, 4, async ({ chave, eventId }) => {
-    try {
-      try {
-        await chamar(token, 'DELETE', `/calendars/${cal}/events/${encodeURIComponent(eventId)}`);
-      } catch (e) {
-        if (!(e instanceof ErroGoogle) || (e.status !== 404 && e.status !== 410)) throw e; // já não existe: ok
-      }
-      delete mapa.itens[chave];
-      resumo.removidos += 1;
-    } catch (e) {
-      resumo.falhas.push(`${chave}: ${mensagemDeErro(e)}`);
-    }
-  });
-
   return resumo;
 }
 
@@ -215,26 +226,42 @@ export async function executarPlano(token, plano, mapa, fusoHorario) {
 const CHAVE_LOCAL = 'google_agenda_local';
 const refMapa = (user) => doc(db, 'users', user.uid, 'integracoes', 'googleAgenda');
 
+const normalizarMapa = (d) => {
+  const agendas = { ...(d?.agendas || {}) };
+  if (!agendas.atividades && d?.calendarId) agendas.atividades = d.calendarId; // mapa antigo: uma agenda só
+  return { agendas, calendarId: agendas.atividades || '', itens: d?.itens || {}, opcoes: d?.opcoes || null };
+};
+
 export async function carregarMapa(user) {
   try {
     if (user) {
       const snap = await getDoc(refMapa(user));
-      return snap.exists() ? { calendarId: snap.data().calendarId || '', itens: snap.data().itens || {}, opcoes: snap.data().opcoes || null } : { calendarId: '', itens: {}, opcoes: null };
+      return normalizarMapa(snap.exists() ? snap.data() : null);
     }
-    const salvo = JSON.parse(localStorage.getItem(CHAVE_LOCAL) || 'null');
-    return salvo ? { calendarId: salvo.calendarId || '', itens: salvo.itens || {}, opcoes: salvo.opcoes || null } : { calendarId: '', itens: {}, opcoes: null };
+    return normalizarMapa(JSON.parse(localStorage.getItem(CHAVE_LOCAL) || 'null'));
   } catch (e) {
     console.error('Erro ao ler o mapa do Google Agenda:', e);
-    return { calendarId: '', itens: {}, opcoes: null };
+    return normalizarMapa(null);
   }
 }
 
+// Avisa o resto do app (ex.: botão de sincronização na barra) que o mapa mudou.
+export const EVENTO_MAPA = 'roti-na:mapa-atualizado';
+
 export async function salvarMapa(user, mapa) {
-  if (user) return salvarDoc(refMapa(user), { calendarId: mapa.calendarId, itens: mapa.itens, opcoes: mapa.opcoes || null, atualizadoEm: new Date().toISOString() });
-  try {
-    localStorage.setItem(CHAVE_LOCAL, JSON.stringify(mapa));
-    return true;
-  } catch {
-    return false;
+  const atual = normalizarMapa(mapa);
+  atual.opcoes = mapa.opcoes || null;
+  let ok;
+  if (user) {
+    ok = await salvarDoc(refMapa(user), { agendas: atual.agendas, calendarId: atual.calendarId, itens: atual.itens, opcoes: atual.opcoes, atualizadoEm: new Date().toISOString() });
+  } else {
+    try {
+      localStorage.setItem(CHAVE_LOCAL, JSON.stringify(atual));
+      ok = true;
+    } catch {
+      ok = false;
+    }
   }
+  window.dispatchEvent(new CustomEvent(EVENTO_MAPA, { detail: atual }));
+  return ok;
 }

@@ -58,7 +58,7 @@ const agoraFixo = new Date(Date.UTC(2026, 10, 8, 12, 0, 0));
 test('ICS: atividade semanal com recorrência, fuso e lembrete', () => {
   const { texto, contagem } = montarICS({
     atividades: [{ id: 'a1', nome: 'Capoeira', horarios: [{ dia: 'SEG', inicio: '19:00', fim: '20:30' }] }],
-    incluirAtividades: true, inicio: '2026-11-09', fim: '2026-12-14', lembreteMin: 10, agora: agoraFixo,
+    incluirAtividades: true, inicio: '2026-11-09', fim: '2026-12-14', lembretes: [10], agora: agoraFixo,
   });
   assert.equal(contagem.atividades, 1);
   assert.match(texto, /DTSTART;TZID=America\/Sao_Paulo:20261109T190000/);
@@ -87,59 +87,93 @@ test('ICS: atividade que passa da meia-noite termina no dia seguinte', () => {
   assert.match(texto, /DTEND;TZID=America\/Sao_Paulo:20261114T020000/);
 });
 
-test('ICS: tarefas com horário, sem horário, sem data, concluídas e marcadores', () => {
+test('ICS: avaliações com/sem horário e sem data; tarefas comuns, concluídas e marcadores ficam de fora', () => {
   const tarefas = [
-    { id: 't1', nome: 'Estudar', data: '2026-11-10', horario: '16:50' },
-    { id: 't2', nome: 'Nomes', data: '2026-11-18' },
-    { id: 't3', nome: 'Sem data' },
-    { id: 't4', nome: 'Feita', data: '2026-11-10', concluida: true },
+    { id: 't1', nome: 'Tarefa comum', data: '2026-11-10', horario: '16:50' },
     { id: 'atv-task-x-2026-11-10-08:00', data: '2026-11-10', concluida: true },
     { id: 'av_1', texto: 'P2 - Cálculo', data: '2026-11-12', hora: '19:00', tipo: 'avaliacao' },
+    { id: 'av_2', texto: 'P1 - Física', data: '2026-11-18', tipo: 'avaliacao' },
+    { id: 'av_3', texto: 'Sem data', tipo: 'avaliacao' },
+    { id: 'av_4', texto: 'Feita', data: '2026-11-10', tipo: 'avaliacao', concluida: true },
   ];
-  const r = montarICS({ tarefas, incluirTarefas: true, incluirAvaliacoes: true, lembreteMin: 30, agora: agoraFixo });
-  assert.equal(r.contagem.tarefas, 2);
-  assert.equal(r.contagem.avaliacoes, 1);
+  const r = montarICS({ tarefas, incluirAvaliacoes: true, lembretes: [30], agora: agoraFixo });
+  assert.equal(r.contagem.avaliacoes, 2);
   assert.equal(r.contagem.semData, 1);
-  assert.match(r.texto, /DTSTART;TZID=America\/Sao_Paulo:20261110T165000/);
+  assert.match(r.texto, /DTSTART;TZID=America\/Sao_Paulo:20261112T190000/);
   assert.match(r.texto, /DTSTART;VALUE=DATE:20261118/);
+  assert.match(r.texto, /TRIGGER:-PT30M/);
   assert.match(r.texto, /TRIGGER:-PT15H/);
   assert.match(r.texto, /SUMMARY:P2 - Cálculo/);
+  assert.doesNotMatch(r.texto, /Tarefa comum/);
+});
+
+test('ICS: vários lembretes geram vários alarmes (evento com horário)', () => {
+  const { texto } = montarICS({
+    atividades: [{ id: 'a1', nome: 'Capoeira', horarios: [{ dia: 'SEG', inicio: '19:00', fim: '20:30' }] }],
+    incluirAtividades: true, inicio: '2026-11-09', fim: '2026-11-30', lembretes: [60, 30, 10, 5], agora: agoraFixo,
+  });
+  assert.equal((texto.match(/BEGIN:VALARM/g) || []).length, 3); // no máximo 3
+  assert.match(texto, /TRIGGER:-PT5M/);
+  assert.match(texto, /TRIGGER:-PT10M/);
+  assert.match(texto, /TRIGGER:-PT30M/);
+  assert.doesNotMatch(texto, /TRIGGER:-PT60M/); // só os 3 menores entram
 });
 
 test('ICS: "só o que ainda não foi exportado" pula itens iguais e reenvia os alterados', () => {
-  const tarefas = [{ id: 't1', nome: 'A', data: '2026-11-10', horario: '10:00' }];
-  const primeira = montarICS({ tarefas, incluirTarefas: true, agora: agoraFixo });
-  const igual = montarICS({ tarefas, incluirTarefas: true, soNovos: true, exportados: primeira.registros, agora: agoraFixo });
+  const tarefas = [{ id: 'av_1', texto: 'A', data: '2026-11-10', hora: '10:00', tipo: 'avaliacao' }];
+  const primeira = montarICS({ tarefas, incluirAvaliacoes: true, agora: agoraFixo });
+  const igual = montarICS({ tarefas, incluirAvaliacoes: true, soNovos: true, exportados: primeira.registros, agora: agoraFixo });
   assert.equal(igual.total, 0);
   assert.equal(igual.contagem.jaExportados, 1);
-  const mudou = montarICS({ tarefas: [{ ...tarefas[0], horario: '11:00' }], incluirTarefas: true, soNovos: true, exportados: primeira.registros, agora: agoraFixo });
+  const mudou = montarICS({ tarefas: [{ ...tarefas[0], hora: '11:00' }], incluirAvaliacoes: true, soNovos: true, exportados: primeira.registros, agora: agoraFixo });
   assert.equal(mudou.total, 1);
 });
 
 test('ICS: escapa vírgula/ponto e vírgula e dobra linhas longas (75 bytes)', () => {
   const longo = 'a'.repeat(200);
   const { texto } = montarICS({
-    tarefas: [{ id: 't9', nome: 'Ler; resumir, revisar', data: '2026-11-10', detalhes: longo }],
-    incluirTarefas: true, agora: agoraFixo,
+    tarefas: [{ id: 'av_9', texto: 'Ler; resumir, revisar', data: '2026-11-10', detalhes: longo, tipo: 'avaliacao' }],
+    incluirAvaliacoes: true, agora: agoraFixo,
   });
-  assert.match(texto, /SUMMARY:Ler\; resumir\\, revisar/);
+  assert.match(texto, /SUMMARY:Ler\\; resumir\\, revisar/);
   texto.split('\r\n').forEach((l) => assert.ok(new TextEncoder().encode(l).length <= 75, l));
 });
 
-import { montarItens } from '../src/utils/agendaItens.js';
+import { montarItens, normalizarLembretes, agendaDaCategoria } from '../src/utils/agendaItens.js';
 import { calcularPlano, paraEventoGoogle } from '../src/utils/agendaPlano.js';
 
 const base = {
-  atividades: [{ id: 'a1', nome: 'Capoeira', horarios: [{ dia: 'SEG', inicio: '19:00', fim: '20:30' }] }],
+  atividades: [
+    { id: 'a1', nome: 'Capoeira', categoria: 'Treinos', horarios: [{ dia: 'SEG', inicio: '19:00', fim: '20:30' }] },
+  ],
   tarefas: [
-    { id: 't1', nome: 'Estudar', data: '2026-11-10', horario: '16:50' },
+    { id: 't1', nome: 'Tarefa antiga', data: '2026-11-10', horario: '16:50' }, // não existe mais no app: ignorada
     { id: 'av1', texto: 'P2', data: '2026-11-12', tipo: 'avaliacao' },
+    { id: 'av2', texto: 'P1', data: '2026-11-13', hora: '08:00', tipo: 'avaliacao' },
   ],
   incluirAtividades: true, inicio: '2026-11-09', fim: '2026-12-14',
-  incluirTarefas: true, incluirAvaliacoes: true, lembreteMin: 10,
+  incluirAvaliacoes: true, lembretes: [10],
 };
-const TODAS = ['atividade', 'tarefa', 'avaliacao'];
-const mapaDe = (itens) => ({ calendarId: 'cal', itens: Object.fromEntries(itens.map((i, n) => [i.chave, { eventId: `e${n}`, assinatura: i.assinatura, categoria: i.categoria }])) });
+const TODAS = ['atividade', 'avaliacao'];
+const mapaDe = (itens) => ({
+  agendas: { atividades: 'cal1', avaliacoes: 'cal2' },
+  itens: Object.fromEntries(itens.map((i, n) => [i.chave, { eventId: `e${n}`, assinatura: i.assinatura, categoria: i.categoria, agenda: i.agenda }])),
+});
+
+test('lembretes: normaliza (texto, repetidos, inválidos, ordem e máximo de 3)', () => {
+  assert.deepEqual(normalizarLembretes('30'), [30]);
+  assert.deepEqual(normalizarLembretes(''), []);
+  assert.deepEqual(normalizarLembretes([60, '30', 30, -5, 'x', 10, 5]), [5, 10, 30]);
+  assert.deepEqual(normalizarLembretes(undefined), []);
+});
+
+test('itens: atividades vão para a agenda "atividades" e avaliações para "avaliacoes"', () => {
+  const { itens } = montarItens(base);
+  assert.equal(itens.length, 3);
+  assert.deepEqual(itens.map((i) => i.agenda), ['atividades', 'avaliacoes', 'avaliacoes']);
+  assert.equal(agendaDaCategoria('avaliacao'), 'avaliacoes');
+  assert.equal(agendaDaCategoria('atividade'), 'atividades');
+});
 
 test('plano: primeira sincronização cria tudo', () => {
   const { itens } = montarItens(base);
@@ -155,29 +189,29 @@ test('plano: nada mudou -> tudo igual', () => {
   assert.equal(p.criar.length + p.atualizar.length + p.remover.length, 0);
 });
 
-test('plano: tarefa alterada atualiza, tarefa excluída ou concluída remove, nova cria', () => {
+test('plano: avaliação alterada atualiza, avaliação com nota/excluída remove, nova cria', () => {
   const { itens } = montarItens(base);
   const mapa = mapaDe(itens);
   const novo = montarItens({
     ...base,
     tarefas: [
-      { id: 't1', nome: 'Estudar', data: '2026-11-10', horario: '17:00' }, // mudou
-      { id: 'av1', texto: 'P2', data: '2026-11-12', tipo: 'avaliacao', concluida: true }, // concluída
-      { id: 't2', nome: 'Nova', data: '2026-11-11' }, // nova
-    ],
+      { id: 'av1', texto: 'P2', data: '2026-11-12', hora: '17:00', tipo: 'avaliacao' }, // mudou
+      { id: 'av3', texto: 'P3', data: '2026-11-20', tipo: 'avaliacao' }, // nova
+    ], // av2 sumiu (ganhou nota)
   }).itens;
   const p = calcularPlano(novo, mapa, { categorias: TODAS });
-  assert.deepEqual(p.atualizar.map((x) => x.item.chave), ['tar:t1']);
-  assert.deepEqual(p.remover.map((x) => x.chave), ['tar:av1']);
-  assert.deepEqual(p.criar.map((x) => x.chave), ['tar:t2']);
+  assert.deepEqual(p.atualizar.map((x) => x.item.chave), ['tar:av1']);
+  assert.deepEqual(p.remover.map((x) => x.chave), ['tar:av2']);
+  assert.equal(p.remover[0].agenda, 'avaliacoes');
+  assert.deepEqual(p.criar.map((x) => x.chave), ['tar:av3']);
   assert.equal(p.iguais, 1);
 });
 
 test('plano: não remove categorias desmarcadas nem quando "remover" está desligado', () => {
   const { itens } = montarItens(base);
   const mapa = mapaDe(itens);
-  const semTarefas = montarItens({ ...base, incluirTarefas: false, incluirAvaliacoes: false }).itens;
-  const p1 = calcularPlano(semTarefas, mapa, { categorias: ['atividade'] });
+  const semAvaliacoes = montarItens({ ...base, incluirAvaliacoes: false }).itens;
+  const p1 = calcularPlano(semAvaliacoes, mapa, { categorias: ['atividade'] });
   assert.equal(p1.remover.length, 0);
   const p2 = calcularPlano([], mapa, { categorias: TODAS, remover: false });
   assert.equal(p2.remover.length, 0);
@@ -185,33 +219,69 @@ test('plano: não remove categorias desmarcadas nem quando "remover" está desli
   assert.equal(p3.remover.length, 3);
 });
 
+test('plano: eventos "tarefa" antigos sempre são removidos', () => {
+  const { itens } = montarItens(base);
+  const mapa = mapaDe(itens);
+  mapa.itens['tar:velha'] = { eventId: 'x', assinatura: 's', categoria: 'tarefa' };
+  const p = calcularPlano(itens, mapa, { categorias: TODAS });
+  assert.deepEqual(p.remover.map((x) => x.chave), ['tar:velha']);
+  assert.equal(p.remover[0].agenda, 'atividades');
+});
+
+test('plano: avaliação que estava na agenda única antiga é movida para a agenda de avaliações', () => {
+  const { itens } = montarItens(base);
+  const mapa = mapaDe(itens);
+  // mapa antigo: sem campo "agenda" -> tudo na agenda de atividades
+  Object.values(mapa.itens).forEach((g) => { delete g.agenda; });
+  const p = calcularPlano(itens, mapa, { categorias: TODAS });
+  assert.deepEqual(p.remover.map((x) => x.chave).sort(), ['tar:av1', 'tar:av2']);
+  assert.ok(p.remover.every((x) => x.mover && x.agenda === 'atividades'));
+  assert.deepEqual(p.criar.map((x) => x.chave).sort(), ['tar:av1', 'tar:av2']);
+  assert.equal(p.iguais, 1); // a atividade continua onde estava
+});
+
 test('plano: "atualizar" desligado só cria o que é novo', () => {
   const { itens } = montarItens(base);
   const mapa = mapaDe(itens);
-  const alterados = montarItens({ ...base, lembreteMin: 30 }).itens;
+  const alterados = montarItens({ ...base, lembretes: [30] }).itens;
   const p = calcularPlano(alterados, mapa, { categorias: TODAS, atualizar: false });
   assert.equal(p.atualizar.length, 0);
   assert.equal(p.iguais, 3);
 });
 
-test('evento Google: atividade semanal, tarefa com horário e dia inteiro', () => {
+test('plano: mudar lembretes ou cor atualiza; reabrir com as mesmas opções não muda nada', () => {
   const { itens } = montarItens(base);
-  const [atv, tar, av] = itens;
+  const mapa = mapaDe(itens);
+  const igual = montarItens({ ...base, lembretes: normalizarLembretes([10]) }).itens;
+  assert.equal(calcularPlano(igual, mapa, { categorias: TODAS }).iguais, 3);
+  const doisLembretes = montarItens({ ...base, lembretes: [10, 30] }).itens;
+  assert.equal(calcularPlano(doisLembretes, mapa, { categorias: TODAS }).atualizar.length, 3);
+  const comCor = montarItens({ ...base, coresAtividade: { Treinos: '8' } }).itens;
+  assert.deepEqual(calcularPlano(comCor, mapa, { categorias: TODAS }).atualizar.map((x) => x.item.chave), ['atv:a1:0']);
+});
+
+test('evento Google: atividade semanal com cor e 3 lembretes; avaliação com horário e dia inteiro', () => {
+  const { itens } = montarItens({ ...base, lembretes: [30, 10, 60], coresAtividade: { Treinos: '8' }, corAvaliacao: '11' });
+  const [atv, avHora, avDia] = [itens[0], itens.find((i) => i.chave === 'tar:av2'), itens.find((i) => i.chave === 'tar:av1')];
   const ea = paraEventoGoogle(atv);
   assert.equal(ea.start.dateTime, '2026-11-09T19:00:00');
   assert.equal(ea.end.dateTime, '2026-11-09T20:30:00');
   assert.equal(ea.start.timeZone, 'America/Sao_Paulo');
   assert.deepEqual(ea.recurrence, ['RRULE:FREQ=WEEKLY;BYDAY=MO;UNTIL=20261215T025959Z']);
-  assert.deepEqual(ea.reminders.overrides, [{ method: 'popup', minutes: 10 }]);
+  assert.deepEqual(ea.reminders.overrides, [{ method: 'popup', minutes: 10 }, { method: 'popup', minutes: 30 }, { method: 'popup', minutes: 60 }]);
+  assert.equal(ea.colorId, '8');
   assert.equal(ea.extendedProperties.private.rotiNaChave, 'atv:a1:0');
-  const et = paraEventoGoogle(tar);
-  assert.equal(et.start.dateTime, '2026-11-10T16:50:00');
-  assert.equal(et.end.dateTime, '2026-11-10T17:20:00');
-  assert.equal(et.recurrence, undefined);
-  const ev = paraEventoGoogle(av);
+  const eh = paraEventoGoogle(avHora);
+  assert.equal(eh.start.dateTime, '2026-11-13T08:00:00');
+  assert.equal(eh.end.dateTime, '2026-11-13T08:30:00');
+  assert.equal(eh.recurrence, undefined);
+  assert.equal(eh.colorId, '11');
+  const ev = paraEventoGoogle(avDia);
   assert.deepEqual(ev.start, { date: '2026-11-12' });
   assert.deepEqual(ev.end, { date: '2026-11-13' });
   assert.deepEqual(ev.reminders.overrides, [{ method: 'popup', minutes: 900 }]);
-  const sem = paraEventoGoogle({ ...tar, lembreteMin: null });
+  const sem = paraEventoGoogle({ ...avHora, lembretes: [] });
   assert.deepEqual(sem.reminders, { useDefault: false, overrides: [] });
+  const semCor = paraEventoGoogle(montarItens(base).itens[0]);
+  assert.equal(semCor.colorId, undefined);
 });

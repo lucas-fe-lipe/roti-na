@@ -105,14 +105,27 @@ export default function Sidebar({ isOpen, onClose, user, onProfileUpdated, ativi
     }
   };
 
+  const googleEmAndamento = useRef(false);
   const handleGoogleLogin = async () => {
+    // Evita abrir duas janelas (causa do erro "cancelled-popup-request")
+    if (googleEmAndamento.current) return;
+    googleEmAndamento.current = true;
     setErro('');
     try {
       const provider = new GoogleAuthProvider();
       await signInWithPopup(auth, provider);
       onClose();
     } catch (err) {
-      setErro(err.message);
+      const code = err?.code || '';
+      if (code === 'auth/cancelled-popup-request' || code === 'auth/popup-closed-by-user') {
+        // usuário fechou/cancelou: não é um erro de verdade
+      } else if (code === 'auth/popup-blocked') {
+        setErro('O navegador bloqueou a janela de login. Permita pop-ups para este site e tente de novo.');
+      } else {
+        setErro('Não foi possível entrar com o Google. Se estiver no Brave, desative os Shields (ícone do leão) para este site e tente de novo. (' + (code || err.message) + ')');
+      }
+    } finally {
+      googleEmAndamento.current = false;
     }
   };
 

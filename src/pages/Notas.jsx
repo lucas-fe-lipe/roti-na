@@ -12,6 +12,7 @@ export default function Notas({ user, atividades, isAvaliacoesOpen, setIsAvaliac
   const [cursoModal, setCursoModal] = useState({ open: false, data: null });
   const [periodoModal, setPeriodoModal] = useState({ open: false, data: null, cursoId: null });
   const [disciplinaModal, setDisciplinaModal] = useState({ open: false, data: null, periodoId: null, cursoId: null });
+  const [resumoModal, setResumoModal] = useState(null); // { discId, periodoId, cursoId }
 
   const [confirmacao, setConfirmacao] = useState(null); // { titulo, mensagem, executar }
   const [cursosMinimizados, setCursosMinimizados] = useState({});
@@ -173,7 +174,7 @@ export default function Notas({ user, atividades, isAvaliacoesOpen, setIsAvaliac
     }
   };
 
-  const salvarDisciplina = async (disciplina, periodoId, cursoId) => {
+  const salvarDisciplina = async (disciplina, periodoId, cursoId, { fechar = true } = {}) => {
     const curso = cursos.find(c => c.id === cursoId);
     if (!curso) return;
     const id = disciplina.id || Date.now().toString();
@@ -194,7 +195,11 @@ export default function Notas({ user, atividades, isAvaliacoesOpen, setIsAvaliac
     else persistirLocal(cursos.map(c => c.id === cursoId ? cursoAtualizado : c));
     
     await syncAvaliacoesComTarefas(novaDisciplina, cursoId, periodoId);
-    setDisciplinaModal({ open: false, data: null, periodoId: null, cursoId: null });
+    if (fechar) {
+      setDisciplinaModal({ open: false, data: null, periodoId: null, cursoId: null });
+      setResumoModal(null);
+    }
+    return novaDisciplina;
   };
 
   const excluirDisciplina = (disciplinaId, periodoId, cursoId) => {
@@ -231,6 +236,27 @@ export default function Notas({ user, atividades, isAvaliacoesOpen, setIsAvaliac
     else persistirLocal(cursos.map(c => c.id === curso.id ? curso : c));
     
     await syncAvaliacoesComTarefas(disciplina, curso.id, curso.periodos[periodoIndex].id);
+  };
+
+  const achaDisciplina = (m) => m
+    ? cursos.find(c => c.id === m.cursoId)?.periodos?.find(p => p.id === m.periodoId)?.disciplinas?.find(d => d.id === m.discId) || null
+    : null;
+
+  const salvarAvaliacoesDoResumo = async (avaliacoes) => {
+    const atual = achaDisciplina(resumoModal);
+    if (!atual) return;
+    await salvarDisciplina({ ...atual, avaliacoes }, resumoModal.periodoId, resumoModal.cursoId);
+  };
+
+  // "Editar disciplina" dentro do resumo: guarda as avaliações pendentes (se houver) e abre a edição
+  const editarDisciplinaDoResumo = async (avaliacoesPendentes) => {
+    const atual = achaDisciplina(resumoModal);
+    if (!atual) return;
+    const { periodoId, cursoId } = resumoModal;
+    let dados = atual;
+    if (avaliacoesPendentes) dados = await salvarDisciplina({ ...atual, avaliacoes: avaliacoesPendentes }, periodoId, cursoId, { fechar: false });
+    setResumoModal(null);
+    setDisciplinaModal({ open: true, data: dados, periodoId, cursoId });
   };
 
   const calcAvaliacoes = (avaliacoes = [], usarMedia = false) => {
@@ -408,7 +434,7 @@ export default function Notas({ user, atividades, isAvaliacoesOpen, setIsAvaliac
                             const isDiscRed = maxTotal > 0 && percentual < 60;
                             
                             return (
-                              <div key={disc.id} onClick={() => setDisciplinaModal({ open: true, data: disc, periodoId: periodo.id, cursoId: curso.id })} className="bg-zinc-800/40 p-2.5 sm:p-3 rounded-lg flex justify-between items-center border border-zinc-800/60 cursor-pointer hover:border-zinc-700 transition-colors w-full">
+                              <div key={disc.id} onClick={() => setResumoModal({ discId: disc.id, periodoId: periodo.id, cursoId: curso.id })} className="bg-zinc-800/40 p-2.5 sm:p-3 rounded-lg flex justify-between items-center border border-zinc-800/60 cursor-pointer hover:border-zinc-700 transition-colors w-full">
                                 
                                 <div className="flex-1 min-w-0 pr-2">
                                   <h4 className="font-bold text-white text-xs sm:text-sm truncate w-full">{disc.nome}</h4>
@@ -468,6 +494,16 @@ export default function Notas({ user, atividades, isAvaliacoesOpen, setIsAvaliac
           onClose={() => setDisciplinaModal({ open: false, data: null, periodoId: null, cursoId: null })} 
           onSave={(d) => salvarDisciplina(d, disciplinaModal.periodoId, disciplinaModal.cursoId)} 
           onDelete={(id) => excluirDisciplina(id, disciplinaModal.periodoId, disciplinaModal.cursoId)} 
+        />
+      )}
+      {achaDisciplina(resumoModal) && (
+        <ModalDisciplinaResumo
+          key={`${resumoModal.discId}`}
+          disciplina={achaDisciplina(resumoModal)}
+          statusClasse={statusCores[achaDisciplina(resumoModal).status] || 'bg-zinc-700'}
+          onClose={() => setResumoModal(null)}
+          onSalvarAvaliacoes={salvarAvaliacoesDoResumo}
+          onEditar={editarDisciplinaDoResumo}
         />
       )}
       {isAvaliacoesOpen && (
@@ -542,62 +578,50 @@ function ModalPeriodo({ periodoInicial, onClose, onSave, onDelete }) {
   );
 }
 
-function ModalDisciplina({ disciplinaInicial, tiposHoras, atividades, onClose, onSave, onDelete }) {
-  const [disc, setDisc] = useState(disciplinaInicial || { nome: '', professor: '', cargaHoraria: '', tipoHora: tiposHoras[0]?.nome || '', status: 'Cursando', atividadeVinculada: '', usarMedia: false, avaliacoes: [] });
-  const [draggedIndex, setDraggedIndex] = useState(null);
-
-  const hAv = (id, f, v) => setDisc(p => ({ ...p, avaliacoes: p.avaliacoes.map(a => a.id === id ? { ...a, [f]: v } : a) }));
-  
-  const handleDragStart = (e, index) => {
-    setDraggedIndex(index);
-    e.dataTransfer.effectAllowed = 'move';
-  };
-
-  const handleDragOver = (e, index) => {
-    e.preventDefault();
-    if (draggedIndex === null || draggedIndex === index) return;
-    const novasAvaliacoes = [...disc.avaliacoes];
-    const itemMovido = novasAvaliacoes.splice(draggedIndex, 1)[0];
-    novasAvaliacoes.splice(index, 0, itemMovido);
-    setDraggedIndex(index);
-    setDisc(p => ({ ...p, avaliacoes: novasAvaliacoes }));
-  };
-
-  const handleDragEnd = () => {
-    setDraggedIndex(null);
-  };
-
+// Nota final de uma lista de avaliações (soma ou média, conforme a disciplina)
+function calcularNotaFinal(avaliacoes = [], usarMedia = false) {
   let maxT = 0, obtT = 0, percFinal = 0;
-
-  if (disc.usarMedia && disc.avaliacoes.length > 0) {
-    let somaPercentuais = 0;
-    let count = 0;
-    disc.avaliacoes.forEach(a => {
+  if (usarMedia && avaliacoes.length > 0) {
+    let soma = 0, count = 0;
+    avaliacoes.forEach(a => {
       if (a.obtida !== '' && !isNaN(a.obtida) && a.max !== '' && !isNaN(a.max) && Number(a.max) > 0) {
-        somaPercentuais += (Number(a.obtida) / Number(a.max)) * 100;
+        soma += (Number(a.obtida) / Number(a.max)) * 100;
         count++;
       }
     });
-    percFinal = count > 0 ? somaPercentuais / count : 0;
+    percFinal = count > 0 ? soma / count : 0;
     maxT = 100;
     obtT = percFinal;
   } else {
-    disc.avaliacoes.forEach(a => { 
-      if (a.obtida !== '' && !isNaN(a.obtida)) { 
-        maxT += Number(a.max)||0; 
-        obtT += Number(a.obtida)||0; 
+    avaliacoes.forEach(a => {
+      if (a.obtida !== '' && !isNaN(a.obtida)) {
+        maxT += Number(a.max) || 0;
+        obtT += Number(a.obtida) || 0;
       }
     });
     percFinal = maxT > 0 ? (obtT / maxT) * 100 : 0;
   }
-  
-  const isDiscRed = maxT > 0 && percFinal < 60;
+  return { maxT, obtT, percFinal, vermelho: maxT > 0 && percFinal < 60 };
+}
+
+// "showDateInput" é só um detalhe visual do editor; não deve ser salvo
+const limparAvaliacao = (av) => {
+  const { showDateInput: _visual, ...resto } = av; // eslint-disable-line no-unused-vars
+  return resto;
+};
+
+function ModalDisciplina({ disciplinaInicial, tiposHoras, atividades, onClose, onSave, onDelete }) {
+  const [disc, setDisc] = useState(
+    disciplinaInicial
+      ? { ...disciplinaInicial, avaliacoes: disciplinaInicial.avaliacoes || [] }
+      : { nome: '', professor: '', cargaHoraria: '', tipoHora: tiposHoras[0]?.nome || '', status: 'Cursando', atividadeVinculada: '', usarMedia: false, avaliacoes: [] }
+  );
 
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-2 sm:p-4">
       <div className="bg-zinc-900 text-zinc-100 rounded-xl w-full max-w-md p-3 sm:p-5 shadow-2xl space-y-3 max-h-[90vh] overflow-y-auto border border-zinc-800">
         <h2 className="text-xl font-bold">{disciplinaInicial ? 'Editar Disciplina' : 'Nova Disciplina'}</h2>
-        
+
         <div className="space-y-2.5">
           <div><label className="block text-xs font-semibold text-zinc-400 mb-1">Nome</label><input type="text" value={disc.nome} onChange={e => setDisc({...disc, nome: e.target.value})} className="w-full bg-zinc-950 border border-zinc-700 rounded p-2 text-white text-sm" /></div>
           <div><label className="block text-xs font-semibold text-zinc-400 mb-1">Professor</label><input type="text" value={disc.professor} onChange={e => setDisc({...disc, professor: e.target.value})} className="w-full bg-zinc-950 border border-zinc-700 rounded p-2 text-white text-sm" /></div>
@@ -629,79 +653,131 @@ function ModalDisciplina({ disciplinaInicial, tiposHoras, atividades, onClose, o
             </select>
           </div>
 
-          <div className="pt-2 border-t border-zinc-800">
-            <div className="flex justify-between items-center mb-2">
-              <label className="text-sm font-bold text-zinc-300">Avaliações</label>
-              <button onClick={() => setDisc(p => ({...p, avaliacoes: [...p.avaliacoes, { id: Date.now().toString(), nome: `P${p.avaliacoes.length+1}`, max: '', obtida: '', data: '', hora: '', showDateInput: false }]}))} className="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-2.5 py-1 rounded text-xs border border-zinc-600 font-bold">+ Adicionar</button>
-            </div>
-            
-            <div className="space-y-1.5">
-              {disc.avaliacoes.map((av, index) => {
-                const isCalculable = av.max !== '' && av.obtida !== '' && Number(av.max) > 0;
-                const pNum = isCalculable ? (Number(av.obtida) / Number(av.max)) * 100 : 0;
-                const pLocal = isCalculable ? pNum.toFixed(1) + '%' : '';
-                const isRed = isCalculable && pNum < 60;
-
-                return (
-                  <div 
-                    key={av.id} 
-                    draggable
-                    onDragStart={(e) => handleDragStart(e, index)}
-                    onDragOver={(e) => handleDragOver(e, index)}
-                    onDragEnd={handleDragEnd}
-                    className="flex gap-1 items-center bg-zinc-950/40 p-1 rounded border border-zinc-800/80"
-                  >
-                    <span className="text-zinc-500 cursor-grab hover:text-zinc-300 select-none px-1 text-xs font-bold tracking-tighter" title="Arraste para mover">⋮⋮</span>
-                    <input type="text" value={av.nome} onChange={e => hAv(av.id, 'nome', e.target.value)} placeholder="Nome" className="flex-1 min-w-0 bg-zinc-950 border border-zinc-700 rounded p-1.5 text-white text-xs" />
-                    
-                    {av.showDateInput ? (
-                      <div className="flex gap-1 shrink-0 items-center">
-                        <input type="date" value={av.data || ''} onChange={e => hAv(av.id, 'data', e.target.value)} onBlur={(e) => { if (!e.currentTarget.parentNode.contains(e.relatedTarget)) hAv(av.id, 'showDateInput', false); }} autoFocus className="w-[105px] bg-zinc-950 border border-zinc-700 rounded p-1.5 text-white text-[10px] [color-scheme:dark]" />
-                        <input type="time" value={av.hora || ''} onChange={e => hAv(av.id, 'hora', e.target.value)} onBlur={(e) => { if (!e.currentTarget.parentNode.contains(e.relatedTarget)) hAv(av.id, 'showDateInput', false); }} className="w-[75px] bg-zinc-950 border border-zinc-700 rounded p-1.5 text-white text-[10px] [color-scheme:dark]" />
-                      </div>
-                    ) : (
-                      <button onClick={() => hAv(av.id, 'showDateInput', true)} className={`w-8 h-8 shrink-0 flex items-center justify-center rounded border transition-colors ${av.data ? 'bg-blue-600/20 border-blue-500/50 text-blue-400' : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:bg-zinc-700 hover:text-white'}`}>
-                         <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-                      </button>
-                    )}
-
-                    <input type="number" value={av.max} onChange={e => hAv(av.id, 'max', e.target.value)} placeholder="Total" className="w-10 sm:w-11 shrink-0 bg-zinc-950 border border-zinc-700 rounded p-1.5 text-white text-xs text-center" />
-                    <input type="number" value={av.obtida} onChange={e => hAv(av.id, 'obtida', e.target.value)} placeholder="Nota" className="w-10 sm:w-11 shrink-0 bg-zinc-950 border border-zinc-700 rounded p-1.5 text-white text-xs text-center" />
-                    <span className={`w-9 shrink-0 text-right text-[10px] font-bold ${isRed ? 'text-red-500' : 'text-zinc-400'}`}>{pLocal}</span>
-                    <button onClick={() => setDisc(p => ({...p, avaliacoes: p.avaliacoes.filter(x => x.id !== av.id)}))} className="text-red-500 hover:text-red-400 font-bold px-1.5 py-0.5 text-base bg-transparent border-none shrink-0">×</button>
-                  </div>
-                );
-              })}
-            </div>
-            
-            <div className="mt-3 flex justify-between items-center text-xs font-medium text-zinc-400">
-              <div>
-                Nota Final: <span className={`font-bold text-sm ${isDiscRed ? 'text-red-500' : 'text-white'}`}>{obtT.toFixed(2)} / {maxT.toFixed(2)} - {percFinal.toFixed(2)}%</span>
-              </div>
-              
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] text-zinc-400">média</span>
-                <button 
-                  type="button" 
-                  onClick={() => setDisc(p => ({ ...p, usarMedia: !p.usarMedia }))}
-                  className={`w-9 h-5 flex items-center rounded-full p-1 transition-colors duration-200 ease-in-out ${disc.usarMedia ? 'bg-blue-600' : 'bg-zinc-700'}`}
-                >
-                  <div className={`bg-white w-3.5 h-3.5 rounded-full shadow-md transform transition-transform duration-200 ease-in-out ${disc.usarMedia ? 'translate-x-4' : 'translate-x-0'}`} />
-                </button>
-              </div>
-            </div>
+          <div className="flex items-center justify-between pt-2 border-t border-zinc-800">
+            <span className="text-xs text-zinc-400">Nota final pela média das avaliações</span>
+            <button
+              type="button"
+              onClick={() => setDisc(p => ({ ...p, usarMedia: !p.usarMedia }))}
+              className={`w-9 h-5 flex items-center rounded-full p-1 transition-colors duration-200 ease-in-out ${disc.usarMedia ? 'bg-blue-600' : 'bg-zinc-700'}`}
+              aria-label="Calcular pela média"
+            >
+              <div className={`bg-white w-3.5 h-3.5 rounded-full shadow-md transform transition-transform duration-200 ease-in-out ${disc.usarMedia ? 'translate-x-4' : 'translate-x-0'}`} />
+            </button>
           </div>
+          {!disciplinaInicial && <p className="text-[11px] text-zinc-500">As avaliações são adicionadas depois de salvar: toque na disciplina na lista.</p>}
         </div>
 
         <div className="flex justify-between items-center pt-3 border-t border-zinc-800 mt-3">
           {disciplinaInicial ? (
             <button onClick={() => onDelete(disc.id)} className="text-red-500 hover:text-red-400 font-bold text-sm bg-transparent border-none p-0">Excluir</button>
           ) : <div></div>}
-          
+
           <div className="flex gap-2">
             <button onClick={onClose} className="px-3 py-1.5 bg-zinc-800 rounded text-zinc-300 hover:bg-zinc-700 font-bold text-xs transition-colors">Cancelar</button>
             <button onClick={() => onSave(disc)} className="px-3 py-1.5 bg-zinc-600 text-white rounded hover:bg-zinc-500 font-bold text-xs transition-colors">Salvar</button>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Pop-up que abre ao tocar numa disciplina: dados compactos + avaliações (adicionar/editar/dar nota).
+function ModalDisciplinaResumo({ disciplina, statusClasse, onClose, onSalvarAvaliacoes, onEditar }) {
+  const original = (disciplina.avaliacoes || []).map(limparAvaliacao);
+  const [avaliacoes, setAvaliacoes] = useState(original);
+  const [draggedIndex, setDraggedIndex] = useState(null);
+  const alterado = JSON.stringify(avaliacoes.map(limparAvaliacao)) !== JSON.stringify(original);
+
+  const hAv = (id, f, v) => setAvaliacoes(p => p.map(a => a.id === id ? { ...a, [f]: v } : a));
+
+  const handleDragOver = (e, index) => {
+    e.preventDefault();
+    if (draggedIndex === null || draggedIndex === index) return;
+    const novas = [...avaliacoes];
+    const movido = novas.splice(draggedIndex, 1)[0];
+    novas.splice(index, 0, movido);
+    setDraggedIndex(index);
+    setAvaliacoes(novas);
+  };
+
+  const { maxT, obtT, percFinal, vermelho } = calcularNotaFinal(avaliacoes, disciplina.usarMedia);
+  const limpas = () => avaliacoes.map(limparAvaliacao);
+
+  return (
+    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-2 sm:p-4">
+      <div className="bg-zinc-900 text-zinc-100 rounded-xl w-full max-w-md p-3 sm:p-5 shadow-2xl space-y-3 max-h-[90vh] overflow-y-auto border border-zinc-800">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <h2 className="text-lg font-bold leading-tight break-words">{disciplina.nome || 'Disciplina'}</h2>
+            <div className="text-xs text-zinc-400 mt-0.5 flex flex-wrap gap-x-2">
+              {disciplina.professor && <span>Prof: {disciplina.professor}</span>}
+              <span>{disciplina.cargaHoraria || 0}h{disciplina.tipoHora ? ` • ${disciplina.tipoHora}` : ''}</span>
+            </div>
+          </div>
+          <div className={`${statusClasse} text-white text-[9px] font-bold px-2 py-1 rounded shrink-0 uppercase tracking-wide`}>{disciplina.status}</div>
+        </div>
+
+        <button onClick={() => onEditar(alterado ? limpas() : null)} className="w-full text-xs font-bold text-zinc-300 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded py-1.5 transition-colors">
+          Editar disciplina
+        </button>
+
+        <div className="pt-2 border-t border-zinc-800">
+          <div className="flex justify-between items-center mb-2">
+            <label className="text-sm font-bold text-zinc-300">Avaliações</label>
+            <button onClick={() => setAvaliacoes(p => [...p, { id: Date.now().toString(), nome: `P${p.length + 1}`, max: '', obtida: '', data: '', hora: '', showDateInput: false }])} className="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-2.5 py-1 rounded text-xs border border-zinc-600 font-bold">+ Adicionar</button>
+          </div>
+
+          {avaliacoes.length === 0 && <p className="text-xs text-zinc-500 italic">Nenhuma avaliação ainda.</p>}
+
+          <div className="space-y-1.5">
+            {avaliacoes.map((av, index) => {
+              const isCalculable = av.max !== '' && av.obtida !== '' && Number(av.max) > 0;
+              const pNum = isCalculable ? (Number(av.obtida) / Number(av.max)) * 100 : 0;
+              const pLocal = isCalculable ? pNum.toFixed(1) + '%' : '';
+              const isRed = isCalculable && pNum < 60;
+
+              return (
+                <div
+                  key={av.id}
+                  draggable
+                  onDragStart={(e) => { setDraggedIndex(index); e.dataTransfer.effectAllowed = 'move'; }}
+                  onDragOver={(e) => handleDragOver(e, index)}
+                  onDragEnd={() => setDraggedIndex(null)}
+                  className="flex gap-1 items-center bg-zinc-950/40 p-1 rounded border border-zinc-800/80"
+                >
+                  <span className="text-zinc-500 cursor-grab hover:text-zinc-300 select-none px-1 text-xs font-bold tracking-tighter" title="Arraste para mover">⋮⋮</span>
+                  <input type="text" value={av.nome} onChange={e => hAv(av.id, 'nome', e.target.value)} placeholder="Nome" className="flex-1 min-w-0 bg-zinc-950 border border-zinc-700 rounded p-1.5 text-white text-xs" />
+
+                  {av.showDateInput ? (
+                    <div className="flex gap-1 shrink-0 items-center">
+                      <input type="date" value={av.data || ''} onChange={e => hAv(av.id, 'data', e.target.value)} onBlur={(e) => { if (!e.currentTarget.parentNode.contains(e.relatedTarget)) hAv(av.id, 'showDateInput', false); }} autoFocus className="w-[105px] bg-zinc-950 border border-zinc-700 rounded p-1.5 text-white text-[10px] [color-scheme:dark]" />
+                      <input type="time" value={av.hora || ''} onChange={e => hAv(av.id, 'hora', e.target.value)} onBlur={(e) => { if (!e.currentTarget.parentNode.contains(e.relatedTarget)) hAv(av.id, 'showDateInput', false); }} className="w-[75px] bg-zinc-950 border border-zinc-700 rounded p-1.5 text-white text-[10px] [color-scheme:dark]" />
+                    </div>
+                  ) : (
+                    <button onClick={() => hAv(av.id, 'showDateInput', true)} className={`w-8 h-8 shrink-0 flex items-center justify-center rounded border transition-colors ${av.data ? 'bg-blue-600/20 border-blue-500/50 text-blue-400' : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:bg-zinc-700 hover:text-white'}`} title="Data e hora">
+                      <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                    </button>
+                  )}
+
+                  <input type="number" value={av.max} onChange={e => hAv(av.id, 'max', e.target.value)} placeholder="Total" className="w-10 sm:w-11 shrink-0 bg-zinc-950 border border-zinc-700 rounded p-1.5 text-white text-xs text-center" />
+                  <input type="number" value={av.obtida} onChange={e => hAv(av.id, 'obtida', e.target.value)} placeholder="Nota" className="w-10 sm:w-11 shrink-0 bg-zinc-950 border border-zinc-700 rounded p-1.5 text-white text-xs text-center" />
+                  <span className={`w-9 shrink-0 text-right text-[10px] font-bold ${isRed ? 'text-red-500' : 'text-zinc-400'}`}>{pLocal}</span>
+                  <button onClick={() => setAvaliacoes(p => p.filter(x => x.id !== av.id))} className="text-red-500 hover:text-red-400 font-bold px-1.5 py-0.5 text-base bg-transparent border-none shrink-0" title="Remover avaliação">×</button>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="mt-3 text-xs font-medium text-zinc-400">
+            Nota Final: <span className={`font-bold text-sm ${vermelho ? 'text-red-500' : 'text-white'}`}>{obtT.toFixed(2)} / {maxT.toFixed(2)} - {percFinal.toFixed(2)}%</span>
+            {disciplina.usarMedia && <span className="text-[11px] text-zinc-500"> (média)</span>}
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 pt-3 border-t border-zinc-800">
+          <button onClick={onClose} className="px-3 py-1.5 bg-zinc-800 rounded text-zinc-300 hover:bg-zinc-700 font-bold text-xs transition-colors">{alterado ? 'Cancelar' : 'Fechar'}</button>
+          {alterado && <button onClick={() => onSalvarAvaliacoes(limpas())} className="px-3 py-1.5 bg-zinc-600 text-white rounded hover:bg-zinc-500 font-bold text-xs transition-colors">Salvar</button>}
         </div>
       </div>
     </div>
@@ -718,6 +794,7 @@ function ModalAvaliacoesGlobal({ cursos, tarefas, onClose, onConfirmar }) {
   cursos.forEach(c => {
     c.periodos?.forEach(p => {
       p.disciplinas?.forEach(d => {
+        if (d.status !== 'Cursando') return; // só disciplinas em andamento
         d.avaliacoes?.forEach(a => {
           todasAvaliacoes.push({ ...a, cursoId: c.id, periodoId: p.id, disciplinaId: d.id, disciplinaNome: d.nome });
         });
@@ -764,6 +841,14 @@ function ModalAvaliacoesGlobal({ cursos, tarefas, onClose, onConfirmar }) {
     if (!b.data) return -1;
     return new Date(`${b.data}T${b.hora || '00:00'}:00`) - new Date(`${a.data}T${a.hora || '00:00'}:00`);
   });
+
+  // concluídas agrupadas por disciplina (ordem alfabética; dentro de cada uma, a mais recente primeiro)
+  const concluidasPorDisciplina = Object.entries(concluidas.reduce((acc, av) => {
+    const k = `${av.cursoId}_${av.periodoId}_${av.disciplinaId}`;
+    if (!acc[k]) acc[k] = { nome: av.disciplinaNome || 'Sem nome', lista: [] };
+    acc[k].lista.push(av);
+    return acc;
+  }, {})).sort((a, b) => a[1].nome.localeCompare(b[1].nome, 'pt-BR'));
 
   const formatarDataCabecalho = (dataStr) => {
     if (dataStr === 'Sem data') return 'Sem data';
@@ -862,7 +947,12 @@ function ModalAvaliacoesGlobal({ cursos, tarefas, onClose, onConfirmar }) {
             </div>
             {!minConcluidas && (
               <div className="flex flex-col opacity-60">
-                {concluidas.length === 0 ? <p className="text-xs text-zinc-600 italic pl-5">Nenhuma avaliação concluída.</p> : concluidas.map(av => renderAvItem(av, false, true))}
+                {concluidas.length === 0 ? <p className="text-xs text-zinc-600 italic pl-5">Nenhuma avaliação concluída.</p> : concluidasPorDisciplina.map(([chave, grupo]) => (
+                  <div key={chave} className="mb-2">
+                    <div className="text-xs font-bold text-zinc-400 pl-1 mb-1 uppercase tracking-wider">{grupo.nome}</div>
+                    {grupo.lista.map(av => renderAvItem(av, false, true))}
+                  </div>
+                ))}
               </div>
             )}
           </div>

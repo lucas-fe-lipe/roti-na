@@ -42,17 +42,22 @@ export default function Configuracoes({ config, atualizarConfig, onVoltar }) {
 
       <Grupo titulo="Blocos da página Rotina">
         <Interruptor rotulo="Metas diárias" ligado={blocos.metas} onChange={(v) => atualizarConfig({ blocos: { metas: v } })} />
-        <Interruptor rotulo="Tarefas atrasadas" ligado={blocos.atrasadas} onChange={(v) => atualizarConfig({ blocos: { atrasadas: v } })} />
-        <Interruptor rotulo="Tarefas concluídas" ligado={blocos.concluidas} onChange={(v) => atualizarConfig({ blocos: { concluidas: v } })} />
-        <Interruptor rotulo="Progresso do dia" descricao="Mostra (feitas/total) ao lado de Hoje." ligado={blocos.progressoDia} onChange={(v) => atualizarConfig({ blocos: { progressoDia: v } })} />
         <Interruptor rotulo="Linha do horário atual" descricao={'Linha que marca "agora" na grade semanal.'} ligado={blocos.linhaAgora} onChange={(v) => atualizarConfig({ blocos: { linhaAgora: v } })} />
+        {integracaoConfigurada() && (
+          <Interruptor
+            rotulo="Google Agenda na tela (modo Agenda)"
+            descricao="Mostra sua agenda do Google embaixo das metas, só para visualizar. Para criar ou editar, use os botões do bloco."
+            ligado={blocos.agendaGoogle}
+            onChange={(v) => atualizarConfig({ blocos: { agendaGoogle: v } })}
+          />
+        )}
       </Grupo>
 
       {integracaoConfigurada() && (
         <Grupo titulo="Google Agenda">
           <Interruptor
             rotulo="Sincronizar automaticamente"
-            descricao="Envia para a agenda roti-na o que você criar, mudar ou excluir, com o app aberto. Exige a primeira sincronização em Exportar."
+            descricao="Envia para as agendas roti-na o que você criar, mudar ou excluir, com o app aberto. Exige a primeira sincronização em Exportar."
             ligado={integracoes.googleAutoSync}
             onChange={(v) => atualizarConfig({ integracoes: { googleAutoSync: v } })}
           />

@@ -6,7 +6,7 @@ import { salvarDoc } from '../services/db';
 // Valores padrão: tudo ligado, como o app era antes das configurações existirem.
 export const CONFIG_PADRAO = {
   paginas: { notas: true },
-  blocos: { metas: true, atrasadas: true, concluidas: true, progressoDia: true, linhaAgora: true },
+  blocos: { metas: true, linhaAgora: true, agendaGoogle: false },
   integracoes: { googleAutoSync: false },
   novidadesVista: '',
 };

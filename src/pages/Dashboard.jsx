@@ -1,16 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
-import ItemRow from '../components/ItemRow';
+import AgendaGoogle from '../components/AgendaGoogle';
 import Configuracoes from './Configuracoes';
 import Novidades from './Novidades';
 import useDados from '../hooks/useDados';
 import useConfig from '../hooks/useConfig';
 import useGoogleAutoSync from '../hooks/useGoogleAutoSync';
 import { VERSAO_ATUAL } from '../data/novidades';
-import { horaParaMinutos, ordenarPorHorario, horarioJaPassou } from '../utils/horario';
+import { horaParaMinutos } from '../utils/horario';
 import ActivityModal from '../components/ActivityModal';
 import GoalModal from '../components/GoalModal';
-import TaskModal from '../components/TaskModal';
-import TaskDetailModal from '../components/TaskDetailModal';
 import Sidebar from '../components/Sidebar';
 import RightMenu from '../components/RightMenu';
 import Notas from './Notas';
@@ -19,20 +17,13 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { doc } from 'firebase/firestore';
 import { salvarDoc, apagarDoc, registrarSchema } from '../services/db';
 import { getInitials } from '../utils/defaultAvatars';
-import { hojeLocalStr } from '../utils/date';
 import { diaDaMeta, progressoAtual } from '../utils/metas';
 import { notificar } from '../utils/toast';
 import Avatar from '../components/Avatar';
 
-// Atividades da grade não são tarefas. Ao concluir uma, guardamos uma "tarefa marcadora" (id atv-task-...)
-// só para lembrar que ela foi feita naquele dia. Esses marcadores nunca aparecem nas listas de tarefas.
-const ehMarcadorDeAtividade = (t) => !!t.id && t.id.startsWith('atv-task-');
-
 export default function Dashboard() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isGoalModalOpen, setIsGoalModalOpen] = useState(false);
-  const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
-  const [isTaskDetailOpen, setIsTaskDetailOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isRightMenuOpen, setIsRightMenuOpen] = useState(false);
   const [isAvaliacoesOpen, setIsAvaliacoesOpen] = useState(false); 
@@ -41,20 +32,14 @@ export default function Dashboard() {
   
   const [user, setUser] = useState(null);
   const [userAvatar, setUserAvatar] = useState('');
-  const { atividades, setAtividades, metas, setMetas, tarefas, setTarefas } = useDados(user, activePage);
+  const { atividades, setAtividades, metas, setMetas, tarefas } = useDados(user, activePage);
   const { config, atualizarConfig } = useConfig(user);
   const temNovidade = config.novidadesVista !== VERSAO_ATUAL;
-  useGoogleAutoSync({ user, atividades, tarefas, ativo: config.integracoes.googleAutoSync });
-  const [confirmarExclusaoConcluidas, setConfirmarExclusaoConcluidas] = useState(false);
+  const sync = useGoogleAutoSync({ user, atividades, tarefas, ativo: config.integracoes.googleAutoSync });
   
   const [atividadeEditando, setAtividadeEditando] = useState(null);
   const [metaEditando, setMetaEditando] = useState(null);
-  const [tarefaEditando, setTarefaEditando] = useState(null);
-  const [tarefaDetalhe, setTarefaDetalhe] = useState(null);
   const [modoVisualizacao, setModoVisualizacao] = useState(true);
-
-  // 'atrasadas' e 'concluidas' iniciam como true (minimizados). As datas iniciam maximizadas por padrão (false).
-  const [minimizedSections, setMinimizedSections] = useState({ concluidas: true, atrasadas: true });
 
   const [categorias, setCategorias] = useState(['Estudos', 'Trabalho', 'Treinos', 'Outros']);
   const coresUsadas = Array.from(new Set(atividades.map(a => a.cor)));
@@ -233,97 +218,6 @@ export default function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [metas, currentTime]);
 
-  const handleSalvarTarefa = async (novaTarefa) => {
-    if (user) {
-      await salvarDoc(doc(db, 'users', user.uid, 'tarefas', novaTarefa.id), novaTarefa);
-    } else {
-      setTarefas((atuais) => {
-        const existe = atuais.some(t => t.id === novaTarefa.id);
-        const atualizadas = existe ? atuais.map(t => t.id === novaTarefa.id ? novaTarefa : t) : [...atuais, novaTarefa];
-        localStorage.setItem('local_tarefas', JSON.stringify(atualizadas));
-        return atualizadas;
-      });
-    }
-  };
-
-  const handleToggleConcluida = async (tarefa) => {
-    const atualizada = { ...tarefa, concluida: !tarefa.concluida };
-    if (user) {
-      await salvarDoc(doc(db, 'users', user.uid, 'tarefas', tarefa.id), atualizada);
-    } else {
-      const atualizadas = tarefas.map(t => t.id === tarefa.id ? atualizada : t);
-      setTarefas(atualizadas);
-      localStorage.setItem('local_tarefas', JSON.stringify(atualizadas));
-    }
-  };
-
-  const handleToggleConcluidaAtividade = async (atvId, horarioInicio) => {
-    const hojeStr = hojeLocalStr(currentTime);
-    const taskId = `atv-task-${atvId}-${hojeStr}-${horarioInicio}`;
-    const atvObj = atividades.find(a => a.id === atvId);
-    if (!atvObj) return;
-
-    const tarefaExistente = tarefas.find(t => t.id === taskId);
-
-    if (tarefaExistente && tarefaExistente.concluida) {
-      // desmarcar: apaga o marcador (não deixa lixo no banco)
-      await handleExcluirTarefa(taskId);
-    } else if (tarefaExistente) {
-      // marcador antigo que ficou como "não concluído"
-      await handleToggleConcluida(tarefaExistente);
-    } else {
-      const novaTarefa = {
-        id: taskId,
-        nome: atvObj.apelido || atvObj.nome,
-        data: hojeStr,
-        horario: horarioInicio,
-        cor: atvObj.cor || '#000000',
-        atividadeVinculada: atvObj.id,
-        detalhes: atvObj.detalhes || '',
-        concluida: true
-      };
-      await handleSalvarTarefa(novaTarefa);
-    }
-  };
-
-  const handleExcluirTarefa = async (id) => {
-    if (user) {
-      await apagarDoc(doc(db, 'users', user.uid, 'tarefas', id));
-    } else {
-      const atualizadas = tarefas.filter(t => t.id !== id);
-      setTarefas(atualizadas);
-      localStorage.setItem('local_tarefas', JSON.stringify(atualizadas));
-    }
-  };
-
-  const excluirTarefaComDesfazer = async (id) => {
-    const anterior = tarefas.find(t => t.id === id);
-    await handleExcluirTarefa(id);
-    if (anterior) notificar('Tarefa excluída.', 'info', { rotulo: 'Desfazer', fn: () => handleSalvarTarefa(anterior) });
-  };
-
-  const handleExcluirTarefasConcluidas = async () => {
-    // apaga as tarefas/avaliações concluídas e também marcadores de atividades de dias anteriores.
-    // Os marcadores de HOJE ficam, para as atividades de hoje continuarem concluídas.
-    const hoje = hojeLocalStr(currentTime);
-    const apagar = tarefas.filter(t => ehMarcadorDeAtividade(t) ? t.data !== hoje : t.concluida);
-    if (user) {
-      await Promise.all(apagar.map(t => apagarDoc(doc(db, 'users', user.uid, 'tarefas', t.id))));
-    } else {
-      const ids = new Set(apagar.map(t => t.id));
-      const atualizadas = tarefas.filter(t => !ids.has(t.id));
-      setTarefas(atualizadas);
-      localStorage.setItem('local_tarefas', JSON.stringify(atualizadas));
-    }
-    setConfirmarExclusaoConcluidas(false);
-    if (apagar.length > 0) {
-      notificar(`${apagar.length} ${apagar.length === 1 ? 'item excluído' : 'itens excluídos'}.`, 'info', {
-        rotulo: 'Desfazer',
-        fn: () => Promise.all(apagar.map(t => handleSalvarTarefa(t))),
-      });
-    }
-  };
-
   const abrirNovaAtividade = () => {
     setAtividadeEditando(null);
     setModoVisualizacao(false);
@@ -338,91 +232,6 @@ export default function Dashboard() {
 
   const userName = user ? (user.displayName || user.email.split('@')[0]) : 'Login';
   const userInitials = getInitials(userName);
-
-  const hojeStr = hojeLocalStr(currentTime);
-  const nomeDiaHoje = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'][currentDay];
-  const dataFormatadaHoje = `Hoje - ${nomeDiaHoje}, ${new Date().toLocaleDateString('pt-BR')}`;
-
-  const atividadesDoDia = [];
-  atividades.forEach(atv => {
-    (atv.horarios || []).forEach(h => {
-      const diaAbreviado = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'][currentDay];
-      if (h.dia === diaAbreviado) {
-        const taskId = `atv-task-${atv.id}-${hojeStr}-${h.inicio}`;
-        const tarefaCorrespondente = tarefas.find(t => t.id === taskId);
-        const concluida = !!(tarefaCorrespondente && tarefaCorrespondente.concluida);
-
-        atividadesDoDia.push({
-          ...atv,
-          uniqueKey: taskId,
-          horarioExibicao: h.inicio,
-          horarioInicio: h.inicio,
-          concluida
-        });
-      }
-    });
-  });
-
-  const atividadesNaoConcluidasHoje = atividadesDoDia.filter(a => !a.concluida);
-  const atividadesConcluidasHojeList = atividadesDoDia.filter(a => a.concluida);
-
-  const tarefasPorData = {};
-  const tarefasConcluidas = [];
-
-  tarefas.forEach(t => {
-    if (ehMarcadorDeAtividade(t)) return;
-
-    if (t.concluida) {
-      tarefasConcluidas.push(t);
-    } else {
-      const d = t.data || 'Sem data';
-      if (!tarefasPorData[d]) tarefasPorData[d] = [];
-      tarefasPorData[d].push(t);
-    }
-  });
-
-  const tarefasAtrasadasPorData = {};
-  let totalAtrasadas = 0;
-
-  Object.keys(tarefasPorData).forEach(d => {
-    if (d !== 'Sem data' && d < hojeStr) {
-      const lista = tarefasPorData[d].filter(t => !t.concluida);
-      if (lista.length > 0) {
-        tarefasAtrasadasPorData[d] = lista;
-        totalAtrasadas += lista.length;
-      }
-    }
-  });
-
-  const datasAtrasadasOrdenadas = Object.keys(tarefasAtrasadasPorData).sort((a, b) => new Date(a) - new Date(b));
-
-  const datasOrdenadas = Object.keys(tarefasPorData).sort((a, b) => {
-    if (a === 'Sem data') return 1;
-    if (b === 'Sem data') return -1;
-    return new Date(a) - new Date(b);
-  });
-
-  const toggleMinimizar = (dataKey) => {
-    setMinimizedSections(prev => ({ ...prev, [dataKey]: !prev[dataKey] }));
-  };
-
-  const formatarTituloData = (dataKey) => {
-    if (dataKey === 'Sem data') return 'Sem data';
-    const [ano, mes, dia] = dataKey.split('-');
-    const dataObj = new Date(ano, mes - 1, dia);
-    const nomeDia = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'][dataObj.getDay()];
-    return `${nomeDia}, ${dia}/${mes}/${ano.slice(2)}`;
-  };
-
-  // ---------- ordem por horário (atividades e tarefas misturadas) ----------
-  const itensHoje = ordenarPorHorario([
-    ...atividadesNaoConcluidasHoje.map(atv => ({ tipo: 'atv', min: horaParaMinutos(atv.horarioInicio), atv })),
-    ...(tarefasPorData[hojeStr] || []).filter(t => !t.concluida).map(t => ({ tipo: 'tarefa', min: horaParaMinutos(t.horario || t.hora), t })),
-  ]);
-  const itensConcluidos = ordenarPorHorario([
-    ...atividadesConcluidasHojeList.map(atv => ({ tipo: 'atv', min: horaParaMinutos(atv.horarioInicio), atv })),
-    ...tarefasConcluidas.map(t => ({ tipo: 'tarefa', min: horaParaMinutos(t.horario || t.hora), t })),
-  ]);
 
   // ---------- grade: segmentos por dia, com colunas lado a lado quando há sobreposição ----------
   const segmentosGrade = [];
@@ -459,69 +268,6 @@ export default function Dashboard() {
     fecharGrupo();
   }
 
-  // progresso do dia: atividades de hoje + tarefas de hoje (feitas / total)
-  const feitasHoje = atividadesConcluidasHojeList.length + tarefasConcluidas.filter(t => t.data === hojeStr).length;
-  const totalHoje = feitasHoje + itensHoje.length;
-
-  const abrirTarefa = (t) => { setTarefaDetalhe(t); setIsTaskDetailOpen(true); };
-  const corDaTarefa = (t) => t.cor || '#000000';
-
-  const renderAtividadeHoje = (atv) => (
-    <ItemRow
-      key={atv.uniqueKey}
-      cor={atv.cor}
-      horario={atv.horarioExibicao}
-      horarioVazio
-      titulo={atv.apelido || atv.nome}
-      detalhes={atv.detalhes}
-      atrasado={horarioJaPassou(atv.horarioInicio, currentTime)}
-      onAbrir={() => abrirDetalhesAtividade(atv)}
-      onToggle={() => handleToggleConcluidaAtividade(atv.id, atv.horarioInicio)}
-    />
-  );
-
-  const renderTarefaHoje = (t) => (
-    <ItemRow
-      key={t.id}
-      cor={corDaTarefa(t)}
-      horario={t.horario || t.hora}
-      titulo={t.nome || t.texto}
-      detalhes={t.detalhes}
-      isAvaliacao={t.tipo === 'avaliacao'}
-      atrasado={horarioJaPassou(t.horario || t.hora, currentTime)}
-      onAbrir={() => abrirTarefa(t)}
-      onToggle={() => handleToggleConcluida(t)}
-    />
-  );
-
-  const renderAtividadeConcluida = (atv) => (
-    <ItemRow
-      key={atv.uniqueKey}
-      cor={atv.cor}
-      horario={atv.horarioExibicao}
-      horarioVazio
-      titulo={atv.apelido || atv.nome}
-      detalhes={atv.detalhes}
-      concluido
-      onAbrir={() => abrirDetalhesAtividade(atv)}
-      onToggle={() => handleToggleConcluidaAtividade(atv.id, atv.horarioInicio)}
-    />
-  );
-
-  const renderTarefaConcluida = (t) => (
-    <ItemRow
-      key={t.id}
-      cor={corDaTarefa(t)}
-      horario={t.horario || t.hora}
-      titulo={t.nome || t.texto}
-      detalhes={t.detalhes}
-      isAvaliacao={t.tipo === 'avaliacao'}
-      concluido
-      onAbrir={() => abrirTarefa(t)}
-      onToggle={() => handleToggleConcluida(t)}
-    />
-  );
-
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col">
       <header className="flex justify-between items-center px-6 py-2 border-b border-zinc-800 shrink-0">
@@ -533,6 +279,18 @@ export default function Dashboard() {
         </div>
 
         <div className="flex items-center gap-3">
+          {(sync.mostrarBotao || sync.sincronizando) && (
+            <button
+              onClick={sync.sincronizarAgora}
+              disabled={sync.sincronizando}
+              className="bg-zinc-900 border border-zinc-800 w-8 h-8 flex items-center justify-center rounded hover:bg-zinc-800 transition-colors shadow-sm text-blue-500 hover:text-blue-400 disabled:opacity-70"
+              aria-label="Sincronizar com o Google Agenda"
+              title={sync.sincronizando ? 'Sincronizando…' : `Sincronizar com o Google Agenda (${sync.pendentes} ${sync.pendentes === 1 ? 'mudança' : 'mudanças'})`}
+            >
+              <svg className={sync.sincronizando ? 'animate-spin' : ''} width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden="true"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+            </button>
+          )}
+
           {activePage === 'Grade' && (
             <button 
               onClick={abrirNovaAtividade} 
@@ -672,131 +430,9 @@ export default function Dashboard() {
             </div>
             )}
 
-            <div className="mt-3 w-full px-2 sm:px-0 flex flex-col gap-2">
-              
-              {/* BLOCO DE ATRASADAS */}
-              {config.blocos.atrasadas && totalAtrasadas > 0 && (
-                <div className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 shadow-lg">
-                  <div className="flex justify-between items-center mb-1">
-                    <button onClick={() => toggleMinimizar('atrasadas')} className="text-xs font-bold text-red-400 hover:text-red-300 flex items-center gap-2">
-                      <span>{minimizedSections['atrasadas'] !== false ? '▶\uFE0E' : '▼\uFE0E'}</span> Atrasadas ({totalAtrasadas})
-                    </button>
-                    <button onClick={() => { setTarefaEditando(null); setIsTaskModalOpen(true); }} className="w-6 h-6 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded flex items-center justify-center text-xs transition-colors">+</button>
-                  </div>
-
-                  {minimizedSections['atrasadas'] === false && (
-                    <div className="space-y-3 mt-2">
-                      {datasAtrasadasOrdenadas.map(dataKey => {
-                        const lista = tarefasAtrasadasPorData[dataKey] || [];
-                        if (lista.length === 0) return null;
-                        return (
-                          <div key={dataKey} className="space-y-1.5">
-                            <div className="text-[11px] font-bold text-zinc-400 pl-1">{formatarTituloData(dataKey)}</div>
-                            {lista.map(t => (
-                              <ItemRow
-                                key={t.id}
-                                cor={corDaTarefa(t)}
-                                horario={t.horario || t.hora}
-                                titulo={t.nome || t.texto}
-                                detalhes={t.detalhes}
-                                isAvaliacao={t.tipo === 'avaliacao'}
-                                atrasado
-                                onAbrir={() => abrirTarefa(t)}
-                                onToggle={() => handleToggleConcluida(t)}
-                              />
-                            ))}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* BLOCO DE HOJE */}
-              <div className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 shadow-lg">
-                <div className="flex justify-between items-center mb-1">
-                  <button onClick={() => toggleMinimizar(hojeStr)} className="text-xs font-bold text-zinc-200 hover:text-white flex items-center gap-2">
-                    <span>{minimizedSections[hojeStr] ? '▶\uFE0E' : '▼\uFE0E'}</span> {dataFormatadaHoje}
-                    {config.blocos.progressoDia && totalHoje > 0 && <span className="text-[10px] font-medium text-zinc-400">({feitasHoje}/{totalHoje})</span>}
-                  </button>
-                  <button aria-label="Nova tarefa" title="Nova tarefa" onClick={() => { setTarefaEditando(null); setIsTaskModalOpen(true); }} className="w-6 h-6 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded flex items-center justify-center text-xs transition-colors">+</button>
-                </div>
-
-                {!minimizedSections[hojeStr] && (
-                  <div className="space-y-1.5 mt-2">
-                    {itensHoje.map(item => item.tipo === 'atv' ? renderAtividadeHoje(item.atv) : renderTarefaHoje(item.t))}
-                    {itensHoje.length === 0 && (
-                      <p className="text-xs text-zinc-500 text-center py-3">
-                        {totalHoje > 0
-                          ? 'Tudo feito por hoje. Bom trabalho!'
-                          : 'Nada para hoje ainda. Toque no + para adicionar uma tarefa.'}
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {datasOrdenadas.map(dataKey => {
-                if (dataKey === hojeStr || dataKey < hojeStr) return null;
-                
-                const isMinimizado = minimizedSections[dataKey] !== undefined ? minimizedSections[dataKey] : false;
-                
-                const listaTarefas = (tarefasPorData[dataKey] || []).filter(t => !t.concluida);
-                if (listaTarefas.length === 0 && dataKey !== 'Sem data') return null;
-
-                return (
-                  <div key={dataKey} className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 shadow-lg">
-                    <div className="flex justify-between items-center mb-1">
-                      <button onClick={() => toggleMinimizar(dataKey)} className="text-xs font-bold text-zinc-200 hover:text-white flex items-center gap-2">
-                        <span>{isMinimizado ? '▶\uFE0E' : '▼\uFE0E'}</span> {formatarTituloData(dataKey)}
-                      </button>
-                      <button onClick={() => { setTarefaEditando(null); setIsTaskModalOpen(true); }} className="w-6 h-6 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded flex items-center justify-center text-xs transition-colors">+</button>
-                    </div>
-
-                    {!isMinimizado && (
-                      <div className="space-y-1.5 mt-2">
-                        {listaTarefas.map(t => (
-                          <ItemRow
-                            key={t.id}
-                            cor={corDaTarefa(t)}
-                            horario={t.horario || t.hora}
-                            titulo={t.nome || t.texto}
-                            detalhes={t.detalhes}
-                            isAvaliacao={t.tipo === 'avaliacao'}
-                            onAbrir={() => abrirTarefa(t)}
-                            onToggle={() => handleToggleConcluida(t)}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-
-              {/* BLOCO DE CONCLUÍDAS */}
-              {config.blocos.concluidas && (tarefasConcluidas.length > 0 || atividadesConcluidasHojeList.length > 0) && (
-                <div className="bg-zinc-900/50 border border-zinc-800/80 rounded-xl px-3 py-2.5 shadow-lg">
-                  <div className="flex justify-between items-center mb-1">
-                    <button onClick={() => toggleMinimizar('concluidas')} className="text-xs font-bold text-zinc-400 hover:text-zinc-200 flex items-center gap-2">
-                      <span>{minimizedSections['concluidas'] !== false ? '▶\uFE0E' : '▼\uFE0E'}</span> Concluídas ({tarefasConcluidas.length + atividadesConcluidasHojeList.length})
-                    </button>
-                    {tarefasConcluidas.length > 0 && (
-                      <button onClick={() => setConfirmarExclusaoConcluidas(true)} className="text-[10px] font-semibold px-2 py-0.5 bg-red-950/60 hover:bg-red-900/60 text-red-400 rounded transition-colors">
-                        Excluir
-                      </button>
-                    )}
-                  </div>
-
-                  {minimizedSections['concluidas'] === false && (
-                    <div className="space-y-1.5 mt-2">
-                      {itensConcluidos.map(item => item.tipo === 'atv' ? renderAtividadeConcluida(item.atv) : renderTarefaConcluida(item.t))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-            </div>
+            {config.blocos.agendaGoogle && (
+              <AgendaGoogle user={user} agendas={sync.agendas} />
+            )}
           </div>
         )}
 
@@ -820,19 +456,6 @@ export default function Dashboard() {
         )}
       </main>
 
-      {confirmarExclusaoConcluidas && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-          <div className="bg-zinc-900 text-zinc-100 rounded-lg w-full max-w-sm p-6 shadow-2xl space-y-4">
-            <h3 className="text-lg font-bold">Excluir Concluídas</h3>
-            <p className="text-sm text-zinc-400">Tem certeza que deseja excluir todas as tarefas concluídas?</p>
-            <div className="flex justify-end gap-2 pt-2">
-              <button onClick={() => setConfirmarExclusaoConcluidas(false)} className="px-4 py-2 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 text-sm">Cancelar</button>
-              <button onClick={handleExcluirTarefasConcluidas} className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded font-medium text-sm">Excluir</button>
-            </div>
-          </div>
-        </div>
-      )}
-
       <ActivityModal 
         isOpen={isModalOpen} 
         onClose={() => setIsModalOpen(false)} 
@@ -850,21 +473,6 @@ export default function Dashboard() {
         onDelete={handleExcluirMeta}
         onReset={handleZerarMeta}
         metaEditada={metaEditando}
-      />
-      <TaskModal 
-        isOpen={isTaskModalOpen}
-        onClose={() => setIsTaskModalOpen(false)}
-        onSave={handleSalvarTarefa}
-        onDelete={excluirTarefaComDesfazer}
-        taskEditada={tarefaEditando}
-        atividades={atividades}
-      />
-      <TaskDetailModal 
-        isOpen={isTaskDetailOpen}
-        onClose={() => setIsTaskDetailOpen(false)}
-        tarefa={tarefaDetalhe}
-        onDelete={excluirTarefaComDesfazer}
-        onEdit={(t) => { setTarefaEditando(t); setIsTaskModalOpen(true); }}
       />
       <Sidebar 
         isOpen={isSidebarOpen} 

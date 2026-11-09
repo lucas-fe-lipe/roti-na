@@ -9,8 +9,10 @@ const fmtUTC = (d) => {
 };
 
 /**
- * mapa = { calendarId, itens: { [chave]: { eventId, assinatura, categoria } } }
- * opcoes = { categorias: ['atividade','tarefa','avaliacao'] (as marcadas), atualizar: bool, remover: bool }
+ * mapa = { itens: { [chave]: { eventId, assinatura, categoria, agenda } } }  (agenda: 'atividades' | 'avaliacoes'; ausente = 'atividades')
+ * opcoes = { categorias: ['atividade','avaliacao'] (as marcadas), atualizar: bool, remover: bool }
+ * Itens guardados na agenda errada (ex.: avaliações que ficavam na agenda única antiga) são movidos:
+ * removidos da agenda antiga e criados na nova.
  */
 export function calcularPlano(itens, mapa, { categorias = [], atualizar = true, remover = true } = {}) {
   const guardados = mapa?.itens || {};
@@ -20,14 +22,19 @@ export function calcularPlano(itens, mapa, { categorias = [], atualizar = true, 
   itens.forEach((item) => {
     const g = guardados[item.chave];
     if (!g) plano.criar.push(item);
-    else if (g.assinatura !== item.assinatura && atualizar) plano.atualizar.push({ item, eventId: g.eventId });
+    else if ((g.agenda || 'atividades') !== (item.agenda || 'atividades')) {
+      plano.remover.push({ chave: item.chave, eventId: g.eventId, agenda: g.agenda || 'atividades', mover: true });
+      plano.criar.push(item);
+    } else if (g.assinatura !== item.assinatura && atualizar) plano.atualizar.push({ item, eventId: g.eventId });
     else plano.iguais += 1;
   });
 
   if (remover) {
     Object.entries(guardados).forEach(([chave, g]) => {
       // só remove de categorias que estão marcadas nesta sincronização
-      if (categorias.includes(g.categoria) && !desejadas.has(chave)) plano.remover.push({ chave, eventId: g.eventId });
+      // 'tarefa' (já não existe no app) sempre sai da agenda
+      const limpavel = categorias.includes(g.categoria) || g.categoria === 'tarefa';
+      if (limpavel && !desejadas.has(chave)) plano.remover.push({ chave, eventId: g.eventId, agenda: g.agenda || 'atividades' });
     });
   }
   return plano;
@@ -49,12 +56,15 @@ export function paraEventoGoogle(item, fusoHorario = 'America/Sao_Paulo') {
   }
   if (item.semanal) evento.recurrence = [`RRULE:FREQ=WEEKLY;BYDAY=${item.semanal.byday};UNTIL=${fmtUTC(item.semanal.ate)}`];
 
-  if (item.lembreteMin === null || item.lembreteMin === undefined) {
+  const lembretes = Array.isArray(item.lembretes) ? item.lembretes : (item.lembreteMin === null || item.lembreteMin === undefined ? [] : [item.lembreteMin]);
+  if (lembretes.length === 0) {
     evento.reminders = { useDefault: false, overrides: [] };
+  } else if (item.diaInteiro) {
+    // dia inteiro: 900 min antes da meia-noite = véspera às 09:00 (um único aviso)
+    evento.reminders = { useDefault: false, overrides: [{ method: 'popup', minutes: 900 }] };
   } else {
-    // dia inteiro: 900 min antes da meia-noite = véspera às 09:00
-    const minutos = item.diaInteiro ? 900 : Number(item.lembreteMin);
-    evento.reminders = { useDefault: false, overrides: [{ method: 'popup', minutes: minutos }] };
+    evento.reminders = { useDefault: false, overrides: lembretes.map((m) => ({ method: 'popup', minutes: Number(m) })) };
   }
+  if (item.colorId) evento.colorId = String(item.colorId);
   return evento;
 }

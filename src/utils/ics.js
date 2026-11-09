@@ -13,7 +13,7 @@ const fmtUTC = (d) => {
 function escapar(texto) {
   return String(texto ?? '')
     .replace(/\\/g, '\\\\')
-    .replace(/;/g, '\;')
+    .replace(/;/g, '\\;')
     .replace(/,/g, '\\,')
     .replace(/\r?\n/g, '\\n');
 }
@@ -38,11 +38,12 @@ function dobrar(linha) {
   return partes.join('\r\n');
 }
 
-// Evento de dia inteiro: lembrete na véspera às 09:00 (15 h antes da meia-noite do dia).
-function alarme(minutos, diaInteiro) {
-  if (minutos === null || minutos === undefined || minutos === '' || Number(minutos) < 0) return [];
-  const gatilho = diaInteiro ? '-PT15H' : `-PT${Number(minutos)}M`;
-  return ['BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:Lembrete', `TRIGGER:${gatilho}`, 'END:VALARM'];
+// Evento de dia inteiro: um lembrete na véspera às 09:00 (15 h antes da meia-noite do dia).
+function alarmes(lembretes, diaInteiro) {
+  const lista = Array.isArray(lembretes) ? lembretes : [];
+  if (lista.length === 0) return [];
+  const gatilhos = diaInteiro ? ['-PT15H'] : lista.map((m) => `-PT${Number(m)}M`);
+  return gatilhos.flatMap((g) => ['BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:Lembrete', `TRIGGER:${g}`, 'END:VALARM']);
 }
 
 export function montarICS({
@@ -55,7 +56,7 @@ export function montarICS({
   const { itens, semData } = montarItens(opcoes);
   const linhas = [];
   const registros = {};
-  const contagem = { atividades: 0, tarefas: 0, avaliacoes: 0, semData, jaExportados: 0 };
+  const contagem = { atividades: 0, avaliacoes: 0, semData, jaExportados: 0 };
   const carimbo = fmtUTC(agora);
 
   itens.forEach((it) => {
@@ -75,11 +76,10 @@ export function montarICS({
     if (it.semanal) linhas.push(`RRULE:FREQ=WEEKLY;BYDAY=${it.semanal.byday};UNTIL=${fmtUTC(it.semanal.ate)}`);
     linhas.push(`SUMMARY:${escapar(it.titulo)}`);
     if (it.descricao) linhas.push(`DESCRIPTION:${escapar(it.descricao)}`);
-    linhas.push(...alarme(it.lembreteMin, it.diaInteiro), 'END:VEVENT');
+    linhas.push(...alarmes(it.lembretes, it.diaInteiro), 'END:VEVENT');
 
     if (it.categoria === 'atividade') contagem.atividades += 1;
-    else if (it.categoria === 'avaliacao') contagem.avaliacoes += 1;
-    else contagem.tarefas += 1;
+    else contagem.avaliacoes += 1;
   });
 
   const cabecalho = [
@@ -92,5 +92,5 @@ export function montarICS({
     `X-WR-TIMEZONE:${fusoHorario}`,
   ];
   const texto = [...cabecalho, ...linhas, 'END:VCALENDAR'].map(dobrar).join('\r\n') + '\r\n';
-  return { texto, contagem, registros, total: contagem.atividades + contagem.tarefas + contagem.avaliacoes };
+  return { texto, contagem, registros, total: contagem.atividades + contagem.avaliacoes };
 }

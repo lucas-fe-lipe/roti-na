@@ -1,8 +1,21 @@
 // Notas de atualização. Para anunciar algo novo: adicione um item NO TOPO da lista
 // e atualize VERSAO_ATUAL com a mesma versão. O selo "novo" aparece até a pessoa abrir a página.
-export const VERSAO_ATUAL = '1.5';
+export const VERSAO_ATUAL = '1.6';
 
 export const NOVIDADES = [
+  {
+    versao: '1.6',
+    data: '2026-11-09',
+    titulo: 'Agendas separadas, cores e mais lembretes',
+    itens: [
+      'A lista de tarefas saiu da tela inicial: o app agora é só grade, metas e notas. Quem quiser ver a agenda pode ligar "Google Agenda na tela" em Configurações.',
+      'Botão azul de sincronizar na barra superior: aparece quando há mudanças que ainda não foram para o Google Agenda.',
+      'Duas agendas no Google: "roti-na" (atividades) e "roti-na avaliações". Você escolhe a cor de cada categoria de atividade e das avaliações.',
+      'Até 3 lembretes por evento, e o pop-up de exportar reabre com as últimas opções usadas.',
+      'Ao tocar numa disciplina abre um resumo com as avaliações. Para editar os dados, use o botão "Editar disciplina".',
+      'A lista de Avaliações mostra só disciplinas "Cursando", e as concluídas aparecem agrupadas por disciplina.',
+    ],
+  },
   {
     versao: '1.5',
     data: '2026-11-08',

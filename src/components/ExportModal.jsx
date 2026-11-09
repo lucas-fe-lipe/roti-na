@@ -1,13 +1,28 @@
 import { useState, useMemo, useEffect } from 'react';
 import { hojeLocalStr } from '../utils/date';
 import { montarICS } from '../utils/ics';
-import { montarItens } from '../utils/agendaItens';
+import { montarItens, normalizarLembretes, CORES_GOOGLE, MAX_LEMBRETES } from '../utils/agendaItens';
 import { calcularPlano } from '../utils/agendaPlano';
 import { notificar } from '../utils/toast';
 import {
-  integracaoConfigurada, precarregarGIS, pedirToken, garantirAgenda, executarPlano,
-  carregarMapa, salvarMapa, mensagemDeErro, NOME_AGENDA, iniciarSincronizacao, terminarSincronizacao,
+  integracaoConfigurada, precarregarGIS, pedirToken, garantirAgendas, executarPlano,
+  carregarMapa, salvarMapa, mensagemDeErro, NOME_AGENDA, NOME_AGENDA_AVALIACOES, iniciarSincronizacao, terminarSincronizacao,
 } from '../services/googleAgenda';
+import { agendasNecessarias } from '../hooks/useGoogleAutoSync';
+
+const UNIDADES = [
+  { mult: 1, rotulo: 'minutos' },
+  { mult: 60, rotulo: 'horas' },
+  { mult: 1440, rotulo: 'dias' },
+];
+
+// minutos -> { v, u } com a maior unidade que divide certinho
+const minutosParaLinha = (min) => {
+  const m = Number(min);
+  const un = m > 0 && m % 1440 === 0 ? 1440 : m > 0 && m % 60 === 0 ? 60 : 1;
+  return { v: String(m / un), u: String(un) };
+};
+const linhaParaMinutos = (l) => (l.v === '' || Number.isNaN(Number(l.v)) ? null : Number(l.v) * Number(l.u));
 
 const somarDias = (dataStr, dias) => {
   const [a, m, d] = dataStr.split('-').map(Number);
@@ -19,6 +34,20 @@ const lerRegistro = (user) => {
   try { return JSON.parse(localStorage.getItem(chaveRegistro(user)) || '{}') || {}; } catch { return {}; }
 };
 
+function SeletorCor({ rotulo, valor, onChange }) {
+  const cor = CORES_GOOGLE.find((c) => c.id === valor);
+  return (
+    <div className="flex items-center gap-2">
+      <span className="w-3.5 h-3.5 rounded-full shrink-0 border border-zinc-600" style={{ backgroundColor: cor ? cor.hex : 'transparent' }} aria-hidden="true" />
+      <span className="flex-1 min-w-0 truncate text-sm">{rotulo}</span>
+      <select value={valor} onChange={(e) => onChange(e.target.value)} className="bg-zinc-900 border border-zinc-700 rounded p-1.5 text-zinc-100 text-xs" aria-label={`Cor de ${rotulo}`}>
+        <option value="">Cor da agenda</option>
+        {CORES_GOOGLE.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+      </select>
+    </div>
+  );
+}
+
 export default function ExportModal({ aberto, onFechar, user, atividades, tarefas, config, atualizarConfig }) {
   const hoje = hojeLocalStr(new Date());
   const googleOk = integracaoConfigurada();
@@ -26,9 +55,10 @@ export default function ExportModal({ aberto, onFechar, user, atividades, tarefa
   const [incluirAtividades, setIncluirAtividades] = useState(true);
   const [inicio, setInicio] = useState(hoje);
   const [fim, setFim] = useState(somarDias(hoje, 112)); // ~16 semanas
-  const [incluirTarefas, setIncluirTarefas] = useState(true);
   const [incluirAvaliacoes, setIncluirAvaliacoes] = useState(true);
-  const [lembrete, setLembrete] = useState('10');
+  const [linhasLembrete, setLinhasLembrete] = useState([minutosParaLinha(10)]);
+  const [coresAtividade, setCoresAtividade] = useState({});
+  const [corAvaliacao, setCorAvaliacao] = useState('');
   const [soNovosICS, setSoNovosICS] = useState(false);
   const [atualizarMudancas, setAtualizarMudancas] = useState(true); // Google: atualizar o que mudou e remover o que foi excluído
   const [mapa, setMapa] = useState(null);
@@ -37,8 +67,13 @@ export default function ExportModal({ aberto, onFechar, user, atividades, tarefa
   const [confirmouRemocao, setConfirmouRemocao] = useState(false);
 
   const fusoHorario = Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Sao_Paulo';
-  const lembreteMin = lembrete === '' ? null : Number(lembrete);
-  const categorias = [incluirAtividades && 'atividade', incluirTarefas && 'tarefa', incluirAvaliacoes && 'avaliacao'].filter(Boolean);
+  const lembretes = normalizarLembretes(linhasLembrete.map(linhaParaMinutos));
+  const chaveLembretes = lembretes.join(',');
+  const categorias = [incluirAtividades && 'atividade', incluirAvaliacoes && 'avaliacao'].filter(Boolean);
+  const categoriasDeAtividade = Array.from(new Set(atividades.map((a) => a.categoria).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  // só as categorias que existem de fato entram nas cores (e na "assinatura" dos eventos)
+  const coresUsadas = Object.fromEntries(categoriasDeAtividade.filter((c) => coresAtividade[c]).map((c) => [c, coresAtividade[c]]));
+  const chaveCores = JSON.stringify([coresUsadas, corAvaliacao]);
 
   useEffect(() => {
     if (!aberto) return;
@@ -47,12 +82,27 @@ export default function ExportModal({ aberto, onFechar, user, atividades, tarefa
     if (googleOk) {
       precarregarGIS();
       let ativo = true;
-      carregarMapa(user).then((m) => { if (ativo) setMapa(m); });
+      carregarMapa(user).then((m) => {
+        if (!ativo) return;
+        setMapa(m);
+        // reabre com o que foi usado da última vez (senão tudo apareceria como "precisa atualizar")
+        const o = m.opcoes;
+        if (o) {
+          setIncluirAtividades(!!o.incluirAtividades);
+          if (o.inicio) setInicio(o.inicio);
+          if (o.fim) setFim(o.fim);
+          setIncluirAvaliacoes(!!o.incluirAvaliacoes);
+          const salvos = normalizarLembretes(o.lembretes !== undefined ? o.lembretes : o.lembrete);
+          setLinhasLembrete(salvos.map(minutosParaLinha));
+          setCoresAtividade(o.coresAtividade || {});
+          setCorAvaliacao(o.corAvaliacao || '');
+        }
+      });
       return () => { ativo = false; };
     }
   }, [aberto, user, googleOk]);
 
-  const opcoesItens = { atividades, tarefas, incluirAtividades, inicio, fim, incluirTarefas, incluirAvaliacoes, lembreteMin };
+  const opcoesItens = { atividades, tarefas, incluirAtividades, inicio, fim, incluirAvaliacoes, lembretes, coresAtividade: coresUsadas, corAvaliacao };
 
   // Pré-visualização do arquivo .ics
   const previaICS = useMemo(
@@ -60,7 +110,7 @@ export default function ExportModal({ aberto, onFechar, user, atividades, tarefa
       ? montarICS({ ...opcoesItens, soNovos: soNovosICS, exportados: soNovosICS ? lerRegistro(user) : {}, fusoHorario })
       : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [aberto, destino, atividades, tarefas, incluirAtividades, inicio, fim, incluirTarefas, incluirAvaliacoes, lembrete, soNovosICS]
+    [aberto, destino, atividades, tarefas, incluirAtividades, inicio, fim, incluirAvaliacoes, chaveLembretes, soNovosICS]
   );
 
   // Pré-visualização da sincronização com o Google
@@ -70,7 +120,7 @@ export default function ExportModal({ aberto, onFechar, user, atividades, tarefa
     const plano = calcularPlano(itens, mapa, { categorias, atualizar: atualizarMudancas, remover: atualizarMudancas });
     return { itens, semData, plano };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [aberto, destino, mapa, atividades, tarefas, incluirAtividades, inicio, fim, incluirTarefas, incluirAvaliacoes, lembrete, atualizarMudancas]);
+  }, [aberto, destino, mapa, atividades, tarefas, incluirAtividades, inicio, fim, incluirAvaliacoes, chaveLembretes, chaveCores, atualizarMudancas]);
 
   useEffect(() => { setConfirmouRemocao(false); }, [previaGoogle?.plano.remover.length]);
 
@@ -118,10 +168,10 @@ export default function ExportModal({ aberto, onFechar, user, atividades, tarefa
     let mapaAtual = mapa;
     try {
       const token = await pedirToken();
-      mapaAtual = await garantirAgenda(token, mapa, fusoHorario);
-      // se a agenda foi recriada, o mapa ficou vazio: recalcula o plano com ele
+      mapaAtual = await garantirAgendas(token, mapa, fusoHorario, agendasNecessarias({ incluirAtividades, incluirAvaliacoes }));
+      // se uma agenda foi recriada, o mapa mudou: recalcula o plano com ele
       const { itens } = montarItens(opcoesItens);
-      const planoFinal = mapaAtual === mapa ? plano : calcularPlano(itens, mapaAtual, { categorias, atualizar: atualizarMudancas, remover: atualizarMudancas });
+      const planoFinal = calcularPlano(itens, mapaAtual, { categorias, atualizar: atualizarMudancas, remover: atualizarMudancas });
       const resumo = await executarPlano(token, planoFinal, mapaAtual, fusoHorario);
       const partes = [];
       if (resumo.criados) partes.push(`${resumo.criados} criados`);
@@ -137,11 +187,11 @@ export default function ExportModal({ aberto, onFechar, user, atividades, tarefa
       console.error(e);
       notificar(mensagemDeErro(e), 'erro');
     } finally {
-      if (mapaAtual && mapaAtual.calendarId) {
+      if (mapaAtual && Object.keys(mapaAtual.agendas || {}).length) {
         // guarda o que deu certo (e as opções usadas, para a sincronização automática)
-        mapaAtual.opcoes = { incluirAtividades, inicio, fim, incluirTarefas, incluirAvaliacoes, lembrete };
+        mapaAtual.opcoes = { incluirAtividades, inicio, fim, incluirAvaliacoes, lembretes, coresAtividade: coresUsadas, corAvaliacao };
         await salvarMapa(user, mapaAtual);
-        setMapa({ calendarId: mapaAtual.calendarId, itens: { ...mapaAtual.itens }, opcoes: mapaAtual.opcoes });
+        setMapa({ agendas: { ...mapaAtual.agendas }, calendarId: mapaAtual.calendarId, itens: { ...mapaAtual.itens }, opcoes: mapaAtual.opcoes });
       }
       terminarSincronizacao();
       setSincronizando(false);
@@ -179,26 +229,36 @@ export default function ExportModal({ aberto, onFechar, user, atividades, tarefa
           </div>
 
           <label className="flex items-center gap-2 cursor-pointer rounded border border-zinc-800 bg-zinc-950 p-3">
-            <input type="checkbox" checked={incluirTarefas} onChange={(e) => setIncluirTarefas(e.target.checked)} className="w-4 h-4 accent-zinc-300" />
-            <span className="font-medium">Tarefas</span>
-          </label>
-
-          <label className="flex items-center gap-2 cursor-pointer rounded border border-zinc-800 bg-zinc-950 p-3">
             <input type="checkbox" checked={incluirAvaliacoes} onChange={(e) => setIncluirAvaliacoes(e.target.checked)} className="w-4 h-4 accent-zinc-300" />
             <span className="font-medium">Avaliações (da página Notas)</span>
           </label>
 
-          <div>
-            <label className="block text-xs text-zinc-500 mb-1">Lembrete</label>
-            <select value={lembrete} onChange={(e) => setLembrete(e.target.value)} className="w-full bg-zinc-950 border border-zinc-700 rounded p-2 text-zinc-100">
-              <option value="">Sem lembrete</option>
-              <option value="0">Na hora</option>
-              <option value="5">5 minutos antes</option>
-              <option value="10">10 minutos antes</option>
-              <option value="30">30 minutos antes</option>
-              <option value="60">1 hora antes</option>
-            </select>
-            <p className="text-[11px] text-zinc-500 mt-1">Itens sem horário (dia inteiro) avisam na véspera às 09:00.</p>
+          <div className="space-y-1.5">
+            <label className="block text-xs text-zinc-500">Lembretes (até {MAX_LEMBRETES})</label>
+            {linhasLembrete.length === 0 && <p className="text-xs text-zinc-500">Sem lembretes.</p>}
+            {linhasLembrete.map((l, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <input
+                  type="number" min="0" value={l.v}
+                  onChange={(e) => setLinhasLembrete((p) => p.map((x, j) => (j === i ? { ...x, v: e.target.value } : x)))}
+                  className="w-20 bg-zinc-950 border border-zinc-700 rounded p-1.5 text-zinc-100 text-sm"
+                  aria-label={`Lembrete ${i + 1}`}
+                />
+                <select
+                  value={l.u}
+                  onChange={(e) => setLinhasLembrete((p) => p.map((x, j) => (j === i ? { ...x, u: e.target.value } : x)))}
+                  className="bg-zinc-950 border border-zinc-700 rounded p-1.5 text-zinc-100 text-sm"
+                >
+                  {UNIDADES.map((u) => <option key={u.mult} value={String(u.mult)}>{u.rotulo}</option>)}
+                </select>
+                <span className="text-xs text-zinc-500 flex-1">antes</span>
+                <button type="button" onClick={() => setLinhasLembrete((p) => p.filter((_, j) => j !== i))} className="text-red-500 hover:text-red-400 px-2 text-lg leading-none" title="Remover lembrete">×</button>
+              </div>
+            ))}
+            {linhasLembrete.length < MAX_LEMBRETES && (
+              <button type="button" onClick={() => setLinhasLembrete((p) => [...p, minutosParaLinha(p.length === 0 ? 10 : 60)])} className="text-xs text-zinc-300 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded px-2.5 py-1">+ Adicionar lembrete</button>
+            )}
+            <p className="text-[11px] text-zinc-500">Itens sem horário (dia inteiro) avisam uma vez, na véspera às 09:00.</p>
           </div>
         </div>
 
@@ -216,8 +276,18 @@ export default function ExportModal({ aberto, onFechar, user, atividades, tarefa
             ) : (
               <>
                 <p className="text-xs text-zinc-400">
-                  O app cria e mantém uma agenda chamada <strong>{NOME_AGENDA}</strong> na sua conta Google. Ele só enxerga essa agenda, nunca as suas outras.
+                  O app cria e mantém duas agendas na sua conta Google: <strong>{NOME_AGENDA}</strong> (atividades) e <strong>{NOME_AGENDA_AVALIACOES}</strong> (avaliações). Ele só enxerga essas agendas, nunca as suas outras.
                 </p>
+
+                <div className="rounded border border-zinc-800 bg-zinc-950 p-3 space-y-2">
+                  <div className="text-xs text-zinc-500">Cores no Google Agenda</div>
+                  {incluirAtividades && categoriasDeAtividade.map((cat) => (
+                    <SeletorCor key={cat} rotulo={cat} valor={coresAtividade[cat] || ''} onChange={(v) => setCoresAtividade((p) => ({ ...p, [cat]: v }))} />
+                  ))}
+                  {incluirAtividades && categoriasDeAtividade.length === 0 && <p className="text-xs text-zinc-500">Suas atividades ainda não têm categoria.</p>}
+                  {incluirAvaliacoes && <SeletorCor rotulo="Avaliações" valor={corAvaliacao} onChange={setCorAvaliacao} />}
+                  <p className="text-[11px] text-zinc-500">"Cor da agenda" usa a cor da agenda inteira, que você muda no app do Google (a lista de cores de evento do Google tem só 11 opções).</p>
+                </div>
                 <label className="flex items-start gap-2 cursor-pointer">
                   <input type="checkbox" checked={atualizarMudancas} onChange={(e) => setAtualizarMudancas(e.target.checked)} className="w-4 h-4 mt-0.5 accent-zinc-300" />
                   <span>
@@ -245,8 +315,7 @@ export default function ExportModal({ aberto, onFechar, user, atividades, tarefa
                         <strong>{p.criar.length}</strong> para criar · <strong>{p.atualizar.length}</strong> para atualizar · <strong>{p.remover.length}</strong> para remover
                       </div>
                       <div className="text-zinc-500">{p.iguais} já estão na agenda e não mudaram.</div>
-                      {previaGoogle.semData > 0 && <div className="text-amber-400">{previaGoogle.semData} tarefas sem data ficam de fora (o Google Agenda precisa de uma data).</div>}
-                      <div className="text-zinc-500">Tarefas e avaliações concluídas saem da agenda na próxima sincronização.</div>
+                      {previaGoogle.semData > 0 && <div className="text-amber-400">{previaGoogle.semData} avaliações sem data ficam de fora (o Google Agenda precisa de uma data).</div>}
                       <div className="text-zinc-500">A sincronização é só do app para o Google: mudanças feitas direto na agenda podem ser sobrescritas.</div>
                     </>
                   )}
@@ -271,10 +340,10 @@ export default function ExportModal({ aberto, onFechar, user, atividades, tarefa
               </span>
             </label>
             <div className="rounded bg-zinc-950 border border-zinc-800 p-3 text-xs text-zinc-300 space-y-1">
-              <div><strong>{previaICS?.total ?? 0}</strong> {previaICS?.total === 1 ? 'evento será gerado' : 'eventos serão gerados'}: {c?.atividades ?? 0} de atividades, {c?.tarefas ?? 0} de tarefas e {c?.avaliacoes ?? 0} de avaliações.</div>
+              <div><strong>{previaICS?.total ?? 0}</strong> {previaICS?.total === 1 ? 'evento será gerado' : 'eventos serão gerados'}: {c?.atividades ?? 0} de atividades e {c?.avaliacoes ?? 0} de avaliações.</div>
               {c?.jaExportados > 0 && <div className="text-zinc-500">{c.jaExportados} já exportados e sem mudanças (ignorados).</div>}
               {c?.semData > 0 && <div className="text-amber-400">{c.semData} sem data não entram no arquivo.</div>}
-              <div className="text-zinc-500">Tarefas e avaliações já concluídas não são exportadas.</div>
+              <div className="text-zinc-500">Avaliações que já têm nota não são exportadas.</div>
             </div>
             <details className="text-xs text-zinc-400">
               <summary className="cursor-pointer text-zinc-300">Como importar no Google Agenda</summary>
