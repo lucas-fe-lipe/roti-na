@@ -400,7 +400,7 @@ export default function Notas({ user, atividades, isAvaliacoesOpen, setIsAvaliac
                             
                             return (
                               <div key={disc.id} onClick={() => setResumoModal({ discId: disc.id, periodoId: periodo.id, cursoId: curso.id })} style={estiloCard} className={`relative overflow-hidden ${corCard ? '' : 'bg-zinc-800/40'} p-2.5 sm:p-3 pt-3.5 sm:pt-4 rounded-lg flex justify-between items-center border ${corCard ? 'border-black/20' : 'border-zinc-800/60 hover:border-zinc-700'} cursor-pointer transition-colors w-full`}>
-                                <BarraNotas percentual={resumoNota.preenchimento} minimo={resumoNota.aprovacao} />
+                                <BarraNotas percentual={resumoNota.preenchimento} distribuido={resumoNota.distribuido} minimo={resumoNota.aprovacao} />
                                 
                                 <div className="flex-1 min-w-0 pr-2">
                                   <h4 className={`font-bold ${classeNormal('text-white')} text-xs sm:text-sm truncate w-full`}>{disc.nome}</h4>
@@ -408,8 +408,8 @@ export default function Notas({ user, atividades, isAvaliacoesOpen, setIsAvaliac
                                   <div className={`text-[10px] sm:text-xs ${corCard ? 'opacity-85' : 'text-gray-400'} mt-0.5 flex flex-wrap gap-1 leading-tight`}>
                                     <span>{disc.cargaHoraria}h • {disc.tipoHora} • Nota: </span>
                                     <span className={`font-bold inline-flex items-center gap-1 ${classeNormal('text-white')}`}>
-                                      {isDiscRed && <IconeAviso />}
                                       {obtidaTotal.toFixed(2)} / {maxTotal.toFixed(2)} - {percentual.toFixed(2)}%
+                                      {isDiscRed && <IconeAviso />}
                                     </span>
                                   </div>
                                 </div>
@@ -492,13 +492,14 @@ function IconeAviso() {
   );
 }
 
-// Barra no topo da disciplina: fundo preto, preenchida de branco conforme a nota obtida.
-// Por baixo do branco fica uma faixa cinza até o percentual para passar (padrão 60% do total).
-function BarraNotas({ percentual, minimo }) {
+// Barra no topo da disciplina (fundo preto), em camadas:
+//  cinza escuro = percentual para passar · cinza claro = pontos já distribuídos (avaliações com nota lançada) · branco = pontos obtidos
+function BarraNotas({ percentual, distribuido = 0, minimo }) {
   const limitar = (v) => Math.max(0, Math.min(100, Number(v) || 0));
   return (
-    <div className="absolute top-0 left-0 right-0 h-1 bg-black" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(limitar(percentual))} aria-label={`Nota obtida ${limitar(percentual).toFixed(0)}%, mínimo ${limitar(minimo)}%`}>
-      <div className="absolute inset-y-0 left-0 bg-zinc-500" style={{ width: `${limitar(minimo)}%` }} />
+    <div className="absolute top-0 left-0 right-0 h-1 bg-black" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(limitar(percentual))} aria-label={`Obtido ${limitar(percentual).toFixed(0)}%, distribuído ${limitar(distribuido).toFixed(0)}%, mínimo ${limitar(minimo)}%`}>
+      <div className="absolute inset-y-0 left-0 bg-zinc-700" style={{ width: `${limitar(minimo)}%` }} />
+      <div className="absolute inset-y-0 left-0 bg-zinc-400 transition-all duration-500" style={{ width: `${limitar(distribuido)}%` }} />
       <div className="absolute inset-y-0 left-0 bg-white transition-all duration-500" style={{ width: `${limitar(percentual)}%` }} />
     </div>
   );

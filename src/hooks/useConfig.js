@@ -2,14 +2,16 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { salvarDoc } from '../services/db';
+import { normalizarLayout, LAYOUT_PADRAO } from '../utils/layout';
 
 // Valores padrão: tudo ligado, como o app era antes das configurações existirem.
 export const CONFIG_PADRAO = {
-  paginas: { notas: true },
-  blocos: { metas: true, linhaAgora: true, agendaGoogle: false },
+  paginas: { grade: true, notas: true },
+  blocos: { grade: true, metas: true, cursos: true, linhaAgora: true, agendaGoogle: false },
+  layout: LAYOUT_PADRAO, // ordem das páginas e dos blocos dentro delas
   integracoes: { googleAutoSync: false },
   grade: { pxPorHora: 22 }, // altura da grade horária
-  agendaGoogle: { email: '', incluirRotiNa: true, extras: '' }, // fontes do bloco "Google Agenda na tela"
+  agendaGoogle: { email: '', incluirRotiNa: true, extras: '', minimizada: false }, // fontes do bloco "Google Agenda na tela"
 };
 
 const mesclar = (salva) => ({
@@ -18,6 +20,7 @@ const mesclar = (salva) => ({
   paginas: { ...CONFIG_PADRAO.paginas, ...(salva?.paginas || {}) },
   blocos: { ...CONFIG_PADRAO.blocos, ...(salva?.blocos || {}) },
   integracoes: { ...CONFIG_PADRAO.integracoes, ...(salva?.integracoes || {}) },
+  layout: normalizarLayout(salva?.layout),
   grade: { ...CONFIG_PADRAO.grade, ...(salva?.grade || {}) },
   agendaGoogle: { ...CONFIG_PADRAO.agendaGoogle, ...(salva?.agendaGoogle || {}) },
 });
@@ -62,6 +65,7 @@ export default function useConfig(user) {
       paginas: { ...atual.paginas, ...(parcial.paginas || {}) },
       blocos: { ...atual.blocos, ...(parcial.blocos || {}) },
       integracoes: { ...atual.integracoes, ...(parcial.integracoes || {}) },
+      layout: parcial.layout || atual.layout,
       grade: { ...atual.grade, ...(parcial.grade || {}) },
       agendaGoogle: { ...atual.agendaGoogle, ...(parcial.agendaGoogle || {}) },
     });

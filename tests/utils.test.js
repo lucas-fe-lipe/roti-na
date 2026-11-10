@@ -366,3 +366,46 @@ test('disciplinaDaAtividade só considera disciplinas Cursando', () => {
   assert.equal(disciplinaDaAtividade(cursos, 'outra'), null);
   assert.equal(disciplinaDaAtividade(cursos, ''), null);
 });
+
+import { normalizarLayout, moverPagina, moverSecao, paginasVisiveis, secoesAtivasDaPagina, LAYOUT_PADRAO } from '../src/utils/layout.js';
+
+test('layout: normalizar completa, remove repetidos e ids desconhecidos', () => {
+  assert.deepEqual(normalizarLayout(undefined), LAYOUT_PADRAO);
+  const l = normalizarLayout({ paginas: ['Notas', 'X', 'Notas'], secoes: { Grade: ['metas', 'metas', 'lixo'], Notas: ['grade'] } });
+  assert.deepEqual(l.paginas, ['Notas', 'Grade']);
+  assert.deepEqual(l.secoes.Grade, ['metas', 'agenda']);
+  assert.deepEqual(l.secoes.Notas, ['grade', 'cursos']); // "cursos" ausente volta para a página de origem
+});
+
+test('layout: mover página e mover bloco entre páginas', () => {
+  assert.deepEqual(moverPagina(LAYOUT_PADRAO, 'Notas', 0).paginas, ['Notas', 'Grade']);
+  assert.deepEqual(moverPagina(LAYOUT_PADRAO, 'Grade', 5).paginas, ['Notas', 'Grade']);
+  const m = moverSecao(LAYOUT_PADRAO, 'cursos', 'Grade', 1);
+  assert.deepEqual(m.secoes.Grade, ['grade', 'cursos', 'metas', 'agenda']);
+  assert.deepEqual(m.secoes.Notas, []);
+  const reord = moverSecao(LAYOUT_PADRAO, 'agenda', 'Grade', 0);
+  assert.deepEqual(reord.secoes.Grade, ['agenda', 'grade', 'metas']);
+});
+
+test('layout: página vazia some do menu e a ordem define a primeira página', () => {
+  const base = { paginas: { grade: true, notas: true }, blocos: { grade: true, metas: true, cursos: true, agendaGoogle: false }, layout: LAYOUT_PADRAO };
+  assert.deepEqual(paginasVisiveis(base), ['Grade', 'Notas']);
+  assert.deepEqual(paginasVisiveis({ ...base, layout: moverPagina(LAYOUT_PADRAO, 'Notas', 0) }), ['Notas', 'Grade']);
+  // "cursos" arrastado para a Rotina: Notas fica vazia e desativada
+  const movido = { ...base, layout: moverSecao(LAYOUT_PADRAO, 'cursos', 'Grade', 3) };
+  assert.deepEqual(paginasVisiveis(movido), ['Grade']);
+  assert.deepEqual(secoesAtivasDaPagina(movido, 'Grade'), ['grade', 'metas', 'cursos']);
+  // agenda só conta com a integração Google configurada
+  const comAgenda = { ...base, blocos: { ...base.blocos, agendaGoogle: true } };
+  assert.deepEqual(secoesAtivasDaPagina(comAgenda, 'Grade', true), ['grade', 'metas', 'agenda']);
+  assert.deepEqual(secoesAtivasDaPagina(comAgenda, 'Grade', false), ['grade', 'metas']);
+  // página desligada
+  assert.deepEqual(paginasVisiveis({ ...base, paginas: { grade: false, notas: true } }), ['Notas']);
+});
+
+test('barra de notas: pontos distribuídos e obtidos sobre o total', () => {
+  const disc = { pontosTotais: 100, avaliacoes: [{ max: '30', obtida: '24' }, { max: '30', obtida: '' }] };
+  const r = resumoDisciplina(disc, undefined);
+  assert.equal(r.distribuido, 30);
+  assert.equal(r.preenchimento, 24);
+});

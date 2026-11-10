@@ -129,10 +129,10 @@ export default function ActivityModal({ isOpen, onClose, onSave, onDelete, ativi
                   <div className="mt-0.5 flex items-center gap-1.5">
                     {disciplinaVinculada.temNota ? (
                       <>
+                        <span>Nota: <span className={`font-bold ${disciplinaVinculada.vermelha ? 'text-red-500' : 'text-white'}`}>{disciplinaVinculada.obtida.toFixed(2)} / {disciplinaVinculada.avaliado.toFixed(2)} - {disciplinaVinculada.percentual.toFixed(2)}%</span></span>
                         {disciplinaVinculada.vermelha && (
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" role="img" aria-label="Atenção: nota abaixo do necessário"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
                         )}
-                        <span>Nota: <span className="font-bold text-white">{disciplinaVinculada.obtida.toFixed(2)} / {disciplinaVinculada.avaliado.toFixed(2)} - {disciplinaVinculada.percentual.toFixed(2)}%</span></span>
                       </>
                     ) : <span className="text-zinc-500">Ainda sem notas lançadas</span>}
                   </div>

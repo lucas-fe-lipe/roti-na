@@ -1,6 +1,8 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Fragment } from 'react';
 import AgendaGoogle from '../components/AgendaGoogle';
 import { textoParaFundo } from '../utils/cores';
+import { paginasVisiveis, secoesAtivasDaPagina, PAGINAS } from '../utils/layout';
+import { integracaoConfigurada } from '../services/googleAgenda';
 import { coresVermelhas, disciplinaDaAtividade, resumoDisciplina } from '../utils/notasStatus';
 import Configuracoes from './Configuracoes';
 import useDados from '../hooks/useDados';
@@ -27,13 +29,17 @@ export default function Dashboard() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isRightMenuOpen, setIsRightMenuOpen] = useState(false);
   const [isAvaliacoesOpen, setIsAvaliacoesOpen] = useState(false); 
-  const [activePage, setActivePage] = useState('Grade');
+  const [activePage, setActivePage] = useState(null); // null = a primeira página da ordem escolhida nas Configurações
   const [currentTime, setCurrentTime] = useState(new Date());
   
   const [user, setUser] = useState(null);
   const [userAvatar, setUserAvatar] = useState('');
-  const { atividades, setAtividades, metas, setMetas, tarefas, cursos } = useDados(user, activePage);
   const { config, atualizarConfig } = useConfig(user);
+  const googleOk = integracaoConfigurada();
+  const paginasMenu = paginasVisiveis(config, googleOk);
+  // página aberta: a escolhida; se não houver (ou foi desativada), a primeira da ordem; sem nenhuma, as Configurações
+  const paginaAtual = activePage === 'Configuracoes' ? 'Configuracoes' : (paginasMenu.includes(activePage) ? activePage : (paginasMenu[0] || 'Configuracoes'));
+  const { atividades, setAtividades, metas, setMetas, tarefas, cursos } = useDados(user, paginaAtual);
   const sync = useGoogleAutoSync({ user, atividades, tarefas, ativo: config.integracoes.googleAutoSync });
   
   const [atividadeEditando, setAtividadeEditando] = useState(null);
@@ -270,60 +276,12 @@ export default function Dashboard() {
     fecharGrupo();
   }
 
-  return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col">
-      <header className="flex justify-between items-center px-6 py-2 border-b border-zinc-800 shrink-0">
-        <div onClick={() => setIsSidebarOpen(true)} className="flex items-center gap-2 cursor-pointer hover:text-zinc-300">
-          <div className="w-8 h-8 rounded-full border-2 border-zinc-700 flex items-center justify-center overflow-hidden bg-zinc-800 text-zinc-200 font-bold text-[10px]">
-            <Avatar src={userAvatar} initials={userInitials} />
-          </div>
-          <span className="text-sm font-medium truncate max-w-[150px]">{userName}</span>
-        </div>
-
-        <div className="flex items-center gap-3">
-          {(sync.mostrarBotao || sync.sincronizando) && (
-            <button
-              onClick={sync.sincronizarAgora}
-              disabled={sync.sincronizando}
-              className="bg-zinc-900 border border-zinc-800 w-8 h-8 flex items-center justify-center rounded hover:bg-zinc-800 transition-colors shadow-sm text-blue-500 hover:text-blue-400 disabled:opacity-70"
-              aria-label="Sincronizar com o Google Agenda"
-              title={sync.sincronizando ? 'Sincronizando…' : `Sincronizar com o Google Agenda (${sync.pendentes} ${sync.pendentes === 1 ? 'mudança' : 'mudanças'})`}
-            >
-              <svg className={sync.sincronizando ? 'animate-spin' : ''} width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden="true"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
-            </button>
-          )}
-
-          {activePage === 'Grade' && (
-            <button 
-              onClick={abrirNovaAtividade} 
-              className="bg-zinc-900 text-zinc-100 border border-zinc-800 w-8 h-8 flex items-center justify-center text-base font-bold rounded hover:bg-zinc-800 transition-colors shadow-sm"
-              aria-label="Nova atividade"
-              title="Nova atividade"
-            >
-              +
-            </button>
-          )}
-
-          {activePage === 'Notas' && (
-            <button 
-              onClick={() => setIsAvaliacoesOpen(true)} 
-              className="bg-zinc-900 text-zinc-100 border border-zinc-800 w-8 h-8 flex items-center justify-center rounded hover:bg-zinc-800 transition-colors shadow-sm text-zinc-400 hover:text-white"
-              title="Avaliações"
-            >
-              <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-            </button>
-          )}
-
-          <button aria-label="Abrir menu" onClick={() => setIsRightMenuOpen(true)} className="relative bg-zinc-900 text-zinc-100 border border-zinc-800 px-3 py-1.5 text-lg rounded hover:bg-zinc-800 transition-colors">
-            ☰
-          </button>
-        </div>
-      </header>
-
-      <main className="flex-1 px-0 pt-0 pb-6 sm:px-6 sm:pt-2 flex flex-col items-center overflow-auto w-full">
-        
-        {activePage === 'Grade' && (
-          <div className="w-full max-w-5xl flex flex-col pb-10">
+  // blocos que podem aparecer em qualquer página (a ordem e a página vêm das Configurações)
+  const secaoCursos = <Notas user={user} atividades={atividades} isAvaliacoesOpen={isAvaliacoesOpen} setIsAvaliacoesOpen={setIsAvaliacoesOpen} />;
+  const secoesDaPaginaAtual = paginaAtual === 'Configuracoes' ? [] : secoesAtivasDaPagina(config, paginaAtual, googleOk);
+  const secoes = {
+    grade: (
+      <>
             {atividades.length === 0 && (
               <p className="text-xs text-zinc-500 text-center py-2">
                 Sua grade está vazia. Toque no + no topo para adicionar a primeira atividade.
@@ -402,7 +360,10 @@ export default function Dashboard() {
               </div>
             </div>
 
-            {config.blocos.metas && (
+      </>
+    ),
+    metas: (
+      <>
             <div className="mt-3 flex items-center gap-3 overflow-x-auto pb-1 scrollbar-none w-full px-2 sm:px-0">
               {metas.map((m) => {
                 const progressoExibido = progressoAtual(m, currentTime);
@@ -430,31 +391,81 @@ export default function Dashboard() {
                 <button onClick={() => { setMetaEditando(null); setIsGoalModalOpen(true); }} className="w-12 h-12 bg-zinc-900 border border-dashed border-zinc-700 hover:border-zinc-500 rounded-lg text-lg font-medium text-zinc-400 hover:text-zinc-100 transition-colors flex items-center justify-center shrink-0" title="Adicionar nova meta">+</button>
               )}
             </div>
-            )}
+      </>
+    ),
+    agenda: (
+      <>
+              <AgendaGoogle user={user} agendas={sync.agendas} config={config} atualizarConfig={atualizarConfig} />
+      </>
+    ),
+    cursos: secaoCursos,
+  };
 
-            {config.blocos.agendaGoogle && (
-              <AgendaGoogle user={user} agendas={sync.agendas} config={config} />
-            )}
+  return (
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col">
+      <header className="flex justify-between items-center px-6 py-2 border-b border-zinc-800 shrink-0">
+        <div onClick={() => setIsSidebarOpen(true)} className="flex items-center gap-2 cursor-pointer hover:text-zinc-300">
+          <div className="w-8 h-8 rounded-full border-2 border-zinc-700 flex items-center justify-center overflow-hidden bg-zinc-800 text-zinc-200 font-bold text-[10px]">
+            <Avatar src={userAvatar} initials={userInitials} />
           </div>
-        )}
+          <span className="text-sm font-medium truncate max-w-[150px]">{userName}</span>
+        </div>
 
-        {activePage === 'Notas' && config.paginas.notas && (
-          <Notas user={user} atividades={atividades} isAvaliacoesOpen={isAvaliacoesOpen} setIsAvaliacoesOpen={setIsAvaliacoesOpen} />
-        )}
-
-        {activePage === 'Configuracoes' && (
-          <Configuracoes user={user} config={config} atualizarConfig={atualizarConfig} onVoltar={() => setActivePage('Grade')} />
-        )}
-
-
-        {activePage === 'Notas' && !config.paginas.notas && (
-          <div className="w-full max-w-5xl flex flex-col items-center justify-center flex-1 text-zinc-400 gap-4">
-            <p>A página Notas está desligada nas Configurações.</p>
-            <button onClick={() => setActivePage('Configuracoes')} className="px-4 py-2 bg-zinc-800 text-zinc-200 rounded text-sm hover:bg-zinc-700">
-              Abrir Configurações
+        <div className="flex items-center gap-3">
+          {(sync.mostrarBotao || sync.sincronizando) && (
+            <button
+              onClick={sync.sincronizarAgora}
+              disabled={sync.sincronizando}
+              className="bg-zinc-900 border border-zinc-800 w-8 h-8 flex items-center justify-center rounded hover:bg-zinc-800 transition-colors shadow-sm text-blue-500 hover:text-blue-400 disabled:opacity-70"
+              aria-label="Sincronizar com o Google Agenda"
+              title={sync.sincronizando ? 'Sincronizando…' : `Sincronizar com o Google Agenda (${sync.pendentes} ${sync.pendentes === 1 ? 'mudança' : 'mudanças'})`}
+            >
+              <svg className={sync.sincronizando ? 'animate-spin' : ''} width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden="true"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
             </button>
+          )}
+
+          {secoesDaPaginaAtual.includes('grade') && (
+            <button 
+              onClick={abrirNovaAtividade} 
+              className="bg-zinc-900 text-zinc-100 border border-zinc-800 w-8 h-8 flex items-center justify-center text-base font-bold rounded hover:bg-zinc-800 transition-colors shadow-sm"
+              aria-label="Nova atividade"
+              title="Nova atividade"
+            >
+              +
+            </button>
+          )}
+
+          {secoesDaPaginaAtual.includes('cursos') && (
+            <button 
+              onClick={() => setIsAvaliacoesOpen(true)} 
+              className="bg-zinc-900 text-zinc-100 border border-zinc-800 w-8 h-8 flex items-center justify-center rounded hover:bg-zinc-800 transition-colors shadow-sm text-zinc-400 hover:text-white"
+              title="Avaliações"
+            >
+              <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+            </button>
+          )}
+
+          <button aria-label="Abrir menu" onClick={() => setIsRightMenuOpen(true)} className="relative bg-zinc-900 text-zinc-100 border border-zinc-800 px-3 py-1.5 text-lg rounded hover:bg-zinc-800 transition-colors">
+            ☰
+          </button>
+        </div>
+      </header>
+
+      <main className="flex-1 px-0 pt-0 pb-6 sm:px-6 sm:pt-2 flex flex-col items-center overflow-auto w-full">
+        
+        {paginaAtual !== 'Configuracoes' && (
+          <div className="w-full max-w-5xl flex flex-col pb-10">
+            {secoesDaPaginaAtual.map((id) => (
+              <Fragment key={id}>{secoes[id]}</Fragment>
+            ))}
           </div>
         )}
+
+        {paginaAtual === 'Configuracoes' && (
+          <Configuracoes user={user} config={config} atualizarConfig={atualizarConfig} onVoltar={() => setActivePage(null)} />
+        )}
+
+
       </main>
 
       <ActivityModal 
@@ -493,7 +504,8 @@ export default function Dashboard() {
         isOpen={isRightMenuOpen} 
         onClose={() => setIsRightMenuOpen(false)} 
         onSelectPage={(page) => setActivePage(page)}
-        activePage={activePage}
+        activePage={paginaAtual}
+        paginas={paginasMenu.map((id) => ({ id, rotulo: PAGINAS[id].rotulo }))}
         config={config}
       />
     </div>

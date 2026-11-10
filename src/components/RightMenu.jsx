@@ -1,10 +1,7 @@
-export default function RightMenu({ isOpen, onClose, onSelectPage, activePage, config }) {
+export default function RightMenu({ isOpen, onClose, onSelectPage, activePage, paginas = [] }) {
   if (!isOpen) return null;
 
-  const principais = [
-    { id: 'Grade', rotulo: 'Rotina', visivel: true },
-    { id: 'Notas', rotulo: 'Notas', visivel: config?.paginas?.notas !== false },
-  ].filter((i) => i.visivel);
+  const principais = paginas;
 
   const rodape = [
     { id: 'Configuracoes', rotulo: 'Configurações' },

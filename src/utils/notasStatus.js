@@ -36,6 +36,8 @@ export function resumoDisciplina(disc, periodo) {
     vermelha: maxTotal > 0 && percentual < aprovacao,
     // parte da barra preenchida: pontos obtidos sobre os pontos totais da disciplina
     preenchimento: Math.max(0, Math.min(100, (obtidaTotal / pontosTotais) * 100)),
+    // parte já "distribuída": pontos das avaliações que já têm nota lançada, sobre os pontos totais
+    distribuido: Math.max(0, Math.min(100, (maxTotal / pontosTotais) * 100)),
   };
 }
 
