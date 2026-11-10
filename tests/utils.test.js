@@ -319,8 +319,8 @@ test('notas: soma, média, CRA e mínimo do período', () => {
 });
 
 test('planilha de notas: abas, valores e arquivo .xlsx (zip) válido', () => {
-  const cursos = [{ nome: 'ADS', periodos: [{ nome: '1º', tipoMedia: 'ponderada', minimo: 70, disciplinas: [
-    { nome: 'Cálculo & <1>', status: 'Cursando', cargaHoraria: '60', avaliacoes: [{ nome: 'P1', max: '30', obtida: '25' }, { nome: 'P2', max: '30', obtida: '' }] },
+  const cursos = [{ nome: 'ADS', periodos: [{ nome: '1º', tipoMedia: 'ponderada', disciplinas: [
+    { nome: 'Cálculo & <1>', status: 'Cursando', cargaHoraria: '60', percentualAprovacao: 70, avaliacoes: [{ nome: 'P1', max: '30', obtida: '25' }, { nome: 'P2', max: '30', obtida: '' }] },
   ] }] }];
   const abas = montarAbasNotas(cursos);
   assert.deepEqual(abas.map((a) => a.nome), ['Disciplinas', 'Avaliações', 'Médias']);
@@ -330,4 +330,39 @@ test('planilha de notas: abas, valores e arquivo .xlsx (zip) válido', () => {
   const bytes = gerarXlsx(abas);
   assert.equal(bytes[0], 0x50); // "PK"
   assert.equal(bytes[1], 0x4b);
+});
+
+import { aprovacaoDe, pontosTotaisDe, resumoDisciplina, coresVermelhas, disciplinaDaAtividade, TONS_VERMELHOS } from '../src/utils/notasStatus.js';
+
+test('aprovação e pontos totais: padrões e valores da disciplina', () => {
+  assert.equal(pontosTotaisDe({}), 100);
+  assert.equal(pontosTotaisDe({ pontosTotais: 10 }), 10);
+  assert.equal(pontosTotaisDe({ pontosTotais: 0 }), 100);
+  assert.equal(aprovacaoDe({}, undefined), 60);
+  assert.equal(aprovacaoDe({ percentualAprovacao: 70 }, { minimo: 50 }), 70);
+  assert.equal(aprovacaoDe({}, { minimo: 50 }), 50); // períodos criados na v13 antiga
+  assert.equal(aprovacaoDe({ percentualAprovacao: '' }, {}), 60);
+});
+
+test('nota vermelha: critério é o percentual para passar; cada disciplina vermelha ganha um tom', () => {
+  const disc = (id, obtida, aprov) => ({ id, status: 'Cursando', percentualAprovacao: aprov, avaliacoes: [{ max: '100', obtida: String(obtida) }] });
+  const cursos = [{ id: 'c', periodos: [{ id: 'p', disciplinas: [disc('a', 55, undefined), disc('b', 55, 50), disc('c', 40, 60), { id: 'd', status: 'Cursando', avaliacoes: [] }] }] }];
+  const r = resumoDisciplina(cursos[0].periodos[0].disciplinas[0], cursos[0].periodos[0]);
+  assert.equal(r.vermelha, true);
+  assert.ok(Math.abs(r.preenchimento - 55) < 1e-9);
+  const mapa = coresVermelhas(cursos);
+  assert.deepEqual(Object.keys(mapa), ['a', 'c']); // b passa com 50%; d não tem notas
+  assert.equal(mapa.a, TONS_VERMELHOS[0]);
+  assert.equal(mapa.c, TONS_VERMELHOS[1]);
+  assert.notEqual(mapa.a, mapa.c);
+});
+
+test('disciplinaDaAtividade só considera disciplinas Cursando', () => {
+  const cursos = [{ id: 'c', periodos: [{ id: 'p', disciplinas: [
+    { id: 'x', status: 'Concluída', atividadeVinculada: 'atv1' },
+    { id: 'y', status: 'Cursando', atividadeVinculada: 'atv1' },
+  ] }] }];
+  assert.equal(disciplinaDaAtividade(cursos, 'atv1').disc.id, 'y');
+  assert.equal(disciplinaDaAtividade(cursos, 'outra'), null);
+  assert.equal(disciplinaDaAtividade(cursos, ''), null);
 });

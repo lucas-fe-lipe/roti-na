@@ -5,6 +5,7 @@ import { db } from '../services/firebase';
 import { hojeLocalStr } from '../utils/date';
 import { textoParaFundo } from '../utils/cores';
 import { calcAvaliacoes, calcCRA, minimoDoPeriodo as minimoNum } from '../utils/notas';
+import { resumoDisciplina, aprovacaoDe, pontosTotaisDe, coresVermelhas, PONTOS_PADRAO, APROVACAO_PADRAO } from '../utils/notasStatus';
 import ConfirmModal from '../components/ConfirmModal';
 
 export default function Notas({ user, atividades, isAvaliacoesOpen, setIsAvaliacoesOpen }) {
@@ -244,19 +245,19 @@ export default function Notas({ user, atividades, isAvaliacoesOpen, setIsAvaliac
     ? cursos.find(c => c.id === m.cursoId)?.periodos?.find(p => p.id === m.periodoId)?.disciplinas?.find(d => d.id === m.discId) || null
     : null;
 
-  const salvarAvaliacoesDoResumo = async (avaliacoes) => {
+  const salvarAvaliacoesDoResumo = async ({ avaliacoes, pontosTotais, percentualAprovacao }) => {
     const atual = achaDisciplina(resumoModal);
     if (!atual) return;
-    await salvarDisciplina({ ...atual, avaliacoes }, resumoModal.periodoId, resumoModal.cursoId);
+    await salvarDisciplina({ ...atual, avaliacoes, pontosTotais, percentualAprovacao }, resumoModal.periodoId, resumoModal.cursoId);
   };
 
   // "Editar disciplina" dentro do resumo: guarda as avaliações pendentes (se houver) e abre a edição
-  const editarDisciplinaDoResumo = async (avaliacoesPendentes) => {
+  const editarDisciplinaDoResumo = async (pendentes) => {
     const atual = achaDisciplina(resumoModal);
     if (!atual) return;
     const { periodoId, cursoId } = resumoModal;
     let dados = atual;
-    if (avaliacoesPendentes) dados = await salvarDisciplina({ ...atual, avaliacoes: avaliacoesPendentes }, periodoId, cursoId, { fechar: false });
+    if (pendentes) dados = await salvarDisciplina({ ...atual, ...pendentes }, periodoId, cursoId, { fechar: false });
     setResumoModal(null);
     setDisciplinaModal({ open: true, data: dados, periodoId, cursoId });
   };
@@ -274,7 +275,7 @@ export default function Notas({ user, atividades, isAvaliacoesOpen, setIsAvaliac
     'Reprovado por falta': 'bg-red-600 text-white'
   };
 
-  const minimoDoPeriodo = (m) => minimoNum(cursos.find(c => c.id === m.cursoId)?.periodos?.find(p => p.id === m.periodoId));
+  const vermelhas = coresVermelhas(cursos);
 
   const hoje = hojeLocalStr();
 
@@ -387,25 +388,27 @@ export default function Notas({ user, atividades, isAvaliacoesOpen, setIsAvaliac
                         <div className="mt-3 flex flex-col gap-2">
                           {periodo.disciplinas?.map(disc => {
                             const { maxTotal, obtidaTotal, percentual } = calcAvaliacoes(disc.avaliacoes, disc.usarMedia);
-                            const minimo = minimoNum(periodo);
-                            const isDiscRed = maxTotal > 0 && percentual < minimo;
+                            const resumoNota = resumoDisciplina(disc, periodo);
+                            const isDiscRed = !!vermelhas[disc.id];
                             // "Cursando" + atividade vinculada: o bloco usa a cor da atividade (texto preto ou branco, conforme a cor)
                             const atvVinc = disc.status === 'Cursando' && disc.atividadeVinculada ? atividades?.find(a => a.id === disc.atividadeVinculada) : null;
-                            const corCard = atvVinc?.cor || null;
+                            // nota vermelha: o bloco inteiro fica vermelho (um tom por disciplina); senão, cor da atividade vinculada
+                            const corCard = vermelhas[disc.id] || atvVinc?.cor || null;
                             const corTexto = corCard ? textoParaFundo(corCard) : null;
                             const estiloCard = corCard ? { backgroundColor: corCard, color: corTexto } : undefined;
                             const classeNormal = (c) => (corCard ? '' : c);
                             
                             return (
                               <div key={disc.id} onClick={() => setResumoModal({ discId: disc.id, periodoId: periodo.id, cursoId: curso.id })} style={estiloCard} className={`relative overflow-hidden ${corCard ? '' : 'bg-zinc-800/40'} p-2.5 sm:p-3 pt-3.5 sm:pt-4 rounded-lg flex justify-between items-center border ${corCard ? 'border-black/20' : 'border-zinc-800/60 hover:border-zinc-700'} cursor-pointer transition-colors w-full`}>
-                                <BarraNotas percentual={maxTotal > 0 ? percentual : 0} minimo={minimo} />
+                                <BarraNotas percentual={resumoNota.preenchimento} minimo={resumoNota.aprovacao} />
                                 
                                 <div className="flex-1 min-w-0 pr-2">
                                   <h4 className={`font-bold ${classeNormal('text-white')} text-xs sm:text-sm truncate w-full`}>{disc.nome}</h4>
                                   {disc.professor && <div className={`text-[10px] sm:text-xs ${corCard ? 'opacity-75' : 'text-gray-500'} mt-0.5 truncate w-full`}>Prof: {disc.professor}</div>}
                                   <div className={`text-[10px] sm:text-xs ${corCard ? 'opacity-85' : 'text-gray-400'} mt-0.5 flex flex-wrap gap-1 leading-tight`}>
                                     <span>{disc.cargaHoraria}h • {disc.tipoHora} • Nota: </span>
-                                    <span className={`font-bold ${isDiscRed ? (corCard ? 'underline decoration-red-600 decoration-2 text-red-700' : 'text-red-500') : classeNormal('text-white')}`}>
+                                    <span className={`font-bold inline-flex items-center gap-1 ${classeNormal('text-white')}`}>
+                                      {isDiscRed && <IconeAviso />}
                                       {obtidaTotal.toFixed(2)} / {maxTotal.toFixed(2)} - {percentual.toFixed(2)}%
                                     </span>
                                   </div>
@@ -465,21 +468,32 @@ export default function Notas({ user, atividades, isAvaliacoesOpen, setIsAvaliac
           key={`${resumoModal.discId}`}
           disciplina={achaDisciplina(resumoModal)}
           statusClasse={statusCores[achaDisciplina(resumoModal).status] || 'bg-zinc-700 text-white'}
-          minimo={minimoDoPeriodo(resumoModal)}
           onClose={() => setResumoModal(null)}
           onSalvarAvaliacoes={salvarAvaliacoesDoResumo}
+          aprovacaoInicial={aprovacaoDe(achaDisciplina(resumoModal), cursos.find(c => c.id === resumoModal.cursoId)?.periodos?.find(p => p.id === resumoModal.periodoId))}
           onEditar={editarDisciplinaDoResumo}
         />
       )}
       {isAvaliacoesOpen && (
-        <ModalAvaliacoesGlobal cursos={cursos} tarefas={tarefas} onClose={() => setIsAvaliacoesOpen(false)} onConfirmar={confirmarNotaGlobal} />
+        <ModalAvaliacoesGlobal cursos={cursos} tarefas={tarefas} atividades={atividades} vermelhas={vermelhas} onClose={() => setIsAvaliacoesOpen(false)} onConfirmar={confirmarNotaGlobal} />
       )}
     </div>
   );
 }
 
+// Símbolo de aviso (branco) que aparece ao lado da nota quando a disciplina está vermelha
+function IconeAviso() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 inline-block" role="img" aria-label="Atenção: nota abaixo do necessário">
+      <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path>
+      <line x1="12" y1="9" x2="12" y2="13"></line>
+      <line x1="12" y1="17" x2="12.01" y2="17"></line>
+    </svg>
+  );
+}
+
 // Barra no topo da disciplina: fundo preto, preenchida de branco conforme a nota obtida.
-// Por baixo do branco fica uma faixa cinza até o mínimo exigido (padrão 60%).
+// Por baixo do branco fica uma faixa cinza até o percentual para passar (padrão 60% do total).
 function BarraNotas({ percentual, minimo }) {
   const limitar = (v) => Math.max(0, Math.min(100, Number(v) || 0));
   return (
@@ -530,7 +544,7 @@ function ModalCurso({ cursoInicial, onClose, onSave, onDelete }) {
 }
 
 function ModalPeriodo({ periodoInicial, onClose, onSave, onDelete }) {
-  const [periodo, setPeriodo] = useState(periodoInicial ? { ...periodoInicial, minimo: periodoInicial.minimo ?? 60 } : { nome: '', dataInicio: '', dataFim: '', tipoMedia: 'ponderada', minimo: 60 });
+  const [periodo, setPeriodo] = useState(periodoInicial || { nome: '', dataInicio: '', dataFim: '', tipoMedia: 'ponderada' });
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-3 sm:p-4">
       <div className="bg-zinc-900 text-zinc-100 rounded-lg w-full max-w-sm p-4 sm:p-6 shadow-2xl space-y-4 border border-zinc-800">
@@ -542,17 +556,12 @@ function ModalPeriodo({ periodoInicial, onClose, onSave, onDelete }) {
             <div className="flex-1"><label className="block text-sm text-zinc-400 mb-1">Fim</label><input type="date" value={periodo.dataFim} onChange={e => setPeriodo({...periodo, dataFim: e.target.value})} className="w-full bg-zinc-950 border border-zinc-700 rounded p-2 text-white [color-scheme:dark]" /></div>
           </div>
           <div><label className="block text-sm text-zinc-400 mb-1">Tipo de Média</label><select value={periodo.tipoMedia} onChange={e => setPeriodo({...periodo, tipoMedia: e.target.value})} className="w-full bg-zinc-950 border border-zinc-700 rounded p-2 text-white"><option value="ponderada">Ponderada (Carga Horária)</option><option value="simples">Aritmética Simples</option></select></div>
-          <div>
-            <label className="block text-sm text-zinc-400 mb-1">Nota mínima para aprovação (%)</label>
-            <input type="number" min="0" max="100" value={periodo.minimo} onChange={e => setPeriodo({...periodo, minimo: e.target.value})} className="w-full bg-zinc-950 border border-zinc-700 rounded p-2 text-white" />
-            <p className="text-[11px] text-zinc-500 mt-1">Aparece como faixa cinza na barra de cada disciplina. Padrão: 60.</p>
-          </div>
         </div>
         <div className="flex justify-between items-center pt-4 border-t border-zinc-800 mt-4">
           {periodoInicial ? <button onClick={() => onDelete(periodo.id)} className="text-red-500 hover:text-red-400 font-bold text-sm bg-transparent border-none p-0">Excluir</button> : <div></div>}
           <div className="flex gap-2">
             <button onClick={onClose} className="px-4 py-2 rounded text-zinc-400 hover:bg-zinc-800 text-sm">Cancelar</button>
-            <button onClick={() => { const n = Number(periodo.minimo); onSave({ ...periodo, minimo: periodo.minimo === '' || !Number.isFinite(n) ? 60 : Math.max(0, Math.min(100, n)) }); }} className="px-4 py-2 bg-zinc-100 text-zinc-950 rounded hover:bg-zinc-300 font-medium text-sm">Salvar</button>
+            <button onClick={() => onSave(periodo)} className="px-4 py-2 bg-zinc-100 text-zinc-950 rounded hover:bg-zinc-300 font-medium text-sm">Salvar</button>
           </div>
         </div>
       </div>
@@ -665,11 +674,16 @@ function ModalDisciplina({ disciplinaInicial, tiposHoras, atividades, onClose, o
 }
 
 // Pop-up que abre ao tocar numa disciplina: dados compactos + avaliações (adicionar/editar/dar nota).
-function ModalDisciplinaResumo({ disciplina, statusClasse, minimo = 60, onClose, onSalvarAvaliacoes, onEditar }) {
+function ModalDisciplinaResumo({ disciplina, statusClasse, aprovacaoInicial = APROVACAO_PADRAO, onClose, onSalvarAvaliacoes, onEditar }) {
   const original = (disciplina.avaliacoes || []).map(limparAvaliacao);
   const [avaliacoes, setAvaliacoes] = useState(original);
   const [draggedIndex, setDraggedIndex] = useState(null);
-  const alterado = JSON.stringify(avaliacoes.map(limparAvaliacao)) !== JSON.stringify(original);
+  const [pontosTotais, setPontosTotais] = useState(String(pontosTotaisDe(disciplina)));
+  const [aprovacao, setAprovacao] = useState(String(aprovacaoInicial));
+  const pontosValidos = Number(pontosTotais) > 0 ? Number(pontosTotais) : PONTOS_PADRAO;
+  const aprovacaoValida = aprovacao !== '' && Number(aprovacao) >= 0 && Number(aprovacao) <= 100 ? Number(aprovacao) : APROVACAO_PADRAO;
+  const alterado = JSON.stringify(avaliacoes.map(limparAvaliacao)) !== JSON.stringify(original)
+    || pontosValidos !== pontosTotaisDe(disciplina) || aprovacaoValida !== aprovacaoInicial;
 
   const hAv = (id, f, v) => setAvaliacoes(p => p.map(a => a.id === id ? { ...a, [f]: v } : a));
 
@@ -683,8 +697,8 @@ function ModalDisciplinaResumo({ disciplina, statusClasse, minimo = 60, onClose,
     setAvaliacoes(novas);
   };
 
-  const { maxT, obtT, percFinal, vermelho } = calcularNotaFinal(avaliacoes, disciplina.usarMedia, minimo);
-  const limpas = () => avaliacoes.map(limparAvaliacao);
+  const { maxT, obtT, percFinal, vermelho } = calcularNotaFinal(avaliacoes, disciplina.usarMedia, aprovacaoValida);
+  const limpas = () => ({ avaliacoes: avaliacoes.map(limparAvaliacao), pontosTotais: pontosValidos, percentualAprovacao: aprovacaoValida });
 
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-2 sm:p-4">
@@ -710,6 +724,17 @@ function ModalDisciplinaResumo({ disciplina, statusClasse, minimo = 60, onClose,
             <button onClick={() => setAvaliacoes(p => [...p, { id: Date.now().toString(), nome: `P${p.length + 1}`, max: '', obtida: '', data: '', hora: '', showDateInput: false }])} className="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-2.5 py-1 rounded text-xs border border-zinc-600 font-bold">+ Adicionar</button>
           </div>
 
+          <div className="flex gap-2 mb-2">
+            <label className="flex-1 text-[11px] text-zinc-400">
+              Pontos totais
+              <input type="number" min="1" value={pontosTotais} onChange={e => setPontosTotais(e.target.value)} className="mt-0.5 w-full bg-zinc-950 border border-zinc-700 rounded p-1.5 text-white text-xs" />
+            </label>
+            <label className="flex-1 text-[11px] text-zinc-400">
+              Passar com (%)
+              <input type="number" min="0" max="100" value={aprovacao} onChange={e => setAprovacao(e.target.value)} className="mt-0.5 w-full bg-zinc-950 border border-zinc-700 rounded p-1.5 text-white text-xs" />
+            </label>
+          </div>
+
           {avaliacoes.length === 0 && <p className="text-xs text-zinc-500 italic">Nenhuma avaliação ainda.</p>}
 
           <div className="space-y-1.5">
@@ -717,7 +742,7 @@ function ModalDisciplinaResumo({ disciplina, statusClasse, minimo = 60, onClose,
               const isCalculable = av.max !== '' && av.obtida !== '' && Number(av.max) > 0;
               const pNum = isCalculable ? (Number(av.obtida) / Number(av.max)) * 100 : 0;
               const pLocal = isCalculable ? pNum.toFixed(1) + '%' : '';
-              const isRed = isCalculable && pNum < 60;
+              const isRed = isCalculable && pNum < aprovacaoValida;
 
               return (
                 <div
@@ -753,6 +778,7 @@ function ModalDisciplinaResumo({ disciplina, statusClasse, minimo = 60, onClose,
 
           <div className="mt-3 text-xs font-medium text-zinc-400">
             Nota Final: <span className={`font-bold text-sm ${vermelho ? 'text-red-500' : 'text-white'}`}>{obtT.toFixed(2)} / {maxT.toFixed(2)} - {percFinal.toFixed(2)}%</span>
+            <span className="text-[11px] text-zinc-500"> (passa com {aprovacaoValida}%)</span>
             {disciplina.usarMedia && <span className="text-[11px] text-zinc-500"> (média)</span>}
           </div>
         </div>
@@ -766,7 +792,7 @@ function ModalDisciplinaResumo({ disciplina, statusClasse, minimo = 60, onClose,
   );
 }
 
-function ModalAvaliacoesGlobal({ cursos, tarefas, onClose, onConfirmar }) {
+function ModalAvaliacoesGlobal({ cursos, tarefas, atividades = [], vermelhas = {}, onClose, onConfirmar }) {
   const [minCorrecao, setMinCorrecao] = useState(true);
   const [minProximas, setMinProximas] = useState(false);
   const [minConcluidas, setMinConcluidas] = useState(true);
@@ -778,7 +804,9 @@ function ModalAvaliacoesGlobal({ cursos, tarefas, onClose, onConfirmar }) {
       p.disciplinas?.forEach(d => {
         if (d.status !== 'Cursando') return; // só disciplinas em andamento
         d.avaliacoes?.forEach(a => {
-          todasAvaliacoes.push({ ...a, cursoId: c.id, periodoId: p.id, disciplinaId: d.id, disciplinaNome: d.nome });
+          // cor do bloco: vermelho (nota da disciplina em risco) ou a cor da atividade vinculada
+          const cor = vermelhas[d.id] || atividades.find(x => x.id === d.atividadeVinculada)?.cor || null;
+          todasAvaliacoes.push({ ...a, cursoId: c.id, periodoId: p.id, disciplinaId: d.id, disciplinaNome: d.nome, cor, vermelha: !!vermelhas[d.id] });
         });
       });
     });
@@ -845,13 +873,13 @@ function ModalAvaliacoesGlobal({ cursos, tarefas, onClose, onConfirmar }) {
   };
 
   const renderAvItem = (av, editavel, exibirDataCompleta = false) => (
-    <div key={`${av.cursoId}_${av.id}`} className="flex items-center gap-2 mb-2 p-2.5 bg-zinc-800/40 border border-zinc-800 rounded-lg">
+    <div key={`${av.cursoId}_${av.id}`} style={av.cor ? { backgroundColor: av.cor, color: textoParaFundo(av.cor) } : undefined} className={`flex items-center gap-2 mb-2 p-2.5 ${av.cor ? 'border-black/20' : 'bg-zinc-800/40 border-zinc-800'} border rounded-lg`}>
       <div className="flex-1 min-w-0 pr-2">
-        {exibirDataCompleta && <div className="text-[11px] text-zinc-400 mb-0.5">{formatarDataConcluida(av.data, av.hora)}</div>}
-        <div className="text-sm font-bold text-white truncate leading-tight">
+        {exibirDataCompleta && <div className={`text-[11px] ${av.cor ? 'opacity-80' : 'text-zinc-400'} mb-0.5`}>{formatarDataConcluida(av.data, av.hora)}</div>}
+        <div className={`text-sm font-bold ${av.cor ? '' : 'text-white'} truncate leading-tight`}>
           {av.hora ? `${av.hora} - ${av.nome}` : av.nome}
         </div>
-        <div className="text-xs text-zinc-500 truncate">{av.disciplinaNome}</div>
+        <div className={`text-xs ${av.cor ? 'opacity-80' : 'text-zinc-500'} truncate flex items-center gap-1`}>{av.vermelha && <IconeAviso />}{av.disciplinaNome}</div>
       </div>
       <div className="w-12 h-10 flex items-center justify-center bg-zinc-900 border border-zinc-700 text-zinc-300 text-xs font-bold rounded shrink-0">
         {av.max || '?'}

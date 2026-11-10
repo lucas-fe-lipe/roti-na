@@ -305,7 +305,6 @@ export default function ExportModal({ aberto, onFechar, user, atividades, tarefa
                   ))}
                   {incluirAtividades && categoriasDeAtividade.length === 0 && <p className="text-xs text-zinc-500">Suas atividades ainda não têm categoria.</p>}
                   {incluirAvaliacoes && <SeletorCor rotulo="Avaliações" valor={corAvaliacao} onChange={setCorAvaliacao} />}
-                  <p className="text-[11px] text-zinc-500">O Google só aceita estas 11 cores por evento. As 24 cores do seletor de agenda (Chocolate, Cobalto etc.) valem para a agenda inteira: troque a cor da agenda "roti-na" direto no Google. "Cor da agenda" deixa o evento com essa cor.</p>
                 </div>
                 {desmarcadasComSalvos.map((cat) => (
                   <label key={cat} className="flex items-start gap-2 cursor-pointer rounded border border-amber-700/50 bg-amber-950/20 p-2.5">
@@ -320,7 +319,6 @@ export default function ExportModal({ aberto, onFechar, user, atividades, tarefa
                   <input type="checkbox" checked={atualizarMudancas} onChange={(e) => setAtualizarMudancas(e.target.checked)} className="w-4 h-4 mt-0.5 accent-zinc-300" />
                   <span>
                     Atualizar o que mudou e remover o que foi excluído
-                    <span className="block text-xs text-zinc-500">Desmarque para só enviar o que ainda não está na agenda.</span>
                   </span>
                 </label>
 
@@ -329,7 +327,6 @@ export default function ExportModal({ aberto, onFechar, user, atividades, tarefa
                     <input type="checkbox" checked={config.integracoes.googleAutoSync} onChange={(e) => atualizarConfig({ integracoes: { googleAutoSync: e.target.checked } })} className="w-4 h-4 mt-0.5 accent-zinc-300" />
                     <span>
                       Sincronizar automaticamente
-                      <span className="block text-xs text-zinc-500">Depois da primeira sincronização, envia sozinho o que você criar, mudar ou excluir enquanto o app estiver aberto. A cada hora o Google pode pedir para reconectar (um toque).</span>
                     </span>
                   </label>
                 )}

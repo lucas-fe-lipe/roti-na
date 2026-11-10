@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import AgendaGoogle from '../components/AgendaGoogle';
 import { textoParaFundo } from '../utils/cores';
+import { coresVermelhas, disciplinaDaAtividade, resumoDisciplina } from '../utils/notasStatus';
 import Configuracoes from './Configuracoes';
 import useDados from '../hooks/useDados';
 import useConfig from '../hooks/useConfig';
@@ -31,7 +32,7 @@ export default function Dashboard() {
   
   const [user, setUser] = useState(null);
   const [userAvatar, setUserAvatar] = useState('');
-  const { atividades, setAtividades, metas, setMetas, tarefas } = useDados(user, activePage);
+  const { atividades, setAtividades, metas, setMetas, tarefas, cursos } = useDados(user, activePage);
   const { config, atualizarConfig } = useConfig(user);
   const sync = useGoogleAutoSync({ user, atividades, tarefas, ativo: config.integracoes.googleAutoSync });
   
@@ -100,7 +101,14 @@ export default function Dashboard() {
   }
 
   const horas = Array.from({ length: maxHour - minHour }, (_, i) => i + minHour);
-  const ROW_HEIGHT = 22;
+  const ROW_HEIGHT = Math.max(12, Math.min(80, Number(config.grade?.pxPorHora) || 22));
+
+  // atividade vinculada a uma disciplina "Cursando" com nota vermelha: o bloco fica vermelho
+  const vermelhas = coresVermelhas(cursos);
+  const corDoBloco = (atv) => {
+    const v = disciplinaDaAtividade(cursos, atv.id);
+    return (v && vermelhas[v.disc.id]) || atv.cor;
+  };
   
   const currentHour = currentTime.getHours();
   const currentMinute = currentTime.getMinutes();
@@ -362,6 +370,7 @@ export default function Dashboard() {
                   const height = ((seg.fim - seg.ini) / 60) * ROW_HEIGHT;
                   const opacityClass = currentDay === seg.dayIndex ? 'opacity-100' : 'opacity-70';
                   const textoPrincipal = atv.apelido ? atv.apelido : atv.nome;
+                  const corBloco = corDoBloco(atv);
                   const hh = (min) => `${String(Math.floor(min / 60) % 24).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
 
                   return (
@@ -371,7 +380,7 @@ export default function Dashboard() {
                       title={`${atv.apelido || atv.nome || ''} · ${hh(seg.ini)}–${hh(seg.fim)}`}
                       className={`absolute rounded text-[10px] overflow-hidden cursor-pointer hover:opacity-100 transition-opacity border border-black/20 px-0.5 py-0 flex flex-col justify-start break-words ${opacityClass}`}
                       style={{
-                        backgroundColor: atv.cor, color: textoParaFundo(atv.cor), top: `${top}px`, height: `${height}px`,
+                        backgroundColor: corBloco, color: textoParaFundo(corBloco), top: `${top}px`, height: `${height}px`,
                         left: `calc(${seg.dayIndex} * (100% / 7) + ${seg.lane} * (100% / 7) / ${seg.cols})`,
                         width: `calc((100% / 7) / ${seg.cols})`
                       }}
@@ -457,6 +466,10 @@ export default function Dashboard() {
         categorias={categoriasTodas}
         coresUsadas={coresUsadas}
         modoVisualizacaoInicial={modoVisualizacao}
+        disciplinaVinculada={(() => {
+          const v = atividadeEditando ? disciplinaDaAtividade(cursos, atividadeEditando.id) : null;
+          return v ? { nome: v.disc.nome, ...resumoDisciplina(v.disc, v.periodo) } : null;
+        })()}
       />
       <GoalModal 
         isOpen={isGoalModalOpen}

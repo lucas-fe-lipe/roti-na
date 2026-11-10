@@ -8,6 +8,7 @@ export const CONFIG_PADRAO = {
   paginas: { notas: true },
   blocos: { metas: true, linhaAgora: true, agendaGoogle: false },
   integracoes: { googleAutoSync: false },
+  grade: { pxPorHora: 22 }, // altura da grade horária
   agendaGoogle: { email: '', incluirRotiNa: true, extras: '' }, // fontes do bloco "Google Agenda na tela"
 };
 
@@ -17,6 +18,7 @@ const mesclar = (salva) => ({
   paginas: { ...CONFIG_PADRAO.paginas, ...(salva?.paginas || {}) },
   blocos: { ...CONFIG_PADRAO.blocos, ...(salva?.blocos || {}) },
   integracoes: { ...CONFIG_PADRAO.integracoes, ...(salva?.integracoes || {}) },
+  grade: { ...CONFIG_PADRAO.grade, ...(salva?.grade || {}) },
   agendaGoogle: { ...CONFIG_PADRAO.agendaGoogle, ...(salva?.agendaGoogle || {}) },
 });
 
@@ -60,6 +62,7 @@ export default function useConfig(user) {
       paginas: { ...atual.paginas, ...(parcial.paginas || {}) },
       blocos: { ...atual.blocos, ...(parcial.blocos || {}) },
       integracoes: { ...atual.integracoes, ...(parcial.integracoes || {}) },
+      grade: { ...atual.grade, ...(parcial.grade || {}) },
       agendaGoogle: { ...atual.agendaGoogle, ...(parcial.agendaGoogle || {}) },
     });
     setConfig(nova);

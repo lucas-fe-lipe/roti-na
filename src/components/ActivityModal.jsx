@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 
-export default function ActivityModal({ isOpen, onClose, onSave, onDelete, atividadeEditada, categorias, coresUsadas, modoVisualizacaoInicial = false }) {
+export default function ActivityModal({ isOpen, onClose, onSave, onDelete, atividadeEditada, categorias, coresUsadas, modoVisualizacaoInicial = false, disciplinaVinculada = null }) {
   const predefinedColors = ['#000000', '#3b82f6', '#8b5cf6', '#ec4899', '#10b981', '#f59e0b', '#64748b'];
   const paletaCores = Array.from(new Set([...predefinedColors, ...coresUsadas]));
 
@@ -121,6 +121,25 @@ export default function ActivityModal({ isOpen, onClose, onSave, onDelete, ativi
               <span className="text-xs text-zinc-400 block">Cor</span>
               <div className="w-6 h-6 rounded-full mt-1 border border-white/20" style={{ backgroundColor: atividadeEditada.cor }}></div>
             </div>
+            {disciplinaVinculada && (
+              <div>
+                <span className="text-xs text-zinc-400 block mb-1">Disciplina vinculada</span>
+                <div className="bg-zinc-950 p-3 rounded text-sm text-zinc-300">
+                  <div className="font-bold text-white">{disciplinaVinculada.nome || 'Sem nome'}</div>
+                  <div className="mt-0.5 flex items-center gap-1.5">
+                    {disciplinaVinculada.temNota ? (
+                      <>
+                        {disciplinaVinculada.vermelha && (
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" role="img" aria-label="Atenção: nota abaixo do necessário"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                        )}
+                        <span>Nota: <span className="font-bold text-white">{disciplinaVinculada.obtida.toFixed(2)} / {disciplinaVinculada.avaliado.toFixed(2)} - {disciplinaVinculada.percentual.toFixed(2)}%</span></span>
+                      </>
+                    ) : <span className="text-zinc-500">Ainda sem notas lançadas</span>}
+                  </div>
+                  <div className="text-xs text-zinc-500 mt-0.5">Passa com {disciplinaVinculada.aprovacao}% de {disciplinaVinculada.pontosTotais} pontos</div>
+                </div>
+              </div>
+            )}
             {atividadeEditada.detalhes && (
               <div>
                 <span className="text-xs text-zinc-400 block">Detalhes</span>

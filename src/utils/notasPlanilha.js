@@ -1,4 +1,5 @@
-import { calcAvaliacoes, calcCRA, minimoDoPeriodo } from './notas.js';
+import { calcAvaliacoes, calcCRA } from './notas.js';
+import { aprovacaoDe, pontosTotaisDe } from './notasStatus.js';
 
 // ---------- conteúdo da planilha ----------
 // Cada aba: { nome, colunas: [{ titulo, largura, num }], linhas: [[célula, ...]] } (num = número com 2 casas)
@@ -11,7 +12,7 @@ export function montarAbasNotas(cursos = []) {
     { titulo: 'Curso', largura: 24 }, { titulo: 'Período', largura: 16 }, { titulo: 'Disciplina', largura: 32 },
     { titulo: 'Professor', largura: 22 }, { titulo: 'Status', largura: 14 }, { titulo: 'Carga (h)', largura: 10, num: true },
     { titulo: 'Tipo de hora', largura: 16 }, { titulo: 'Pontos obtidos', largura: 14, num: true }, { titulo: 'Pontos avaliados', largura: 15, num: true },
-    { titulo: 'Nota (%)', largura: 10, num: true }, { titulo: 'Mínimo (%)', largura: 11, num: true }, { titulo: 'Situação', largura: 20 },
+    { titulo: 'Nota (%)', largura: 10, num: true }, { titulo: 'Passa com (%)', largura: 13, num: true }, { titulo: 'Situação', largura: 20 }, { titulo: 'Pontos totais', largura: 13, num: true },
   ], linhas: [] };
   const avaliacoes = { nome: 'Avaliações', colunas: [
     { titulo: 'Curso', largura: 24 }, { titulo: 'Período', largura: 16 }, { titulo: 'Disciplina', largura: 32 },
@@ -20,22 +21,22 @@ export function montarAbasNotas(cursos = []) {
   ], linhas: [] };
   const medias = { nome: 'Médias', colunas: [
     { titulo: 'Curso', largura: 24 }, { titulo: 'Período', largura: 16 }, { titulo: 'Tipo de média', largura: 20 },
-    { titulo: 'Média (%)', largura: 11, num: true }, { titulo: 'Mínimo (%)', largura: 11, num: true }, { titulo: 'Horas concluídas', largura: 16, num: true },
+    { titulo: 'Média (%)', largura: 11, num: true }, { titulo: 'Horas concluídas', largura: 16, num: true },
   ], linhas: [] };
 
   cursos.forEach((curso) => {
     const todas = [];
     (curso.periodos || []).forEach((p) => {
-      const min = minimoDoPeriodo(p);
       let horas = 0;
       (p.disciplinas || []).forEach((d) => {
         todas.push(d);
         if (d.status === 'Concluída') horas += Number(d.cargaHoraria) || 0;
         const { maxTotal, obtidaTotal, percentual } = calcAvaliacoes(d.avaliacoes, d.usarMedia);
+        const min = aprovacaoDe(d, p);
         const situacao = maxTotal === 0 ? 'Sem notas' : percentual >= min ? 'Acima do mínimo' : 'Abaixo do mínimo';
         resumo.linhas.push([
           curso.nome || '', p.nome || '', d.nome || '', d.professor || '', d.status || '', Number(d.cargaHoraria) || 0, d.tipoHora || '',
-          maxTotal > 0 ? arred(obtidaTotal) : null, maxTotal > 0 ? arred(maxTotal) : null, maxTotal > 0 ? arred(percentual) : null, min, situacao,
+          maxTotal > 0 ? arred(obtidaTotal) : null, maxTotal > 0 ? arred(maxTotal) : null, maxTotal > 0 ? arred(percentual) : null, min, situacao, pontosTotaisDe(d),
         ]);
         (d.avaliacoes || []).forEach((a) => {
           const tem = temNota(a.obtida);
@@ -47,11 +48,11 @@ export function montarAbasNotas(cursos = []) {
         });
       });
       const { cra, hasNotas } = calcCRA(p.disciplinas || [], p.tipoMedia, false);
-      medias.linhas.push([curso.nome || '', p.nome || '', p.tipoMedia === 'simples' ? 'Aritmética simples' : 'Ponderada pela carga horária', hasNotas ? arred(cra) : null, min, horas]);
+      medias.linhas.push([curso.nome || '', p.nome || '', p.tipoMedia === 'simples' ? 'Aritmética simples' : 'Ponderada pela carga horária', hasNotas ? arred(cra) : null, horas]);
     });
     const geral = calcCRA(todas, 'ponderada', true);
     const horasTotal = todas.filter((d) => d.status === 'Concluída').reduce((s, d) => s + (Number(d.cargaHoraria) || 0), 0);
-    medias.linhas.push([curso.nome || '', 'GERAL (concluídas)', 'Ponderada pela carga horária', geral.hasNotas ? arred(geral.cra) : null, null, horasTotal]);
+    medias.linhas.push([curso.nome || '', 'GERAL (concluídas)', 'Ponderada pela carga horária', geral.hasNotas ? arred(geral.cra) : null, horasTotal]);
   });
 
   return [resumo, avaliacoes, medias];
