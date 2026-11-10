@@ -8,6 +8,7 @@ import Avatar from './Avatar';
 import { montarBackup, baixarBackup, lerBackup, importarBackup } from '../utils/backup';
 import { notificar } from '../utils/toast';
 import ExportModal from './ExportModal';
+import { baixarPlanilhaNotas } from '../utils/notasPlanilha';
 
 export default function Sidebar({ isOpen, onClose, user, onProfileUpdated, atividades = [], tarefas = [], config, atualizarConfig }) {
   const [isLogin, setIsLogin] = useState(true);
@@ -19,6 +20,8 @@ export default function Sidebar({ isOpen, onClose, user, onProfileUpdated, ativi
   const [isFullScreenImageOpen, setIsFullScreenImageOpen] = useState(false);
   const [backupPendente, setBackupPendente] = useState(null);
   const [isExportOpen, setIsExportOpen] = useState(false);
+  const [isDadosOpen, setIsDadosOpen] = useState(false);
+  const botaoDados = 'w-full text-left px-4 py-2.5 rounded bg-zinc-800/50 hover:bg-zinc-800 text-sm text-zinc-200 transition-colors disabled:opacity-50';
   const [ocupado, setOcupado] = useState(false);
   const arquivoRef = useRef(null);
 
@@ -30,6 +33,23 @@ export default function Sidebar({ isOpen, onClose, user, onProfileUpdated, ativi
     } catch (e) {
       console.error(e);
       notificar('Não foi possível gerar o backup.', 'erro');
+    }
+    setOcupado(false);
+  };
+
+  const handleExportarNotas = async () => {
+    setOcupado(true);
+    try {
+      const { dados } = await montarBackup(user);
+      if (!dados.cursos?.length) {
+        notificar('Ainda não há cursos para exportar.', 'info');
+      } else {
+        baixarPlanilhaNotas(dados.cursos);
+        notificar('Planilha de notas baixada.', 'sucesso');
+      }
+    } catch (e) {
+      console.error(e);
+      notificar('Não foi possível gerar a planilha.', 'erro');
     }
     setOcupado(false);
   };
@@ -226,11 +246,28 @@ export default function Sidebar({ isOpen, onClose, user, onProfileUpdated, ativi
           )}
 
           <div className="mt-auto pt-6 border-t border-zinc-800 flex flex-col gap-2">
-            <span className="text-xs uppercase tracking-wide text-zinc-500">Meus dados</span>
-            <button onClick={() => setIsExportOpen(true)} className="w-full text-left px-4 py-2.5 rounded bg-zinc-800/50 hover:bg-zinc-800 text-sm text-zinc-200 transition-colors">
-              Exportar para o Google Agenda
+            <button onClick={() => setIsDadosOpen(true)} className="w-full text-left px-4 py-2.5 rounded bg-zinc-800/50 hover:bg-zinc-800 text-sm text-zinc-200 transition-colors">
+              Exportar e Importar
             </button>
-            <button onClick={handleExportar} disabled={ocupado} className="w-full text-left px-4 py-2.5 rounded bg-zinc-800/50 hover:bg-zinc-800 text-sm text-zinc-200 transition-colors disabled:opacity-50">
+            <input ref={arquivoRef} type="file" accept="application/json,.json" onChange={handleEscolherArquivo} className="hidden" />
+          </div>
+        </div>
+      </div>
+
+      {isDadosOpen && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[55] p-4" onClick={() => { if (!ocupado) { setIsDadosOpen(false); setBackupPendente(null); } }}>
+          <div className="bg-zinc-900 text-zinc-100 rounded-lg w-full max-w-sm p-5 shadow-2xl space-y-3 border border-zinc-800" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold">Exportar e Importar</h2>
+              <button aria-label="Fechar" onClick={() => { setIsDadosOpen(false); setBackupPendente(null); }} className="text-zinc-400 hover:text-white text-xl leading-none">&times;</button>
+            </div>
+            <button onClick={() => { setIsDadosOpen(false); setIsExportOpen(true); }} className={botaoDados}>
+              Sincronizar com o Google Agenda
+            </button>
+            <button onClick={handleExportarNotas} disabled={ocupado} className={botaoDados}>
+              Exportar Notas (planilha .xlsx)
+            </button>
+            <button onClick={handleExportar} disabled={ocupado} className={botaoDados}>
               Exportar backup (JSON)
             </button>
             {backupPendente ? (
@@ -244,14 +281,13 @@ export default function Sidebar({ isOpen, onClose, user, onProfileUpdated, ativi
                 </div>
               </div>
             ) : (
-              <button onClick={() => arquivoRef.current?.click()} disabled={ocupado} className="w-full text-left px-4 py-2.5 rounded bg-zinc-800/50 hover:bg-zinc-800 text-sm text-zinc-200 transition-colors disabled:opacity-50">
-                Importar backup
+              <button onClick={() => arquivoRef.current?.click()} disabled={ocupado} className={botaoDados}>
+                Importar backup (JSON)
               </button>
             )}
-            <input ref={arquivoRef} type="file" accept="application/json,.json" onChange={handleEscolherArquivo} className="hidden" />
           </div>
         </div>
-      </div>
+      )}
 
       <ExportModal aberto={isExportOpen} onFechar={() => setIsExportOpen(false)} user={user} atividades={atividades} tarefas={tarefas} config={config} atualizarConfig={atualizarConfig} />
 

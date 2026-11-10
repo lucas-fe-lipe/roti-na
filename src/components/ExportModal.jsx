@@ -65,6 +65,7 @@ export default function ExportModal({ aberto, onFechar, user, atividades, tarefa
   const [sincronizando, setSincronizando] = useState(false);
   const [falhas, setFalhas] = useState([]);
   const [confirmouRemocao, setConfirmouRemocao] = useState(false);
+  const [removerDesmarcadas, setRemoverDesmarcadas] = useState({ atividade: false, avaliacao: false }); // apagar do Google o que já foi enviado de categorias desmarcadas
 
   const fusoHorario = Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Sao_Paulo';
   const lembretes = normalizarLembretes(linhasLembrete.map(linhaParaMinutos));
@@ -74,11 +75,29 @@ export default function ExportModal({ aberto, onFechar, user, atividades, tarefa
   // só as categorias que existem de fato entram nas cores (e na "assinatura" dos eventos)
   const coresUsadas = Object.fromEntries(categoriasDeAtividade.filter((c) => coresAtividade[c]).map((c) => [c, coresAtividade[c]]));
   const chaveCores = JSON.stringify([coresUsadas, corAvaliacao]);
+  const ROTULO_CATEGORIA = { atividade: 'atividades', avaliacao: 'avaliações' };
+  // categorias desmarcadas que ainda têm eventos na agenda do Google
+  const salvosPorCategoria = (cat) => Object.values(mapa?.itens || {}).filter((g) => g.categoria === cat).length;
+  const desmarcadasComSalvos = ['atividade', 'avaliacao'].filter((cat) => !categorias.includes(cat) && salvosPorCategoria(cat) > 0);
+  const chaveRemocaoDesm = desmarcadasComSalvos.map((c) => `${c}:${removerDesmarcadas[c] ? 1 : 0}`).join(',');
+  // plano da sincronização + remoção do que já foi enviado de categorias desmarcadas (se a pessoa pediu)
+  const montarPlanoCompleto = (itens, mapaBase) => {
+    const plano = calcularPlano(itens, mapaBase, { categorias, atualizar: atualizarMudancas, remover: atualizarMudancas });
+    desmarcadasComSalvos.filter((cat) => removerDesmarcadas[cat]).forEach((cat) => {
+      Object.entries(mapaBase?.itens || {}).forEach(([chave, g]) => {
+        if (g.categoria === cat && !plano.remover.some((r) => r.chave === chave)) {
+          plano.remover.push({ chave, eventId: g.eventId, agenda: g.agenda || 'atividades' });
+        }
+      });
+    });
+    return plano;
+  };
 
   useEffect(() => {
     if (!aberto) return;
     setFalhas([]);
     setConfirmouRemocao(false);
+    setRemoverDesmarcadas({ atividade: false, avaliacao: false });
     if (googleOk) {
       precarregarGIS();
       let ativo = true;
@@ -117,10 +136,10 @@ export default function ExportModal({ aberto, onFechar, user, atividades, tarefa
   const previaGoogle = useMemo(() => {
     if (!aberto || destino !== 'google' || !mapa) return null;
     const { itens, semData } = montarItens(opcoesItens);
-    const plano = calcularPlano(itens, mapa, { categorias, atualizar: atualizarMudancas, remover: atualizarMudancas });
+    const plano = montarPlanoCompleto(itens, mapa);
     return { itens, semData, plano };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [aberto, destino, mapa, atividades, tarefas, incluirAtividades, inicio, fim, incluirAvaliacoes, chaveLembretes, chaveCores, atualizarMudancas]);
+  }, [aberto, destino, mapa, atividades, tarefas, incluirAtividades, inicio, fim, incluirAvaliacoes, chaveLembretes, chaveCores, atualizarMudancas, chaveRemocaoDesm]);
 
   useEffect(() => { setConfirmouRemocao(false); }, [previaGoogle?.plano.remover.length]);
 
@@ -171,7 +190,7 @@ export default function ExportModal({ aberto, onFechar, user, atividades, tarefa
       mapaAtual = await garantirAgendas(token, mapa, fusoHorario, agendasNecessarias({ incluirAtividades, incluirAvaliacoes }));
       // se uma agenda foi recriada, o mapa mudou: recalcula o plano com ele
       const { itens } = montarItens(opcoesItens);
-      const planoFinal = calcularPlano(itens, mapaAtual, { categorias, atualizar: atualizarMudancas, remover: atualizarMudancas });
+      const planoFinal = montarPlanoCompleto(itens, mapaAtual);
       const resumo = await executarPlano(token, planoFinal, mapaAtual, fusoHorario);
       const partes = [];
       if (resumo.criados) partes.push(`${resumo.criados} criados`);
@@ -286,8 +305,17 @@ export default function ExportModal({ aberto, onFechar, user, atividades, tarefa
                   ))}
                   {incluirAtividades && categoriasDeAtividade.length === 0 && <p className="text-xs text-zinc-500">Suas atividades ainda não têm categoria.</p>}
                   {incluirAvaliacoes && <SeletorCor rotulo="Avaliações" valor={corAvaliacao} onChange={setCorAvaliacao} />}
-                  <p className="text-[11px] text-zinc-500">"Cor da agenda" usa a cor da agenda inteira, que você muda no app do Google (a lista de cores de evento do Google tem só 11 opções).</p>
+                  <p className="text-[11px] text-zinc-500">O Google só aceita estas 11 cores por evento. As 24 cores do seletor de agenda (Chocolate, Cobalto etc.) valem para a agenda inteira: troque a cor da agenda "roti-na" direto no Google. "Cor da agenda" deixa o evento com essa cor.</p>
                 </div>
+                {desmarcadasComSalvos.map((cat) => (
+                  <label key={cat} className="flex items-start gap-2 cursor-pointer rounded border border-amber-700/50 bg-amber-950/20 p-2.5">
+                    <input type="checkbox" checked={!!removerDesmarcadas[cat]} onChange={(e) => setRemoverDesmarcadas((p) => ({ ...p, [cat]: e.target.checked }))} className="w-4 h-4 mt-0.5 accent-zinc-300" />
+                    <span>
+                      Remover do Google as {ROTULO_CATEGORIA[cat]} já enviadas
+                      <span className="block text-xs text-zinc-400">{salvosPorCategoria(cat)} {salvosPorCategoria(cat) === 1 ? 'evento' : 'eventos'} na agenda. Você desmarcou esta categoria; marque aqui para apagá-los na próxima sincronização.</span>
+                    </span>
+                  </label>
+                ))}
                 <label className="flex items-start gap-2 cursor-pointer">
                   <input type="checkbox" checked={atualizarMudancas} onChange={(e) => setAtualizarMudancas(e.target.checked)} className="w-4 h-4 mt-0.5 accent-zinc-300" />
                   <span>

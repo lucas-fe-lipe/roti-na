@@ -1,11 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import AgendaGoogle from '../components/AgendaGoogle';
+import { textoParaFundo } from '../utils/cores';
 import Configuracoes from './Configuracoes';
-import Novidades from './Novidades';
 import useDados from '../hooks/useDados';
 import useConfig from '../hooks/useConfig';
 import useGoogleAutoSync from '../hooks/useGoogleAutoSync';
-import { VERSAO_ATUAL } from '../data/novidades';
 import { horaParaMinutos } from '../utils/horario';
 import ActivityModal from '../components/ActivityModal';
 import GoalModal from '../components/GoalModal';
@@ -34,7 +33,6 @@ export default function Dashboard() {
   const [userAvatar, setUserAvatar] = useState('');
   const { atividades, setAtividades, metas, setMetas, tarefas } = useDados(user, activePage);
   const { config, atualizarConfig } = useConfig(user);
-  const temNovidade = config.novidadesVista !== VERSAO_ATUAL;
   const sync = useGoogleAutoSync({ user, atividades, tarefas, ativo: config.integracoes.googleAutoSync });
   
   const [atividadeEditando, setAtividadeEditando] = useState(null);
@@ -65,10 +63,6 @@ export default function Dashboard() {
     });
     return () => unsubscribeAuth();
   }, []);
-
-  useEffect(() => {
-    if (activePage === 'Novidades' && temNovidade) atualizarConfig({ novidadesVista: VERSAO_ATUAL });
-  }, [activePage, temNovidade, atualizarConfig]);
 
   useEffect(() => {
     const interval = setInterval(() => setCurrentTime(new Date()), 60000);
@@ -314,7 +308,6 @@ export default function Dashboard() {
 
           <button aria-label="Abrir menu" onClick={() => setIsRightMenuOpen(true)} className="relative bg-zinc-900 text-zinc-100 border border-zinc-800 px-3 py-1.5 text-lg rounded hover:bg-zinc-800 transition-colors">
             ☰
-            {temNovidade && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-blue-500" aria-hidden="true"></span>}
           </button>
         </div>
       </header>
@@ -376,9 +369,9 @@ export default function Dashboard() {
                       key={seg.chave} 
                       onClick={() => abrirDetalhesAtividade(atv)}
                       title={`${atv.apelido || atv.nome || ''} · ${hh(seg.ini)}–${hh(seg.fim)}`}
-                      className={`absolute rounded text-[10px] text-white overflow-hidden cursor-pointer hover:opacity-100 transition-opacity border border-black/20 px-0.5 py-0 flex flex-col justify-start break-words ${opacityClass}`}
+                      className={`absolute rounded text-[10px] overflow-hidden cursor-pointer hover:opacity-100 transition-opacity border border-black/20 px-0.5 py-0 flex flex-col justify-start break-words ${opacityClass}`}
                       style={{
-                        backgroundColor: atv.cor, top: `${top}px`, height: `${height}px`,
+                        backgroundColor: atv.cor, color: textoParaFundo(atv.cor), top: `${top}px`, height: `${height}px`,
                         left: `calc(${seg.dayIndex} * (100% / 7) + ${seg.lane} * (100% / 7) / ${seg.cols})`,
                         width: `calc((100% / 7) / ${seg.cols})`
                       }}
@@ -431,7 +424,7 @@ export default function Dashboard() {
             )}
 
             {config.blocos.agendaGoogle && (
-              <AgendaGoogle user={user} agendas={sync.agendas} />
+              <AgendaGoogle user={user} agendas={sync.agendas} config={config} />
             )}
           </div>
         )}
@@ -441,10 +434,9 @@ export default function Dashboard() {
         )}
 
         {activePage === 'Configuracoes' && (
-          <Configuracoes config={config} atualizarConfig={atualizarConfig} onVoltar={() => setActivePage('Grade')} />
+          <Configuracoes user={user} config={config} atualizarConfig={atualizarConfig} onVoltar={() => setActivePage('Grade')} />
         )}
 
-        {activePage === 'Novidades' && <Novidades onVoltar={() => setActivePage('Grade')} />}
 
         {activePage === 'Notas' && !config.paginas.notas && (
           <div className="w-full max-w-5xl flex flex-col items-center justify-center flex-1 text-zinc-400 gap-4">
@@ -490,7 +482,6 @@ export default function Dashboard() {
         onSelectPage={(page) => setActivePage(page)}
         activePage={activePage}
         config={config}
-        temNovidade={temNovidade}
       />
     </div>
   );

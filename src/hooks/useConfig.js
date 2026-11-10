@@ -8,7 +8,7 @@ export const CONFIG_PADRAO = {
   paginas: { notas: true },
   blocos: { metas: true, linhaAgora: true, agendaGoogle: false },
   integracoes: { googleAutoSync: false },
-  novidadesVista: '',
+  agendaGoogle: { email: '', incluirRotiNa: true, extras: '' }, // fontes do bloco "Google Agenda na tela"
 };
 
 const mesclar = (salva) => ({
@@ -17,6 +17,7 @@ const mesclar = (salva) => ({
   paginas: { ...CONFIG_PADRAO.paginas, ...(salva?.paginas || {}) },
   blocos: { ...CONFIG_PADRAO.blocos, ...(salva?.blocos || {}) },
   integracoes: { ...CONFIG_PADRAO.integracoes, ...(salva?.integracoes || {}) },
+  agendaGoogle: { ...CONFIG_PADRAO.agendaGoogle, ...(salva?.agendaGoogle || {}) },
 });
 
 const chaveLocal = (user) => `config_${user ? user.uid : 'local'}`;
@@ -59,6 +60,7 @@ export default function useConfig(user) {
       paginas: { ...atual.paginas, ...(parcial.paginas || {}) },
       blocos: { ...atual.blocos, ...(parcial.blocos || {}) },
       integracoes: { ...atual.integracoes, ...(parcial.integracoes || {}) },
+      agendaGoogle: { ...atual.agendaGoogle, ...(parcial.agendaGoogle || {}) },
     });
     setConfig(nova);
     try { localStorage.setItem(chaveLocal(user), JSON.stringify(nova)); } catch { /* sem armazenamento */ }

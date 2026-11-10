@@ -3,6 +3,8 @@ import { collection, doc, onSnapshot } from 'firebase/firestore';
 import { salvarDoc, apagarDoc, avisarErroLeitura } from '../services/db';
 import { db } from '../services/firebase';
 import { hojeLocalStr } from '../utils/date';
+import { textoParaFundo } from '../utils/cores';
+import { calcAvaliacoes, calcCRA, minimoDoPeriodo as minimoNum } from '../utils/notas';
 import ConfirmModal from '../components/ConfirmModal';
 
 export default function Notas({ user, atividades, isAvaliacoesOpen, setIsAvaliacoesOpen }) {
@@ -259,66 +261,20 @@ export default function Notas({ user, atividades, isAvaliacoesOpen, setIsAvaliac
     setDisciplinaModal({ open: true, data: dados, periodoId, cursoId });
   };
 
-  const calcAvaliacoes = (avaliacoes = [], usarMedia = false) => {
-    let maxTotal = 0, obtidaTotal = 0, percentual = 0;
-
-    if (usarMedia && avaliacoes.length > 0) {
-      let somaPercentuais = 0;
-      let count = 0;
-      avaliacoes.forEach(a => {
-        if (a.obtida !== '' && !isNaN(a.obtida) && a.max !== '' && !isNaN(a.max) && Number(a.max) > 0) {
-          somaPercentuais += (Number(a.obtida) / Number(a.max)) * 100;
-          count++;
-        }
-      });
-      percentual = count > 0 ? somaPercentuais / count : 0;
-      maxTotal = 100;
-      obtidaTotal = percentual;
-    } else {
-      avaliacoes.forEach(a => {
-        if (a.obtida !== '' && !isNaN(a.obtida)) {
-          maxTotal += Number(a.max) || 0;
-          obtidaTotal += Number(a.obtida) || 0;
-        }
-      });
-      percentual = maxTotal > 0 ? (obtidaTotal / maxTotal) * 100 : 0;
-    }
-    
-    const cappedMax = Math.min(100, maxTotal);
-    const cappedObtida = Math.min(100, obtidaTotal);
-    const notaBase = cappedMax > 0 ? (cappedObtida / cappedMax) * 100 : 0;
-
-    return { maxTotal, obtidaTotal, percentual, notaBase };
-  };
-
-  const calcCRA = (disciplinas, tipoMedia, isGeral = false) => {
-    let somaNotas = 0, somaPesos = 0, hasNotas = false;
-    disciplinas.forEach(d => {
-      if (isGeral && (d.status === 'A Cursar' || d.status === 'Cursando')) return;
-
-      const { maxTotal, notaBase } = calcAvaliacoes(d.avaliacoes, d.usarMedia);
-      if (!isGeral && maxTotal === 0 && (d.status === 'A Cursar' || d.status === 'Cursando')) return;
-
-      if (maxTotal > 0) hasNotas = true;
-      const peso = tipoMedia === 'ponderada' ? (Number(d.cargaHoraria) || 1) : 1;
-      somaNotas += notaBase * peso;
-      somaPesos += peso;
-    });
-    return { cra: somaPesos > 0 ? (somaNotas / somaPesos) : 0, hasNotas };
-  };
-
   const isAtual = (inicio, fim) => {
     const hoje = hojeLocalStr();
     return (inicio <= hoje && fim >= hoje);
   };
 
   const statusCores = {
-    'A Cursar': 'bg-zinc-700',
-    'Cursando': 'bg-blue-600',
-    'Concluída': 'bg-green-700',
-    'Reprovado': 'bg-red-600',
-    'Reprovado por falta': 'bg-red-600'
+    'A Cursar': 'bg-zinc-700 text-white',
+    'Cursando': 'bg-white text-black',
+    'Concluída': 'bg-blue-600 text-white',
+    'Reprovado': 'bg-red-600 text-white',
+    'Reprovado por falta': 'bg-red-600 text-white'
   };
+
+  const minimoDoPeriodo = (m) => minimoNum(cursos.find(c => c.id === m.cursoId)?.periodos?.find(p => p.id === m.periodoId));
 
   const hoje = hojeLocalStr();
 
@@ -416,11 +372,11 @@ export default function Notas({ user, atividades, isAvaliacoesOpen, setIsAvaliac
                         </button>
                         <span className="font-bold text-white text-sm sm:text-base truncate cursor-pointer" onClick={() => toggleMinimizarPeriodo(periodo.id)}>{periodo.nome}</span>
                         <span className="text-[10px] sm:text-xs text-gray-500">({periodo.dataInicio || '?'} até {periodo.dataFim || '?'})</span>
-                        {perAtual && <span className="bg-blue-600 text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded text-white font-bold shrink-0">ATUAL</span>}
+                        {perAtual && <span className="bg-white text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded text-black font-bold shrink-0">ATUAL</span>}
                       </div>
                       
                       <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-400 mt-2 pl-7 sm:pl-8 w-full">
-                        <span>Média: <span className={`font-bold ${(perHasNotas && mediaPeriodo < 60) ? 'text-red-500' : 'text-white'}`}>{mediaPeriodo.toFixed(2)}</span> | Horas: <span className="font-bold text-white">{horasPeriodo}h</span></span>
+                        <span>Média: <span className={`font-bold ${(perHasNotas && mediaPeriodo < minimoNum(periodo)) ? 'text-red-500' : 'text-white'}`}>{mediaPeriodo.toFixed(2)}</span> | Horas: <span className="font-bold text-white">{horasPeriodo}h</span></span>
                         <div className="flex items-center gap-1.5 shrink-0">
                           <button onClick={() => setPeriodoModal({ open: true, data: periodo, cursoId: curso.id })} className="bg-zinc-800 px-2 py-1 rounded hover:bg-zinc-700 text-zinc-300 text-[10px] sm:text-xs">Editar</button>
                           <button onClick={() => setDisciplinaModal({ open: true, data: null, periodoId: periodo.id, cursoId: curso.id })} className="bg-zinc-800 px-2 py-1 rounded hover:bg-zinc-700 text-zinc-200 border border-zinc-700 text-[10px] sm:text-xs">+ Disciplina</button>
@@ -431,23 +387,31 @@ export default function Notas({ user, atividades, isAvaliacoesOpen, setIsAvaliac
                         <div className="mt-3 flex flex-col gap-2">
                           {periodo.disciplinas?.map(disc => {
                             const { maxTotal, obtidaTotal, percentual } = calcAvaliacoes(disc.avaliacoes, disc.usarMedia);
-                            const isDiscRed = maxTotal > 0 && percentual < 60;
+                            const minimo = minimoNum(periodo);
+                            const isDiscRed = maxTotal > 0 && percentual < minimo;
+                            // "Cursando" + atividade vinculada: o bloco usa a cor da atividade (texto preto ou branco, conforme a cor)
+                            const atvVinc = disc.status === 'Cursando' && disc.atividadeVinculada ? atividades?.find(a => a.id === disc.atividadeVinculada) : null;
+                            const corCard = atvVinc?.cor || null;
+                            const corTexto = corCard ? textoParaFundo(corCard) : null;
+                            const estiloCard = corCard ? { backgroundColor: corCard, color: corTexto } : undefined;
+                            const classeNormal = (c) => (corCard ? '' : c);
                             
                             return (
-                              <div key={disc.id} onClick={() => setResumoModal({ discId: disc.id, periodoId: periodo.id, cursoId: curso.id })} className="bg-zinc-800/40 p-2.5 sm:p-3 rounded-lg flex justify-between items-center border border-zinc-800/60 cursor-pointer hover:border-zinc-700 transition-colors w-full">
+                              <div key={disc.id} onClick={() => setResumoModal({ discId: disc.id, periodoId: periodo.id, cursoId: curso.id })} style={estiloCard} className={`relative overflow-hidden ${corCard ? '' : 'bg-zinc-800/40'} p-2.5 sm:p-3 pt-3.5 sm:pt-4 rounded-lg flex justify-between items-center border ${corCard ? 'border-black/20' : 'border-zinc-800/60 hover:border-zinc-700'} cursor-pointer transition-colors w-full`}>
+                                <BarraNotas percentual={maxTotal > 0 ? percentual : 0} minimo={minimo} />
                                 
                                 <div className="flex-1 min-w-0 pr-2">
-                                  <h4 className="font-bold text-white text-xs sm:text-sm truncate w-full">{disc.nome}</h4>
-                                  {disc.professor && <div className="text-[10px] sm:text-xs text-gray-500 mt-0.5 truncate w-full">Prof: {disc.professor}</div>}
-                                  <div className="text-[10px] sm:text-xs text-gray-400 mt-0.5 flex flex-wrap gap-1 leading-tight">
+                                  <h4 className={`font-bold ${classeNormal('text-white')} text-xs sm:text-sm truncate w-full`}>{disc.nome}</h4>
+                                  {disc.professor && <div className={`text-[10px] sm:text-xs ${corCard ? 'opacity-75' : 'text-gray-500'} mt-0.5 truncate w-full`}>Prof: {disc.professor}</div>}
+                                  <div className={`text-[10px] sm:text-xs ${corCard ? 'opacity-85' : 'text-gray-400'} mt-0.5 flex flex-wrap gap-1 leading-tight`}>
                                     <span>{disc.cargaHoraria}h • {disc.tipoHora} • Nota: </span>
-                                    <span className={`font-bold ${isDiscRed ? 'text-red-500' : 'text-white'}`}>
+                                    <span className={`font-bold ${isDiscRed ? (corCard ? 'underline decoration-red-600 decoration-2 text-red-700' : 'text-red-500') : classeNormal('text-white')}`}>
                                       {obtidaTotal.toFixed(2)} / {maxTotal.toFixed(2)} - {percentual.toFixed(2)}%
                                     </span>
                                   </div>
                                 </div>
 
-                                <div className={`${statusCores[disc.status] || 'bg-zinc-700'} text-white text-[8px] sm:text-[9px] font-bold px-1.5 sm:px-2 py-1 sm:py-1.5 rounded ml-1 shrink-0 uppercase tracking-wide`}>
+                                <div className={`${statusCores[disc.status] || 'bg-zinc-700 text-white'}${corCard ? ' ring-1 ring-black/30' : ''} text-[8px] sm:text-[9px] font-bold px-1.5 sm:px-2 py-1 sm:py-1.5 rounded ml-1 shrink-0 uppercase tracking-wide`}>
                                   {disc.status}
                                 </div>
                                 
@@ -500,7 +464,8 @@ export default function Notas({ user, atividades, isAvaliacoesOpen, setIsAvaliac
         <ModalDisciplinaResumo
           key={`${resumoModal.discId}`}
           disciplina={achaDisciplina(resumoModal)}
-          statusClasse={statusCores[achaDisciplina(resumoModal).status] || 'bg-zinc-700'}
+          statusClasse={statusCores[achaDisciplina(resumoModal).status] || 'bg-zinc-700 text-white'}
+          minimo={minimoDoPeriodo(resumoModal)}
           onClose={() => setResumoModal(null)}
           onSalvarAvaliacoes={salvarAvaliacoesDoResumo}
           onEditar={editarDisciplinaDoResumo}
@@ -509,6 +474,18 @@ export default function Notas({ user, atividades, isAvaliacoesOpen, setIsAvaliac
       {isAvaliacoesOpen && (
         <ModalAvaliacoesGlobal cursos={cursos} tarefas={tarefas} onClose={() => setIsAvaliacoesOpen(false)} onConfirmar={confirmarNotaGlobal} />
       )}
+    </div>
+  );
+}
+
+// Barra no topo da disciplina: fundo preto, preenchida de branco conforme a nota obtida.
+// Por baixo do branco fica uma faixa cinza até o mínimo exigido (padrão 60%).
+function BarraNotas({ percentual, minimo }) {
+  const limitar = (v) => Math.max(0, Math.min(100, Number(v) || 0));
+  return (
+    <div className="absolute top-0 left-0 right-0 h-1 bg-black" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(limitar(percentual))} aria-label={`Nota obtida ${limitar(percentual).toFixed(0)}%, mínimo ${limitar(minimo)}%`}>
+      <div className="absolute inset-y-0 left-0 bg-zinc-500" style={{ width: `${limitar(minimo)}%` }} />
+      <div className="absolute inset-y-0 left-0 bg-white transition-all duration-500" style={{ width: `${limitar(percentual)}%` }} />
     </div>
   );
 }
@@ -553,7 +530,7 @@ function ModalCurso({ cursoInicial, onClose, onSave, onDelete }) {
 }
 
 function ModalPeriodo({ periodoInicial, onClose, onSave, onDelete }) {
-  const [periodo, setPeriodo] = useState(periodoInicial || { nome: '', dataInicio: '', dataFim: '', tipoMedia: 'ponderada' });
+  const [periodo, setPeriodo] = useState(periodoInicial ? { ...periodoInicial, minimo: periodoInicial.minimo ?? 60 } : { nome: '', dataInicio: '', dataFim: '', tipoMedia: 'ponderada', minimo: 60 });
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-3 sm:p-4">
       <div className="bg-zinc-900 text-zinc-100 rounded-lg w-full max-w-sm p-4 sm:p-6 shadow-2xl space-y-4 border border-zinc-800">
@@ -565,12 +542,17 @@ function ModalPeriodo({ periodoInicial, onClose, onSave, onDelete }) {
             <div className="flex-1"><label className="block text-sm text-zinc-400 mb-1">Fim</label><input type="date" value={periodo.dataFim} onChange={e => setPeriodo({...periodo, dataFim: e.target.value})} className="w-full bg-zinc-950 border border-zinc-700 rounded p-2 text-white [color-scheme:dark]" /></div>
           </div>
           <div><label className="block text-sm text-zinc-400 mb-1">Tipo de Média</label><select value={periodo.tipoMedia} onChange={e => setPeriodo({...periodo, tipoMedia: e.target.value})} className="w-full bg-zinc-950 border border-zinc-700 rounded p-2 text-white"><option value="ponderada">Ponderada (Carga Horária)</option><option value="simples">Aritmética Simples</option></select></div>
+          <div>
+            <label className="block text-sm text-zinc-400 mb-1">Nota mínima para aprovação (%)</label>
+            <input type="number" min="0" max="100" value={periodo.minimo} onChange={e => setPeriodo({...periodo, minimo: e.target.value})} className="w-full bg-zinc-950 border border-zinc-700 rounded p-2 text-white" />
+            <p className="text-[11px] text-zinc-500 mt-1">Aparece como faixa cinza na barra de cada disciplina. Padrão: 60.</p>
+          </div>
         </div>
         <div className="flex justify-between items-center pt-4 border-t border-zinc-800 mt-4">
           {periodoInicial ? <button onClick={() => onDelete(periodo.id)} className="text-red-500 hover:text-red-400 font-bold text-sm bg-transparent border-none p-0">Excluir</button> : <div></div>}
           <div className="flex gap-2">
             <button onClick={onClose} className="px-4 py-2 rounded text-zinc-400 hover:bg-zinc-800 text-sm">Cancelar</button>
-            <button onClick={() => onSave(periodo)} className="px-4 py-2 bg-zinc-100 text-zinc-950 rounded hover:bg-zinc-300 font-medium text-sm">Salvar</button>
+            <button onClick={() => { const n = Number(periodo.minimo); onSave({ ...periodo, minimo: periodo.minimo === '' || !Number.isFinite(n) ? 60 : Math.max(0, Math.min(100, n)) }); }} className="px-4 py-2 bg-zinc-100 text-zinc-950 rounded hover:bg-zinc-300 font-medium text-sm">Salvar</button>
           </div>
         </div>
       </div>
@@ -579,7 +561,7 @@ function ModalPeriodo({ periodoInicial, onClose, onSave, onDelete }) {
 }
 
 // Nota final de uma lista de avaliações (soma ou média, conforme a disciplina)
-function calcularNotaFinal(avaliacoes = [], usarMedia = false) {
+function calcularNotaFinal(avaliacoes = [], usarMedia = false, minimo = 60) {
   let maxT = 0, obtT = 0, percFinal = 0;
   if (usarMedia && avaliacoes.length > 0) {
     let soma = 0, count = 0;
@@ -601,7 +583,7 @@ function calcularNotaFinal(avaliacoes = [], usarMedia = false) {
     });
     percFinal = maxT > 0 ? (obtT / maxT) * 100 : 0;
   }
-  return { maxT, obtT, percFinal, vermelho: maxT > 0 && percFinal < 60 };
+  return { maxT, obtT, percFinal, vermelho: maxT > 0 && percFinal < minimo };
 }
 
 // "showDateInput" é só um detalhe visual do editor; não deve ser salvo
@@ -683,7 +665,7 @@ function ModalDisciplina({ disciplinaInicial, tiposHoras, atividades, onClose, o
 }
 
 // Pop-up que abre ao tocar numa disciplina: dados compactos + avaliações (adicionar/editar/dar nota).
-function ModalDisciplinaResumo({ disciplina, statusClasse, onClose, onSalvarAvaliacoes, onEditar }) {
+function ModalDisciplinaResumo({ disciplina, statusClasse, minimo = 60, onClose, onSalvarAvaliacoes, onEditar }) {
   const original = (disciplina.avaliacoes || []).map(limparAvaliacao);
   const [avaliacoes, setAvaliacoes] = useState(original);
   const [draggedIndex, setDraggedIndex] = useState(null);
@@ -701,7 +683,7 @@ function ModalDisciplinaResumo({ disciplina, statusClasse, onClose, onSalvarAval
     setAvaliacoes(novas);
   };
 
-  const { maxT, obtT, percFinal, vermelho } = calcularNotaFinal(avaliacoes, disciplina.usarMedia);
+  const { maxT, obtT, percFinal, vermelho } = calcularNotaFinal(avaliacoes, disciplina.usarMedia, minimo);
   const limpas = () => avaliacoes.map(limparAvaliacao);
 
   return (
@@ -715,7 +697,7 @@ function ModalDisciplinaResumo({ disciplina, statusClasse, onClose, onSalvarAval
               <span>{disciplina.cargaHoraria || 0}h{disciplina.tipoHora ? ` • ${disciplina.tipoHora}` : ''}</span>
             </div>
           </div>
-          <div className={`${statusClasse} text-white text-[9px] font-bold px-2 py-1 rounded shrink-0 uppercase tracking-wide`}>{disciplina.status}</div>
+          <div className={`${statusClasse} text-[9px] font-bold px-2 py-1 rounded shrink-0 uppercase tracking-wide`}>{disciplina.status}</div>
         </div>
 
         <button onClick={() => onEditar(alterado ? limpas() : null)} className="w-full text-xs font-bold text-zinc-300 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded py-1.5 transition-colors">

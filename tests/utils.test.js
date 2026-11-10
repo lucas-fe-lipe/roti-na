@@ -285,3 +285,49 @@ test('evento Google: atividade semanal com cor e 3 lembretes; avaliação com ho
   const semCor = paraEventoGoogle(montarItens(base).itens[0]);
   assert.equal(semCor.colorId, undefined);
 });
+
+import { textoParaFundo } from '../src/utils/cores.js';
+import { calcAvaliacoes, calcCRA, minimoDoPeriodo } from '../src/utils/notas.js';
+import { montarAbasNotas, gerarXlsx } from '../src/utils/notasPlanilha.js';
+
+test('textoParaFundo: preto em fundo claro, branco em fundo escuro', () => {
+  assert.equal(textoParaFundo('#ffffff'), '#000000');
+  assert.equal(textoParaFundo('#f6bf26'), '#000000'); // banana
+  assert.equal(textoParaFundo('#000000'), '#ffffff');
+  assert.equal(textoParaFundo('#3f51b5'), '#ffffff'); // mirtilo
+  assert.equal(textoParaFundo('#fff'), '#000000');
+  assert.equal(textoParaFundo('inválida'), '#ffffff');
+});
+
+test('notas: soma, média, CRA e mínimo do período', () => {
+  const avs = [{ max: '30', obtida: '24' }, { max: '30', obtida: '' }, { max: '40', obtida: '20' }];
+  const r = calcAvaliacoes(avs, false);
+  assert.equal(r.maxTotal, 70);
+  assert.equal(r.obtidaTotal, 44);
+  assert.ok(Math.abs(r.percentual - 62.857) < 0.01);
+  assert.equal(calcAvaliacoes(avs, true).percentual, (80 + 50) / 2);
+  const discs = [
+    { status: 'Concluída', cargaHoraria: '60', avaliacoes: [{ max: '100', obtida: '80' }] },
+    { status: 'Concluída', cargaHoraria: '30', avaliacoes: [{ max: '100', obtida: '50' }] },
+    { status: 'Cursando', cargaHoraria: '30', avaliacoes: [] },
+  ];
+  assert.ok(Math.abs(calcCRA(discs, 'ponderada', true).cra - 70) < 1e-9);
+  assert.ok(Math.abs(calcCRA(discs, 'simples', true).cra - 65) < 1e-9);
+  assert.equal(minimoDoPeriodo({}), 60);
+  assert.equal(minimoDoPeriodo({ minimo: '70' }), 70);
+  assert.equal(minimoDoPeriodo({ minimo: '' }), 60);
+});
+
+test('planilha de notas: abas, valores e arquivo .xlsx (zip) válido', () => {
+  const cursos = [{ nome: 'ADS', periodos: [{ nome: '1º', tipoMedia: 'ponderada', minimo: 70, disciplinas: [
+    { nome: 'Cálculo & <1>', status: 'Cursando', cargaHoraria: '60', avaliacoes: [{ nome: 'P1', max: '30', obtida: '25' }, { nome: 'P2', max: '30', obtida: '' }] },
+  ] }] }];
+  const abas = montarAbasNotas(cursos);
+  assert.deepEqual(abas.map((a) => a.nome), ['Disciplinas', 'Avaliações', 'Médias']);
+  assert.equal(abas[0].linhas[0][9], 83.33);
+  assert.equal(abas[0].linhas[0][11], 'Acima do mínimo');
+  assert.equal(abas[1].linhas.length, 2);
+  const bytes = gerarXlsx(abas);
+  assert.equal(bytes[0], 0x50); // "PK"
+  assert.equal(bytes[1], 0x4b);
+});

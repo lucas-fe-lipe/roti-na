@@ -35,10 +35,9 @@ npm test
 
 Roda os testes das funções de data, horário e metas (`tests/utils.test.js`). O deploy só publica se eles passarem.
 
-## Configurações e Novidades
+## Configurações
 
 - Página **Configurações**: liga/desliga páginas e blocos (salvo em `users/{uid}.config` e no aparelho).
-- Página **Novidades**: edite `src/data/novidades.js` (novo item no topo + `VERSAO_ATUAL`) para mostrar o selo "novo".
 
 ## Google Agenda (sincronização)
 

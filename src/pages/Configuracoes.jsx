@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 function Interruptor({ rotulo, descricao, ligado, onChange }) {
   return (
     <label className="flex items-center justify-between gap-4 py-3 cursor-pointer">
@@ -16,6 +18,14 @@ function Interruptor({ rotulo, descricao, ligado, onChange }) {
   );
 }
 
+// Campo de texto que só grava ao sair do campo (evita uma gravação no Firebase a cada tecla)
+function CampoTexto({ id, tipo = 'text', valor, placeholder, onSalvar }) {
+  const [texto, setTexto] = useState(valor || '');
+  return (
+    <input id={id} type={tipo} value={texto} onChange={(e) => setTexto(e.target.value)} onBlur={() => { if (texto !== (valor || '')) onSalvar(texto.trim()); }} placeholder={placeholder} className="bg-zinc-950 border border-zinc-700 rounded p-2 text-sm text-zinc-100" />
+  );
+}
+
 function Grupo({ titulo, children }) {
   return (
     <section className="bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2">
@@ -27,7 +37,7 @@ function Grupo({ titulo, children }) {
 
 import { integracaoConfigurada } from '../services/googleAgenda';
 
-export default function Configuracoes({ config, atualizarConfig, onVoltar }) {
+export default function Configuracoes({ user, config, atualizarConfig, onVoltar }) {
   const { paginas, blocos, integracoes } = config;
   return (
     <div className="w-full max-w-xl flex flex-col gap-4 px-3 sm:px-0 pt-3 pb-10">
@@ -52,6 +62,22 @@ export default function Configuracoes({ config, atualizarConfig, onVoltar }) {
           />
         )}
       </Grupo>
+
+      {integracaoConfigurada() && blocos.agendaGoogle && (
+        <Grupo titulo="Agenda na tela: fontes">
+          <div className="py-3 flex flex-col gap-1">
+            <label className="text-sm text-zinc-100" htmlFor="ag-email">E-mail da conta Google</label>
+            <CampoTexto id="ag-email" tipo="email" valor={config.agendaGoogle.email} placeholder={user?.email || 'voce@gmail.com'} onSalvar={(v) => atualizarConfig({ agendaGoogle: { email: v } })} />
+            <span className="text-xs text-zinc-500">Mostra a sua agenda principal, com os eventos criados dentro e fora do app. Em branco, usa o e-mail do login.</span>
+          </div>
+          <Interruptor rotulo="Incluir as agendas roti-na" descricao="Atividades e avaliações enviadas pelo app." ligado={config.agendaGoogle.incluirRotiNa} onChange={(v) => atualizarConfig({ agendaGoogle: { incluirRotiNa: v } })} />
+          <div className="py-3 flex flex-col gap-1">
+            <label className="text-sm text-zinc-100" htmlFor="ag-extras">Outras agendas (opcional)</label>
+            <CampoTexto id="ag-extras" valor={config.agendaGoogle.extras} placeholder="IDs separados por vírgula" onSalvar={(v) => atualizarConfig({ agendaGoogle: { extras: v } })} />
+            <span className="text-xs text-zinc-500">No Google Agenda: Configurações → escolha a agenda → "Integrar agenda" → ID da agenda. O Google só deixa mostrar aqui agendas que você pode ver.</span>
+          </div>
+        </Grupo>
+      )}
 
       {integracaoConfigurada() && (
         <Grupo titulo="Google Agenda">

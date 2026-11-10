@@ -1,4 +1,4 @@
-export default function RightMenu({ isOpen, onClose, onSelectPage, activePage, config, temNovidade }) {
+export default function RightMenu({ isOpen, onClose, onSelectPage, activePage, config }) {
   if (!isOpen) return null;
 
   const principais = [
@@ -7,7 +7,6 @@ export default function RightMenu({ isOpen, onClose, onSelectPage, activePage, c
   ].filter((i) => i.visivel);
 
   const rodape = [
-    { id: 'Novidades', rotulo: 'Novidades', selo: temNovidade },
     { id: 'Configuracoes', rotulo: 'Configurações' },
   ];
 
@@ -18,7 +17,6 @@ export default function RightMenu({ isOpen, onClose, onSelectPage, activePage, c
       className={`py-2 text-sm font-medium text-left transition-colors flex items-center gap-2 ${activePage === item.id ? 'text-white font-bold' : 'text-zinc-400 hover:text-zinc-200'}`}
     >
       {item.rotulo}
-      {item.selo && <span className="bg-blue-600 text-white text-[9px] px-1.5 py-0.5 rounded font-bold">novo</span>}
     </button>
   );
 
