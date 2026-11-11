@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef, Fragment } from 'react';
 import AgendaGoogle from '../components/AgendaGoogle';
 import MedidasCorporais from '../components/MedidasCorporais';
+import ExerciciosBiblioteca from '../components/ExerciciosBiblioteca';
+import useBiblioteca from '../hooks/useBiblioteca';
+import { modoAdminAtivo } from '../utils/treino';
 import { textoParaFundo } from '../utils/cores';
 import { paginasVisiveis, secoesAtivasDaPagina, PAGINAS } from '../utils/layout';
 import { integracaoConfigurada } from '../services/googleAgenda';
@@ -40,6 +43,7 @@ export default function Dashboard() {
   const paginasMenu = paginasVisiveis(config, googleOk);
   // página aberta: a escolhida; se não houver (ou foi desativada), a primeira da ordem; sem nenhuma, as Configurações
   const paginaAtual = activePage === 'Configuracoes' ? 'Configuracoes' : (paginasMenu.includes(activePage) ? activePage : (paginasMenu[0] || 'Configuracoes'));
+  const midias = useBiblioteca();
   const { atividades, setAtividades, metas, setMetas, tarefas, cursos, medidas, setMedidas } = useDados(user, paginaAtual);
   const sync = useGoogleAutoSync({ user, atividades, tarefas, ativo: config.integracoes.googleAutoSync });
   
@@ -400,7 +404,13 @@ export default function Dashboard() {
       </>
     ),
     cursos: secaoCursos,
-    medidas: <MedidasCorporais user={user} medidas={medidas} setMedidas={setMedidas} />,
+    medidas: <MedidasCorporais user={user} medidas={medidas} setMedidas={setMedidas} sexo={config.treino.sexo} onSexo={(v) => atualizarConfig({ treino: { sexo: v } })} />,
+    exercicios: (
+      <div className="mt-2 w-full px-2 sm:px-0">
+        <h2 className="text-base font-bold text-zinc-100 mb-2">Biblioteca de exercícios</h2>
+        <ExerciciosBiblioteca config={config} atualizarConfig={atualizarConfig} midias={midias} admin={modoAdminAtivo(user, config)} />
+      </div>
+    ),
   };
 
   return (

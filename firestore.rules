@@ -11,6 +11,21 @@ service cloud.firestore {
       }
     }
 
+    // Biblioteca de exercícios: links de GIF/imagem. Todos leem; só o administrador grava (e só um link https).
+    match /biblioteca/{exercicioId} {
+      allow read: if true;
+      allow create, update: if request.auth != null
+        && request.auth.token.email == 'lucasfelipe.np@gmail.com'
+        && request.auth.token.email_verified == true
+        && request.resource.data.keys().hasOnly(['midia', 'atualizadoEm'])
+        && request.resource.data.midia is string
+        && request.resource.data.midia.size() <= 500
+        && request.resource.data.midia.matches('^https://.*');
+      allow delete: if request.auth != null
+        && request.auth.token.email == 'lucasfelipe.np@gmail.com'
+        && request.auth.token.email_verified == true;
+    }
+
     // Qualquer outro caminho fica bloqueado.
     match /{document=**} {
       allow read, write: if false;

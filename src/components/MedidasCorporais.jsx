@@ -5,14 +5,14 @@ import { salvarDoc, apagarDoc } from '../services/db';
 import { hojeLocalStr } from '../utils/date';
 import { notificar } from '../utils/toast';
 import ConfirmModal from './ConfirmModal';
-import { EXTRAS, enriquecer, montarSeries, variacao, validarMedida, classificarIMC, numero } from '../utils/medidas';
+import { EXTRAS, enriquecer, montarSeries, variacao, validarMedida, classificarIMC, numero, estimarGordura, estimarMusculo } from '../utils/medidas';
 
 const fmt = (n, casas = 1) => (n === null || n === undefined || !Number.isFinite(n) ? '–' : n.toFixed(casas).replace('.', ','));
 const fmtData = (d) => { const [y, m, dia] = d.split('-'); return `${dia}/${m}/${y}`; };
 const fmtCurta = (d) => { const [, m, dia] = d.split('-'); return `${dia}/${m}`; };
 const dia = (d) => new Date(`${d}T12:00:00`).getTime();
 
-const vazio = (altura = '') => ({ data: hojeLocalStr(), peso: '', altura: altura === null ? '' : String(altura), gordura: '', musculo: '', extras: {}, obs: '' });
+const vazio = (altura = '') => ({ data: hojeLocalStr(), peso: '', altura: altura === null ? '' : String(altura), abdomen: '', gordura: '', musculo: '', extras: {}, obs: '' });
 
 // ---------- gráfico: 3 linhas (IMC, % gordura, % músculo) ----------
 function Grafico({ series }) {
@@ -24,7 +24,7 @@ function Grafico({ series }) {
 
   const L = 34, R = 10, T = 12, B = 22, W = 600, H = 240;
   const datas = Array.from(new Set(series.flatMap((s) => s.pontos.map((p) => p.data)))).sort();
-  if (datas.length === 0) return <p className="text-xs text-zinc-500 text-center py-6">Registre peso, gordura ou massa muscular para ver o gráfico.</p>;
+  if (datas.length === 0) return <p className="text-xs text-zinc-500 text-center py-6">Registre peso, altura e barriga para ver o gráfico.</p>;
 
   const t0 = dia(datas[0]), t1 = dia(datas[datas.length - 1]);
   const x = (d) => (t1 === t0 ? (L + W - R) / 2 : L + ((dia(d) - t0) / (t1 - t0)) * (W - L - R));
@@ -98,10 +98,15 @@ function Grafico({ series }) {
 }
 
 // ---------- formulário ----------
-function ModalMedida({ inicial, onClose, onSalvar }) {
+function ModalMedida({ inicial, sexo, onSexo, onClose, onSalvar }) {
   const [f, setF] = useState(inicial);
   const [erro, setErro] = useState('');
-  const [mais, setMais] = useState(Object.keys(inicial.extras || {}).length > 0);
+  const [mais, setMais] = useState(Object.keys(inicial.extras || {}).length > 0 || !!inicial.gordura || !!inicial.musculo);
+  // estimativas ao vivo (usam o valor digitado em "Mais medidas" quando existir)
+  const gEst = estimarGordura(sexo, f.altura, f.abdomen);
+  const gUsada = numero(f.gordura) > 0 ? numero(f.gordura) : gEst;
+  const mEst = estimarMusculo(sexo, f.peso, gUsada);
+  const fmtN = (n, c = 1) => (n === null || !Number.isFinite(n) ? '–' : n.toFixed(c).replace('.', ','));
   const [salvando, setSalvando] = useState(false);
   const campo = (id, rotulo, un, passo = '0.1') => (
     <label className="flex flex-col text-[11px] text-zinc-400">
@@ -131,18 +136,35 @@ function ModalMedida({ inicial, onClose, onSalvar }) {
           Data
           <input type="date" value={f.data} max={hojeLocalStr()} onChange={(e) => setF({ ...f, data: e.target.value })} className="mt-0.5 bg-zinc-950 border border-zinc-700 rounded p-2 text-sm text-white [color-scheme:dark]" />
         </label>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-3 gap-2">
           {campo('peso', 'Peso', 'kg')}
           {campo('altura', 'Altura', 'cm')}
-          {campo('gordura', '% de gordura', '%')}
-          {campo('musculo', 'Massa muscular', 'kg')}
+          {campo('abdomen', 'Barriga', 'cm')}
         </div>
-        <p className="text-[11px] text-zinc-500">O IMC é calculado sozinho (peso e altura). Gordura e músculo vêm da sua balança de bioimpedância ou avaliação física; deixe em branco o que não medir. A altura só precisa ser informada uma vez.</p>
+        <p className="text-[11px] text-zinc-500">Barriga: meça na altura do umbigo, sem apertar. Com só esses três dados o app calcula o IMC e estima gordura e músculo. A altura só precisa ser informada uma vez.</p>
+        <div className="flex items-center justify-between gap-2 bg-zinc-950 border border-zinc-800 rounded-lg p-2">
+          <div className="text-xs text-zinc-300">
+            <div>Gordura {numero(f.gordura) > 0 ? '' : 'estimada '}<span className="font-bold text-white">{fmtN(gUsada)}%</span></div>
+            <div>Músculo {numero(f.musculo) > 0 ? '' : 'estimado '}<span className="font-bold text-white">{fmtN(numero(f.musculo) > 0 ? numero(f.musculo) : mEst)} kg</span></div>
+          </div>
+          <div className="flex rounded border border-zinc-700 overflow-hidden" role="group" aria-label="Sexo para o cálculo">
+            {[['m', 'Homem'], ['f', 'Mulher']].map(([v, r]) => (
+              <button key={v} type="button" onClick={() => onSexo(v)} aria-pressed={sexo === v} className={`text-[11px] px-2 py-1 ${sexo === v ? 'bg-zinc-100 text-zinc-900 font-bold' : 'text-zinc-400 hover:bg-zinc-800'}`}>{r}</button>
+            ))}
+          </div>
+        </div>
 
         <button type="button" onClick={() => setMais((m) => !m)} aria-expanded={mais} className="text-xs font-bold text-zinc-300 hover:text-white">
-          {mais ? '▼︎' : '▶︎'} Mais medidas (cm)
+          {mais ? '▼︎' : '▶︎'} Mais medidas
         </button>
         {mais && (
+          <>
+          <p className="text-[11px] text-zinc-500">Se você tem a gordura e o músculo da sua balança ou avaliação física, digite aqui: eles passam a valer no lugar da estimativa.</p>
+          <div className="grid grid-cols-2 gap-2">
+            {campo('gordura', '% de gordura', '%')}
+            {campo('musculo', 'Massa muscular', 'kg')}
+          </div>
+          <div className="text-[11px] text-zinc-400">Outras medidas (cm)</div>
           <div className="grid grid-cols-2 gap-2">
             {EXTRAS.map((e) => (
               <label key={e.id} className="flex flex-col text-[11px] text-zinc-400">
@@ -151,6 +173,7 @@ function ModalMedida({ inicial, onClose, onSalvar }) {
               </label>
             ))}
           </div>
+          </>
         )}
         <label className="flex flex-col text-[11px] text-zinc-400">
           Observação (opcional)
@@ -167,10 +190,10 @@ function ModalMedida({ inicial, onClose, onSalvar }) {
 }
 
 // ---------- bloco principal ----------
-export default function MedidasCorporais({ user, medidas, setMedidas }) {
+export default function MedidasCorporais({ user, medidas, setMedidas, sexo = 'm', onSexo = () => {} }) {
   const [modal, setModal] = useState(null); // formulário inicial
   const [excluir, setExcluir] = useState(null);
-  const enr = useMemo(() => enriquecer(medidas), [medidas]);
+  const enr = useMemo(() => enriquecer(medidas, sexo), [medidas, sexo]);
   const series = useMemo(() => montarSeries(enr), [enr]);
   const ultimaAltura = [...enr].reverse().find((r) => r.alturaUsada)?.alturaUsada ?? '';
 
@@ -202,14 +225,14 @@ export default function MedidasCorporais({ user, medidas, setMedidas }) {
   };
   const pesoPontos = enr.filter((r) => r.peso !== null && r.peso !== undefined).map((r) => ({ valor: r.peso }));
   const dPeso = variacao(pesoPontos);
-  const musculoKgPontos = enr.filter((r) => r.musculo !== null && r.musculo !== undefined).map((r) => ({ valor: r.musculo }));
+  const musculoKgPontos = enr.filter((r) => Number.isFinite(r.musculoUsado)).map((r) => ({ valor: r.musculoUsado }));
   const ultimoDe = (campo) => [...enr].reverse().find((r) => r[campo] !== null && r[campo] !== undefined && Number.isFinite(r[campo]));
 
   const cards = [
     { r: 'Peso', v: ultimoDe('peso') ? `${fmt(ultimoDe('peso').peso)} kg` : '–', d: dPeso === null ? null : `${dPeso > 0 ? '+' : dPeso < 0 ? '−' : ''}${Math.abs(dPeso).toFixed(1).replace('.', ',')} kg` },
     { r: 'IMC', v: fmt(ultimoDe('imc')?.imc), s: classificarIMC(ultimoDe('imc')?.imc), d: delta('imc') },
-    { r: '% de gordura', v: ultimoDe('gordura') ? `${fmt(ultimoDe('gordura').gordura)}%` : '–', d: delta('gordura') ? `${delta('gordura')} p.p.` : null },
-    { r: 'Massa muscular', v: ultimoDe('musculo') ? `${fmt(ultimoDe('musculo').musculo)} kg` : '–', s: ultimoDe('musculoPct') ? `${fmt(ultimoDe('musculoPct').musculoPct)}% do peso` : '', d: (() => { const v = variacao(musculoKgPontos); return v === null ? null : `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toFixed(1).replace('.', ',')} kg`; })() },
+    { r: '% de gordura', v: ultimoDe('gorduraUsada') ? `${fmt(ultimoDe('gorduraUsada').gorduraUsada)}%` : '–', s: ultimoDe('gorduraUsada')?.gorduraEstimada ? 'estimada' : '', d: delta('gordura') ? `${delta('gordura')} p.p.` : null },
+    { r: 'Massa muscular', v: ultimoDe('musculoUsado') ? `${fmt(ultimoDe('musculoUsado').musculoUsado)} kg` : '–', s: ultimoDe('musculoPct') ? `${fmt(ultimoDe('musculoPct').musculoPct)}% do peso${ultimoDe('musculoUsado')?.musculoEstimado ? ' · estimada' : ''}` : '', d: (() => { const v = variacao(musculoKgPontos); return v === null ? null : `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toFixed(1).replace('.', ',')} kg`; })() },
   ];
 
   const historico = [...enr].reverse();
@@ -224,7 +247,7 @@ export default function MedidasCorporais({ user, medidas, setMedidas }) {
       {enr.length === 0 ? (
         <div className="bg-zinc-900 border border-dashed border-zinc-700 rounded-xl p-6 text-center">
           <p className="text-sm text-zinc-300 mb-1">Nenhuma medição ainda.</p>
-          <p className="text-xs text-zinc-500 mb-3">Registre peso, altura, gordura e massa muscular para acompanhar o IMC e a evolução no gráfico.</p>
+          <p className="text-xs text-zinc-500 mb-3">Registre peso, altura e a medida da barriga: o app calcula o IMC e estima gordura e músculo.</p>
           <button onClick={() => setModal(vazio(''))} className="text-sm font-bold px-4 py-2 bg-zinc-100 text-zinc-950 rounded hover:bg-zinc-300">Registrar a primeira medição</button>
         </div>
       ) : (
@@ -255,14 +278,15 @@ export default function MedidasCorporais({ user, medidas, setMedidas }) {
                     <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
                       {r.peso !== null && r.peso !== undefined && <span>Peso {fmt(r.peso)} kg</span>}
                       {r.imc !== null && <span>IMC {fmt(r.imc)}</span>}
-                      {r.gordura !== null && r.gordura !== undefined && <span>Gordura {fmt(r.gordura)}%</span>}
-                      {r.musculo !== null && r.musculo !== undefined && <span>Músculo {fmt(r.musculo)} kg{r.musculoPct ? ` (${fmt(r.musculoPct)}%)` : ''}</span>}
+                      {r.abdomen !== null && <span>Barriga {fmt(r.abdomen)} cm</span>}
+                      {Number.isFinite(r.gorduraUsada) && <span>Gordura {fmt(r.gorduraUsada)}%{r.gorduraEstimada ? ' (est.)' : ''}</span>}
+                      {Number.isFinite(r.musculoUsado) && <span>Músculo {fmt(r.musculoUsado)} kg{r.musculoEstimado ? ' (est.)' : ''}{r.musculoPct ? ` · ${fmt(r.musculoPct)}%` : ''}</span>}
                     </div>
                     {extras.length > 0 && <div className="text-zinc-500 mt-0.5">{extras.map((e) => `${e.rotulo} ${fmt(numero(r.extras[e.id]))} cm`).join(' · ')}</div>}
                     {r.obs && <div className="text-zinc-500 italic mt-0.5 break-words">{r.obs}</div>}
                   </div>
                   <div className="flex gap-1 shrink-0">
-                    <button onClick={() => setModal({ ...vazio(''), ...r, peso: r.peso ?? '', altura: r.altura ?? '', gordura: r.gordura ?? '', musculo: r.musculo ?? '', extras: Object.fromEntries(Object.entries(r.extras || {}).map(([k, v]) => [k, String(v)])), obs: r.obs || '' })} className="text-xs px-2 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded">Editar</button>
+                    <button onClick={() => setModal({ ...vazio(''), ...r, peso: r.peso ?? '', altura: r.altura ?? '', abdomen: r.abdomen ?? '', gordura: r.gordura ?? '', musculo: r.musculo ?? '', extras: Object.fromEntries(Object.entries(r.extras || {}).filter(([k]) => k !== 'abdomen').map(([k, v]) => [k, String(v)])), obs: r.obs || '' })} className="text-xs px-2 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded">Editar</button>
                     <button onClick={() => setExcluir(r)} className="text-xs px-2 py-1 text-red-400 hover:text-red-300" aria-label={`Excluir medição de ${fmtData(r.data)}`}>Excluir</button>
                   </div>
                 </div>
@@ -272,7 +296,7 @@ export default function MedidasCorporais({ user, medidas, setMedidas }) {
         </>
       )}
 
-      {modal && <ModalMedida inicial={modal} onClose={() => setModal(null)} onSalvar={salvar} />}
+      {modal && <ModalMedida inicial={modal} sexo={sexo} onSexo={onSexo} onClose={() => setModal(null)} onSalvar={salvar} />}
       <ConfirmModal
         aberto={!!excluir}
         titulo="Excluir medição"

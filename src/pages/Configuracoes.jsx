@@ -59,6 +59,7 @@ function Grupo({ titulo, children }) {
 }
 
 import { integracaoConfigurada } from '../services/googleAgenda';
+import { podeSerAdmin } from '../utils/treino';
 import { PAGINAS, SECOES, normalizarLayout, moverPagina, moverSecao, secaoAtiva, paginaLigada, paginaVisivel, paginasVisiveis } from '../utils/layout';
 
 const ICONE_ARRASTAR = '⋮⋮';
@@ -88,7 +89,7 @@ function OrganizarPaginas({ config, atualizarConfig, googleOk }) {
     atualizarConfig(parcial);
   };
 
-  const FLAG_SECAO = { grade: 'grade', metas: 'metas', agenda: 'agendaGoogle', cursos: 'cursos', medidas: 'medidas' };
+  const FLAG_SECAO = { grade: 'grade', metas: 'metas', agenda: 'agendaGoogle', cursos: 'cursos', medidas: 'medidas', exercicios: 'exercicios' };
   const FLAG_PAGINA = { Grade: 'grade', Notas: 'notas', Treinos: 'treinos' };
 
   const calcularAlvo = (tipo, id, x, y) => {
@@ -238,6 +239,12 @@ export default function Configuracoes({ user, config, atualizarConfig, onVoltar 
         <AlturaGrade valor={config.grade?.pxPorHora} onSalvar={(v) => atualizarConfig({ grade: { pxPorHora: v } })} />
         <Interruptor rotulo="Linha do horário atual" descricao={'Linha que marca "agora" na grade semanal.'} ligado={blocos.linhaAgora} onChange={(v) => atualizarConfig({ blocos: { linhaAgora: v } })} />
       </Grupo>
+
+      {podeSerAdmin(user) && (
+        <Grupo titulo="Administrador">
+          <Interruptor rotulo="Modo administrador" descricao="Libera, em cada exercício da biblioteca, o campo para colar o link do GIF (Google Drive público). Vale para todos os usuários do app." ligado={!!config.admin?.ativo} onChange={(v) => atualizarConfig({ admin: { ativo: v } })} />
+        </Grupo>
+      )}
 
       {integracaoConfigurada() && blocos.agendaGoogle && (
         <Grupo titulo="Agenda na tela: fontes">

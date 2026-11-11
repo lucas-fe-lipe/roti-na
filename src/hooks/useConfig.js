@@ -7,10 +7,12 @@ import { normalizarLayout, LAYOUT_PADRAO } from '../utils/layout';
 // Valores padrão: tudo ligado, como o app era antes das configurações existirem.
 export const CONFIG_PADRAO = {
   paginas: { grade: true, notas: true, treinos: true },
-  blocos: { grade: true, metas: true, cursos: true, medidas: true, linhaAgora: true, agendaGoogle: false },
+  blocos: { grade: true, metas: true, cursos: true, medidas: true, exercicios: true, linhaAgora: true, agendaGoogle: false },
   layout: LAYOUT_PADRAO, // ordem das páginas e dos blocos dentro delas
   integracoes: { googleAutoSync: false },
   grade: { pxPorHora: 22 }, // altura da grade horária
+  treino: { sexo: 'm', cor: '#f97316' }, // avatar dos músculos
+  admin: { ativo: false }, // modo administrador (só vale para a conta autorizada)
   agendaGoogle: { email: '', incluirRotiNa: true, extras: '', minimizada: false }, // fontes do bloco "Google Agenda na tela"
 };
 
@@ -22,6 +24,8 @@ const mesclar = (salva) => ({
   integracoes: { ...CONFIG_PADRAO.integracoes, ...(salva?.integracoes || {}) },
   layout: normalizarLayout(salva?.layout),
   grade: { ...CONFIG_PADRAO.grade, ...(salva?.grade || {}) },
+  treino: { ...CONFIG_PADRAO.treino, ...(salva?.treino || {}) },
+  admin: { ...CONFIG_PADRAO.admin, ...(salva?.admin || {}) },
   agendaGoogle: { ...CONFIG_PADRAO.agendaGoogle, ...(salva?.agendaGoogle || {}) },
 });
 
@@ -67,6 +71,8 @@ export default function useConfig(user) {
       integracoes: { ...atual.integracoes, ...(parcial.integracoes || {}) },
       layout: parcial.layout || atual.layout,
       grade: { ...atual.grade, ...(parcial.grade || {}) },
+      treino: { ...atual.treino, ...(parcial.treino || {}) },
+      admin: { ...atual.admin, ...(parcial.admin || {}) },
       agendaGoogle: { ...atual.agendaGoogle, ...(parcial.agendaGoogle || {}) },
     });
     setConfig(nova);

@@ -8,7 +8,6 @@ export const EXTRAS = [
   { id: 'bracoE', rotulo: 'Braço esquerdo' },
   { id: 'antebraco', rotulo: 'Antebraço' },
   { id: 'cintura', rotulo: 'Cintura' },
-  { id: 'abdomen', rotulo: 'Abdômen' },
   { id: 'quadril', rotulo: 'Quadril' },
   { id: 'coxaD', rotulo: 'Coxa direita' },
   { id: 'coxaE', rotulo: 'Coxa esquerda' },
@@ -46,9 +45,27 @@ export const musculoPercentual = (musculoKg, pesoKg) => {
   return m && p && p > 0 ? (m / p) * 100 : null;
 };
 
+// ---------- estimativas (só com altura, peso e abdômen) ----------
+// Gordura: RFM (Relative Fat Mass, Woolcott & Bergman 2018) = 64 − 20 × altura/abdômen (+12 para mulheres).
+// É uma estimativa: serve para acompanhar a evolução, não substitui bioimpedância ou avaliação física.
+export function estimarGordura(sexo, alturaCm, abdomenCm) {
+  const h = numero(alturaCm), w = numero(abdomenCm);
+  if (!h || !w || h <= 0 || w <= 0) return null;
+  const rfm = 64 - 20 * (h / w) + (sexo === 'f' ? 12 : 0);
+  return Math.max(3, Math.min(60, rfm));
+}
+
+// Músculo (kg): fração aproximada da massa magra que é músculo esquelético (homem ~54%, mulher ~46%).
+export function estimarMusculo(sexo, pesoKg, gorduraPct) {
+  const p = numero(pesoKg), g = numero(gorduraPct);
+  if (!p || p <= 0 || g === null || g === undefined || Number.isNaN(g)) return null;
+  return p * (1 - g / 100) * (sexo === 'f' ? 0.46 : 0.54);
+}
+
 const LIMITES = {
   peso: [20, 400, 'Peso', 'kg'],
   altura: [80, 250, 'Altura', 'cm'],
+  abdomen: [30, 250, 'Abdômen', 'cm'],
   gordura: [1, 70, '% de gordura', '%'],
   musculo: [5, 200, 'Massa muscular', 'kg'],
 };
@@ -75,7 +92,7 @@ export function validarMedida(form, hoje) {
   if (medida.peso !== null && medida.musculo !== null && medida.musculo >= medida.peso) {
     return { ok: false, erro: 'A massa muscular não pode ser maior que o peso.' };
   }
-  const algo = medida.peso !== null || medida.gordura !== null || medida.musculo !== null || Object.keys(medida.extras).length > 0;
+  const algo = medida.peso !== null || medida.abdomen !== null || medida.gordura !== null || medida.musculo !== null || Object.keys(medida.extras).length > 0;
   if (!algo) return { ok: false, erro: 'Preencha pelo menos uma medida.' };
   if (form.obs && String(form.obs).trim()) medida.obs = String(form.obs).trim().slice(0, 300);
   return { ok: true, medida };
@@ -83,18 +100,31 @@ export function validarMedida(form, hoje) {
 
 // Ordena por data (mais antiga primeiro) e calcula IMC e % de músculo; a altura "vale" daí em diante
 // (se uma medição não tem altura, usa a última informada antes dela, ou a primeira depois).
-export function enriquecer(registros = []) {
+export function enriquecer(registros = [], sexo = 'm') {
   const lista = [...registros].sort((a, b) => (a.data + (a.id || '')).localeCompare(b.data + (b.id || '')));
   let alturaAtual = null;
   const primeiraAltura = lista.find((r) => numero(r.altura) > 0)?.altura ?? null;
   return lista.map((r) => {
     if (numero(r.altura) > 0) alturaAtual = numero(r.altura);
     const altura = alturaAtual ?? numero(primeiraAltura);
+    // medições antigas guardavam o abdômen dentro de "extras"
+    const abdomen = numero(r.abdomen) > 0 ? numero(r.abdomen) : (numero(r.extras?.abdomen) > 0 ? numero(r.extras.abdomen) : null);
+    const gorduraInformada = numero(r.gordura);
+    const gorduraEst = estimarGordura(sexo, altura, abdomen);
+    const gorduraUsada = Number.isFinite(gorduraInformada) ? gorduraInformada : gorduraEst;
+    const musculoInformado = numero(r.musculo);
+    const musculoEst = estimarMusculo(sexo, r.peso, gorduraUsada);
+    const musculoUsado = Number.isFinite(musculoInformado) ? musculoInformado : musculoEst;
     return {
       ...r,
+      abdomen,
       alturaUsada: altura,
       imc: calcIMC(r.peso, altura),
-      musculoPct: musculoPercentual(r.musculo, r.peso),
+      gorduraUsada,
+      gorduraEstimada: !Number.isFinite(gorduraInformada) && gorduraEst !== null,
+      musculoUsado,
+      musculoEstimado: !Number.isFinite(musculoInformado) && musculoEst !== null,
+      musculoPct: musculoPercentual(musculoUsado, r.peso),
     };
   });
 }
@@ -102,7 +132,7 @@ export function enriquecer(registros = []) {
 // Linhas do gráfico: IMC, % de gordura e % de massa muscular (todas numa escala parecida, ~10 a 45)
 export const SERIES = [
   { id: 'imc', rotulo: 'IMC', unidade: '', cor: '#60a5fa', pegar: (r) => r.imc },
-  { id: 'gordura', rotulo: '% de gordura', unidade: '%', cor: '#fbbf24', pegar: (r) => r.gordura },
+  { id: 'gordura', rotulo: '% de gordura', unidade: '%', cor: '#fbbf24', pegar: (r) => r.gorduraUsada },
   { id: 'musculo', rotulo: '% de músculo', unidade: '%', cor: '#34d399', pegar: (r) => r.musculoPct },
 ];
 

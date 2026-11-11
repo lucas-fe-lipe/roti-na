@@ -410,7 +410,10 @@ test('barra de notas: pontos distribuídos e obtidos sobre o total', () => {
   assert.equal(r.preenchimento, 24);
 });
 
-import { numero, calcIMC, classificarIMC, validarMedida, enriquecer, montarSeries, variacao } from '../src/utils/medidas.js';
+import { numero, calcIMC, classificarIMC, validarMedida, enriquecer, montarSeries, variacao, estimarGordura, estimarMusculo } from '../src/utils/medidas.js';
+import { intensidadeDoTreino, corDoMusculo, midiaDoLink, idDoDrive, linkValido, podeSerAdmin, modoAdminAtivo, COR_MUSCULO_PARADO } from '../src/utils/treino.js';
+import { EXERCICIOS, MUSCULOS } from '../src/data/exercicios.js';
+import { CORPOS } from '../src/data/corpoSvg.js';
 
 test('medidas: números com vírgula, IMC e classificação', () => {
   assert.equal(numero('72,5'), 72.5);
@@ -436,7 +439,7 @@ test('medidas: validação do formulário', () => {
   assert.equal(validarMedida({ data: hoje, peso: 'x' }, hoje).ok, false);
   const r = validarMedida({ data: hoje, peso: '72,5', altura: '178', gordura: '18', extras: { cintura: '80', peito: '' }, obs: ' ok ' }, hoje);
   assert.equal(r.ok, true);
-  assert.deepEqual(r.medida, { data: hoje, extras: { cintura: 80 }, peso: 72.5, altura: 178, gordura: 18, musculo: null, obs: 'ok' });
+  assert.deepEqual(r.medida, { data: hoje, extras: { cintura: 80 }, peso: 72.5, altura: 178, abdomen: null, gordura: 18, musculo: null, obs: 'ok' });
   assert.equal(validarMedida({ data: hoje, extras: { cintura: '80' } }, hoje).ok, true); // só uma circunferência já vale
 });
 
@@ -456,4 +459,117 @@ test('medidas: altura vale daí em diante; séries do gráfico só com valores e
   assert.equal(variacao(s[1].pontos), null);
   // sem nenhuma altura: sem IMC
   assert.equal(enriquecer([{ id: 'x', data: '2026-01-01', peso: 70 }])[0].imc, null);
+});
+
+// ---------- medidas simplificadas (altura, peso, barriga) ----------
+test('estimarGordura: RFM com altura e barriga; mulher soma 12; limita 3–60', () => {
+  assert.ok(Math.abs(estimarGordura('m', 175, 85) - (64 - 20 * (175 / 85))) < 1e-9);
+  assert.ok(Math.abs(estimarGordura('f', 165, 80) - (64 - 20 * (165 / 80) + 12)) < 1e-9);
+  assert.equal(estimarGordura('m', 180, 40), 3);
+  assert.equal(estimarGordura('m', 150, 250) >= 3, true);
+  assert.equal(estimarGordura('m', '', 80), null);
+  assert.equal(estimarGordura('m', 175, null), null);
+});
+
+test('estimarMusculo: fração da massa magra; precisa de peso e gordura', () => {
+  assert.ok(Math.abs(estimarMusculo('m', 80, 20) - 80 * 0.8 * 0.54) < 1e-9);
+  assert.ok(Math.abs(estimarMusculo('f', 60, 30) - 60 * 0.7 * 0.46) < 1e-9);
+  assert.equal(estimarMusculo('m', 80, null), null);
+  assert.equal(estimarMusculo('m', '', 20), null);
+});
+
+test('enriquecer: estima gordura/músculo; valores digitados têm prioridade; abdômen antigo em extras', () => {
+  const [a, b, c] = enriquecer([
+    { id: '1', data: '2026-01-01', peso: 80, altura: 175, abdomen: 85 },
+    { id: '2', data: '2026-02-01', peso: 79, abdomen: 84, gordura: 18, musculo: 35 },
+    { id: '3', data: '2026-03-01', peso: 78, extras: { abdomen: 83 } },
+  ], 'm');
+  assert.equal(a.gorduraEstimada, true);
+  assert.equal(a.musculoEstimado, true);
+  assert.ok(Math.abs(a.gorduraUsada - (64 - 20 * (175 / 85))) < 1e-9);
+  assert.equal(b.gorduraUsada, 18);
+  assert.equal(b.gorduraEstimada, false);
+  assert.equal(b.musculoUsado, 35);
+  assert.equal(b.musculoEstimado, false);
+  assert.equal(c.abdomen, 83); // altura herdada da primeira medição
+  assert.equal(c.gorduraEstimada, true);
+  const s = montarSeries([a, b, c]).find((x) => x.id === 'gordura');
+  assert.equal(s.pontos.length, 3);
+});
+
+test('enriquecer: sem barriga não estima; peso+abdômen sozinhos já bastam para validar', () => {
+  const [a] = enriquecer([{ id: '1', data: '2026-01-01', peso: 80, altura: 175 }], 'm');
+  assert.equal(a.gorduraUsada, null);
+  assert.equal(a.musculoUsado, null);
+  const r = validarMedida({ data: '2026-01-01', abdomen: '85', extras: {} }, '2026-02-01');
+  assert.equal(r.ok, true);
+  assert.equal(r.medida.abdomen, 85);
+  assert.equal(validarMedida({ data: '2026-01-01', abdomen: '5', extras: {} }, '2026-02-01').ok, false);
+});
+
+// ---------- treinos: avatar, intensidade e mídia ----------
+test('intensidadeDoTreino: soma séries × peso do músculo; modo absoluto e relativo', () => {
+  const achar = (id) => EXERCICIOS.find((e) => e.id === id);
+  const itens = [{ exercicioId: 'supino-reto', series: 4 }];
+  const abs = intensidadeDoTreino(itens, achar, 'absoluto');
+  assert.ok(Math.abs(abs.chest - 0.4) < 1e-9);
+  assert.ok(Math.abs(abs.triceps - 0.2) < 1e-9);
+  const rel = intensidadeDoTreino(itens, achar, 'relativo');
+  assert.equal(rel.chest, 1);
+  assert.ok(Math.abs(rel.triceps - 0.5) < 1e-9);
+  const cheio = intensidadeDoTreino([{ exercicioId: 'supino-reto', series: 40 }], achar);
+  assert.equal(cheio.chest, 1); // satura em 100%
+  assert.deepEqual(intensidadeDoTreino([{ exercicioId: 'nao-existe', series: 3 }, { exercicioId: 'supino-reto', series: 0 }], achar), {});
+});
+
+test('corDoMusculo: parado = cinza; qualquer intensidade aparece; 1 = cor escolhida', () => {
+  assert.equal(corDoMusculo(0), COR_MUSCULO_PARADO);
+  assert.equal(corDoMusculo(1, '#ff0000'), '#ff0000');
+  assert.notEqual(corDoMusculo(0.05, '#ff0000'), COR_MUSCULO_PARADO);
+  assert.equal(corDoMusculo(0.5, 'invalida').length, 7); // cor inválida cai no padrão
+});
+
+test('mídia: link do Drive vira imagem direta; link comum é mantido; só https', () => {
+  const id = '1AbCdEfGhIjKlMnOpQrStUvWxYz';
+  assert.equal(idDoDrive(`https://drive.google.com/file/d/${id}/view?usp=sharing`), id);
+  assert.equal(idDoDrive(`https://drive.google.com/open?id=${id}`), id);
+  assert.equal(midiaDoLink(`https://drive.google.com/file/d/${id}/view`).img, `https://lh3.googleusercontent.com/d/${id}`);
+  assert.equal(midiaDoLink('https://exemplo.com/a.gif').img, 'https://exemplo.com/a.gif');
+  assert.equal(midiaDoLink('http://exemplo.com/a.gif'), null);
+  assert.equal(linkValido(''), true);
+  assert.equal(linkValido('javascript:alert(1)'), false);
+});
+
+test('administrador: só a conta autorizada, e só com o modo ligado', () => {
+  const lucas = { email: 'Lucasfelipe.NP@gmail.com ' };
+  assert.equal(podeSerAdmin(lucas), true);
+  assert.equal(podeSerAdmin({ email: 'outra@gmail.com' }), false);
+  assert.equal(podeSerAdmin(null), false);
+  assert.equal(modoAdminAtivo(lucas, { admin: { ativo: true } }), true);
+  assert.equal(modoAdminAtivo(lucas, { admin: { ativo: false } }), false);
+  assert.equal(modoAdminAtivo({ email: 'outra@gmail.com' }, { admin: { ativo: true } }), false);
+});
+
+test('biblioteca: todo músculo dos exercícios existe no desenho e tem nome; ids únicos', () => {
+  const ids = new Set();
+  const nosDesenhos = new Set();
+  Object.values(CORPOS).forEach((c) => Object.values(c).forEach((v) => v.musculos.forEach((m) => nosDesenhos.add(m.g))));
+  EXERCICIOS.forEach((e) => {
+    assert.equal(ids.has(e.id), false, `id repetido: ${e.id}`);
+    ids.add(e.id);
+    assert.ok(Object.keys(e.m).length > 0, `${e.id} sem músculos`);
+    Object.entries(e.m).forEach(([g, w]) => {
+      assert.ok(MUSCULOS[g], `${e.id}: músculo sem nome ${g}`);
+      assert.ok(nosDesenhos.has(g), `${e.id}: músculo ${g} não existe no desenho`);
+      assert.ok(w > 0 && w <= 1);
+    });
+  });
+  assert.ok(EXERCICIOS.length >= 50);
+  ['m', 'f'].forEach((s) => ['frente', 'costas'].forEach((v) => assert.ok(CORPOS[s][v].musculos.length >= 15)));
+});
+
+test('layout: biblioteca de exercícios fica na página Treinos por padrão e liga/desliga', () => {
+  const l = normalizarLayout(null);
+  assert.ok(l.secoes.Treinos.includes('exercicios'));
+  assert.equal(secoesAtivasDaPagina({ blocos: { exercicios: false, medidas: true } }, 'Treinos', false).includes('exercicios'), false);
 });
