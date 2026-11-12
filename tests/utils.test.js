@@ -741,3 +741,69 @@ test('treino: mover item e ordenar lista', () => {
   assert.deepEqual(moverItem(l, 'z', 1), l);
   assert.deepEqual(ordenarTreinos([{ nome: 'A', criadoEm: '2026-01-01' }, { nome: 'B', criadoEm: '2026-02-01' }, { nome: 'C' }]).map((t) => t.nome), ['B', 'A', 'C']);
 });
+
+// ---------- sessões de treino (registro do que foi feito) ----------
+import { sessaoInicial, sessaoParaForm, validarSessao, volumeDaSerie, resumoSessao, intensidadesDaSessao, historicoDoTreino, evolucaoExercicio, variacaoEvolucao } from '../src/utils/sessoes.js';
+
+const treinoA = { id: 't1', nome: 'A', itens: [{ id: 'i1', exercicioId: 'supino-reto', series: 3, reps: '8-12', carga: 60 }, { id: 'i2', exercicioId: 'crucifixo', series: 2, reps: '12', carga: null }] };
+
+test('sessão: formulário inicial segue o plano; com histórico segue a última sessão', () => {
+  const f = sessaoInicial(treinoA, null, '2026-11-11');
+  assert.equal(f.itens[0].series.length, 3);
+  assert.deepEqual(f.itens[0].series.map((s) => [s.reps, s.carga]), [['8', '60'], ['8', '60'], ['8', '60']]);
+  assert.deepEqual(f.itens[1].series.map((s) => [s.reps, s.carga]), [['12', ''], ['12', '']]);
+  const ultima = { itens: [{ exercicioId: 'supino-reto', series: [{ reps: 10, carga: 65 }, { reps: 8, carga: 65 }] }] };
+  const g = sessaoInicial(treinoA, ultima, '2026-11-12');
+  assert.deepEqual(g.itens[0].series.map((s) => [s.reps, s.carga]), [['10', '65'], ['8', '65']]);
+  assert.equal(g.itens[1].series.length, 2); // sem histórico desse exercício: volta ao plano
+  assert.equal(new Set(f.itens[0].series.map((s) => s.id)).size, 3); // ids únicos
+});
+
+test('sessão: validar ignora séries em branco, converte números e barra erros', () => {
+  const base = { treinoId: 't1', treinoNome: 'A', data: '2026-11-11', obs: ' boa ', itens: [
+    { exercicioId: 'supino-reto', series: [{ reps: '10', carga: '62,5' }, { reps: '', carga: '' }, { reps: '8', carga: '' }] },
+    { exercicioId: 'crucifixo', series: [{ reps: '', carga: '' }] },
+  ] };
+  const r = validarSessao(base, '2026-11-11');
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.sessao.itens, [{ exercicioId: 'supino-reto', series: [{ reps: 10, carga: 62.5 }, { reps: 8, carga: null }] }]);
+  assert.equal(r.sessao.obs, 'boa');
+  assert.equal(validarSessao({ ...base, data: '2026-11-12' }, '2026-11-11').ok, false); // futuro
+  assert.equal(validarSessao({ ...base, data: '' }, '2026-11-11').ok, false);
+  assert.equal(validarSessao({ ...base, itens: [{ exercicioId: 'supino-reto', series: [{ reps: 'x', carga: '' }] }] }, '2026-11-11').ok, false);
+  assert.equal(validarSessao({ ...base, itens: [{ exercicioId: 'supino-reto', series: [{ reps: '10', carga: '-3' }] }] }, '2026-11-11').ok, false);
+  assert.equal(validarSessao({ ...base, itens: [{ exercicioId: 'supino-reto', series: [{ reps: '', carga: '' }] }] }, '2026-11-11').ok, false); // nada feito
+  assert.equal(validarSessao(base, '2026-11-11', () => false).ok, false); // exercício que não existe mais
+});
+
+test('sessão: volume, resumo e conversão de volta para o formulário', () => {
+  const s = { id: 'x', treinoId: 't1', treinoNome: 'A', data: '2026-11-11', itens: [{ exercicioId: 'supino-reto', series: [{ reps: 10, carga: 60 }, { reps: 8, carga: 60 }] }, { exercicioId: 'flexao', series: [{ reps: 20, carga: null }] }] };
+  assert.equal(volumeDaSerie({ reps: 10, carga: 60 }), 600);
+  assert.equal(volumeDaSerie({ reps: 20, carga: null }), 0);
+  assert.deepEqual(resumoSessao(s), { exercicios: 2, series: 3, volume: 1080 });
+  const f = sessaoParaForm(s);
+  assert.equal(f.itens[0].series[0].reps, '10');
+  assert.equal(f.itens[1].series[0].carga, '');
+  assert.equal(validarSessao(f, '2026-11-11').ok, true);
+});
+
+test('sessão: avatar pelo que foi feito (séries feitas por exercício)', () => {
+  const achar = (id) => EXERCICIOS.find((e) => e.id === id);
+  const s = { itens: [{ exercicioId: 'supino-reto', series: [{ reps: 10 }, { reps: 10 }, { reps: 10 }, { reps: 10 }] }] };
+  assert.ok(Math.abs(intensidadesDaSessao(s, achar).chest - 0.4) < 1e-9);
+});
+
+test('sessão: histórico do treino (mais recente primeiro) e evolução do exercício', () => {
+  const sessoes = [
+    { id: '1', treinoId: 't1', data: '2026-10-01', itens: [{ exercicioId: 'supino-reto', series: [{ reps: 10, carga: 50 }, { reps: 8, carga: 55 }] }] },
+    { id: '2', treinoId: 't2', data: '2026-10-05', itens: [{ exercicioId: 'agachamento', series: [{ reps: 10, carga: 80 }] }] },
+    { id: '3', treinoId: 't1', data: '2026-10-15', itens: [{ exercicioId: 'supino-reto', series: [{ reps: 10, carga: 60 }] }] },
+  ];
+  assert.deepEqual(historicoDoTreino(sessoes, 't1').map((s) => s.id), ['3', '1']);
+  const ev = evolucaoExercicio(sessoes, 'supino-reto');
+  assert.deepEqual(ev, [{ data: '2026-10-01', cargaMax: 55, volume: 940, series: 2 }, { data: '2026-10-15', cargaMax: 60, volume: 600, series: 1 }]);
+  assert.equal(variacaoEvolucao(ev, 'cargaMax'), 5);
+  assert.equal(variacaoEvolucao(ev, 'volume'), -340);
+  assert.equal(variacaoEvolucao([ev[0]]), null);
+  assert.deepEqual(evolucaoExercicio(sessoes, 'nao-existe'), []);
+});

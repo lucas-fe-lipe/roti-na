@@ -6,6 +6,9 @@ import { notificar } from '../utils/toast';
 import useVoltar from '../hooks/useVoltar';
 import ConfirmModal from './ConfirmModal';
 import AvatarMuscular from './AvatarMuscular';
+import { EditorSessao, HistoricoTreino } from './SessoesTreino';
+import { hojeLocalStr } from '../utils/date';
+import { sessaoInicial, sessaoParaForm, historicoDoTreino } from '../utils/sessoes';
 import { EXERCICIOS, CATEGORIAS, MUSCULOS } from '../data/exercicios';
 import { novoItem, validarTreino, resumoTreino, intensidadesDoTreino, musculosMaisTrabalhados, moverItem, ordenarTreinos } from '../utils/treinoModelo';
 
@@ -112,7 +115,7 @@ function EditorTreino({ inicial, config, onClose, onSalvar }) {
 }
 
 // ---------- detalhe: avatar grande, músculos mais trabalhados e exercícios ----------
-function DetalheTreino({ treino, config, atualizarConfig, onClose, onEditar, onExcluir }) {
+function DetalheTreino({ treino, sessoes, config, atualizarConfig, onClose, onEditar, onExcluir, onRegistrar, onEditarSessao, onExcluirSessao }) {
   useVoltar(true, onClose);
   const { sexo, cor, modo } = config.treino;
   const intensidades = intensidadesDoTreino(treino, achar, modo);
@@ -160,6 +163,13 @@ function DetalheTreino({ treino, config, atualizarConfig, onClose, onEditar, onE
           })}
         </ol>
 
+        <button onClick={onRegistrar} className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-bold transition-colors">Registrar sessão</button>
+
+        <div className="space-y-2">
+          <h3 className="text-xs uppercase tracking-wide text-zinc-500">Histórico</h3>
+          <HistoricoTreino treino={treino} sessoes={sessoes} config={config} onEditar={onEditarSessao} onExcluir={onExcluirSessao} />
+        </div>
+
         <div className="flex justify-between gap-2 pt-2 border-t border-zinc-800">
           <button onClick={onExcluir} className="px-3 py-1.5 text-red-500 hover:text-red-400 text-sm">Excluir</button>
           <div className="flex gap-2">
@@ -173,10 +183,12 @@ function DetalheTreino({ treino, config, atualizarConfig, onClose, onEditar, onE
 }
 
 // ---------- bloco principal ----------
-export default function TreinosLista({ user, treinos, setTreinos, config, atualizarConfig }) {
+export default function TreinosLista({ user, treinos, setTreinos, sessoes = [], setSessoes = () => {}, config, atualizarConfig }) {
   const [editor, setEditor] = useState(null);
   const [detalheId, setDetalheId] = useState(null);
   const [excluir, setExcluir] = useState(null);
+  const [editorSessao, setEditorSessao] = useState(null);
+  const [excluirSessao, setExcluirSessao] = useState(null);
   const ordenados = useMemo(() => ordenarTreinos(treinos), [treinos]);
   const detalhe = treinos.find((t) => t.id === detalheId) || null;
   const { sexo, cor, modo } = config.treino;
@@ -191,6 +203,27 @@ export default function TreinosLista({ user, treinos, setTreinos, config, atuali
     else persistirLocal([...treinos.filter((x) => x.id !== id), completo]);
     if (ok) { notificar('Treino salvo.', 'sucesso'); setEditor(null); setDetalheId(null); }
   };
+
+  const persistirLocalSessoes = (lista) => { setSessoes(lista); try { localStorage.setItem('local_sessoes', JSON.stringify(lista)); } catch { /* sem armazenamento */ } };
+
+  const salvarSessao = async (x) => {
+    const id = x.id || `${Date.now()}`;
+    const completa = { ...x, id, criadoEm: x.criadoEm || new Date().toISOString() };
+    Object.keys(completa).forEach((k) => completa[k] === undefined && delete completa[k]);
+    let ok = true;
+    if (user) ok = await salvarDoc(doc(db, 'users', user.uid, 'sessoes', id), completa);
+    else persistirLocalSessoes([...sessoes.filter((y) => y.id !== id), completa]);
+    if (ok) { notificar('Sessão salva.', 'sucesso'); setEditorSessao(null); }
+  };
+
+  const apagarSessao = async (x) => {
+    let ok = true;
+    if (user) ok = await apagarDoc(doc(db, 'users', user.uid, 'sessoes', x.id));
+    else persistirLocalSessoes(sessoes.filter((y) => y.id !== x.id));
+    if (ok) notificar('Sessão excluída.', 'info', { rotulo: 'Desfazer', fn: () => salvarSessao(x) });
+  };
+
+  const registrar = (t) => setEditorSessao(sessaoInicial(t, historicoDoTreino(sessoes, t.id)[0], hojeLocalStr()));
 
   const apagar = async (t) => {
     let ok = true;
@@ -232,10 +265,14 @@ export default function TreinosLista({ user, treinos, setTreinos, config, atuali
       )}
 
       {detalhe && !editor && (
-        <DetalheTreino treino={detalhe} config={config} atualizarConfig={atualizarConfig} onClose={() => setDetalheId(null)}
-          onEditar={() => setEditor(detalhe)} onExcluir={() => setExcluir(detalhe)} />
+        <DetalheTreino treino={detalhe} sessoes={historicoDoTreino(sessoes, detalhe.id)} config={config} atualizarConfig={atualizarConfig} onClose={() => setDetalheId(null)}
+          onEditar={() => setEditor(detalhe)} onExcluir={() => setExcluir(detalhe)}
+          onRegistrar={() => registrar(detalhe)} onEditarSessao={(x) => setEditorSessao(sessaoParaForm(x))} onExcluirSessao={(x) => setExcluirSessao(x)} />
       )}
+      {editorSessao && <EditorSessao inicial={editorSessao} config={config} onClose={() => setEditorSessao(null)} onSalvar={salvarSessao} />}
       {editor && <EditorTreino inicial={editor} config={config} onClose={() => setEditor(null)} onSalvar={salvar} />}
+      <ConfirmModal aberto={!!excluirSessao} titulo="Excluir sessão" mensagem={excluirSessao ? `Excluir a sessão de ${excluirSessao.data.split('-').reverse().join('/')}?` : ''}
+        onCancelar={() => setExcluirSessao(null)} onConfirmar={() => { const x = excluirSessao; setExcluirSessao(null); apagarSessao(x); }} />
       <ConfirmModal aberto={!!excluir} titulo="Excluir treino" mensagem={excluir ? `Excluir o treino "${excluir.nome}"?` : ''}
         onCancelar={() => setExcluir(null)} onConfirmar={() => { const t = excluir; setExcluir(null); apagar(t); }} />
     </div>

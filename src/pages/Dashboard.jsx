@@ -51,7 +51,7 @@ export default function Dashboard() {
   // botão voltar do celular: fora da página inicial, volta para ela (em vez de fechar o app)
   useVoltar(paginasMenu.length > 0 && paginaAtual !== paginasMenu[0], () => setActivePage(null));
   const midias = useBiblioteca();
-  const { atividades, setAtividades, metas, setMetas, tarefas, cursos, medidas, setMedidas, treinos, setTreinos } = useDados(user, paginaAtual);
+  const { atividades, setAtividades, metas, setMetas, tarefas, cursos, medidas, setMedidas, treinos, setTreinos, sessoes, setSessoes } = useDados(user, paginaAtual);
   const sync = useGoogleAutoSync({ user, atividades, tarefas, ativo: config.integracoes.googleAutoSync });
   
   const [atividadeEditando, setAtividadeEditando] = useState(null);
@@ -453,7 +453,7 @@ export default function Dashboard() {
     ),
     cursos: secaoCursos,
     medidas: <MedidasCorporais user={user} medidas={medidas} setMedidas={setMedidas} sexo={config.treino.sexo} onSexo={(v) => atualizarConfig({ treino: { sexo: v } })} />,
-    treinos: <TreinosLista user={user} treinos={treinos} setTreinos={setTreinos} config={config} atualizarConfig={atualizarConfig} />,
+    treinos: <TreinosLista user={user} treinos={treinos} setTreinos={setTreinos} sessoes={sessoes} setSessoes={setSessoes} config={config} atualizarConfig={atualizarConfig} />,
     exercicios: (
       <div className="mt-2 w-full px-2 sm:px-0">
         <h2 className="text-base font-bold text-zinc-100 mb-2">Biblioteca de exercícios</h2>
