@@ -318,16 +318,45 @@ test('notas: soma, média, CRA e mínimo do período', () => {
   assert.equal(minimoDoPeriodo({ minimo: '' }), 60);
 });
 
-test('planilha de notas: abas, valores e arquivo .xlsx (zip) válido', () => {
-  const cursos = [{ nome: 'ADS', periodos: [{ nome: '1º', tipoMedia: 'ponderada', disciplinas: [
-    { nome: 'Cálculo & <1>', status: 'Cursando', cargaHoraria: '60', percentualAprovacao: 70, avaliacoes: [{ nome: 'P1', max: '30', obtida: '25' }, { nome: 'P2', max: '30', obtida: '' }] },
-  ] }] }];
-  const abas = montarAbasNotas(cursos);
-  assert.deepEqual(abas.map((a) => a.nome), ['Disciplinas', 'Avaliações', 'Médias']);
-  assert.equal(abas[0].linhas[0][9], 83.33);
-  assert.equal(abas[0].linhas[0][11], 'Acima do mínimo');
-  assert.equal(abas[1].linhas.length, 2);
-  const bytes = gerarXlsx(abas);
+const cursosPlanilha = [{ nome: 'ADS', periodos: [
+  { nome: '1º período', disciplinas: [
+    { nome: 'Cálculo & <1>', professor: 'Hernan Roberto', status: 'Cursando', cargaHoraria: '60', avaliacoes: [
+      { nome: 'P1', max: '30', obtida: '25', data: '2026-03-10', hora: '19:00' },
+      { nome: 'P2', max: '30', obtida: '', data: '2026-05-02' },
+    ] },
+    { nome: 'Lógica', status: 'Concluída', avaliacoes: [] },
+  ] },
+  { nome: '2º período', disciplinas: [] },
+] }];
+
+test('planilha de notas: uma aba por período, com a estrutura pedida', () => {
+  const abas = montarAbasNotas(cursosPlanilha);
+  assert.deepEqual(abas.map((a) => a.nome), ['ADS - 1º período', 'ADS - 2º período']);
+  const t = abas[0].linhas.map((l) => l.c.map((c) => c.v));
+  assert.equal(t[0][0], 'ADS — 1º período');
+  assert.deepEqual(t[1].slice(0, 4), ['Disciplina', 'Distribuídos', 'Obtido', '%']);
+  assert.deepEqual(t[2].slice(0, 4), ['Cálculo & <1> (60h)\nHernan Roberto', 30, 25, 83.33]);
+  assert.deepEqual(abas[0].linhas[2].c.slice(0, 4).map((c) => c.e), ['pretoTexto', 'pretoNum', 'pretoNum', 'pretoPct']);
+  assert.deepEqual(t[3], ['P1', 30, 25, 83.33, '10/03/2026 19:00']);
+  assert.deepEqual(t[4], ['P2', 30, null, null, '02/05/2026']); // sem nota: nota e % vazios
+  // depois das avaliações, volta o cabeçalho para a próxima disciplina
+  assert.equal(t[5][0], 'Disciplina');
+  assert.equal(t[6][0], 'Lógica'); // sem carga nem professor: uma linha só
+  assert.deepEqual(t[6].slice(1, 4), [0, 0, null]);
+  assert.equal(abas[0].linhas[6].alt, 20);
+  assert.equal(abas[0].linhas[2].alt, 32);
+  assert.equal(abas[1].linhas[1].c[0].v, 'Nenhuma disciplina neste período.');
+});
+
+test('planilha de notas: nomes de aba válidos e únicos; sem períodos gera aba de aviso; .xlsx é um zip', () => {
+  const longo = 'x'.repeat(40);
+  const abas = montarAbasNotas([{ nome: 'A/B', periodos: [{ nome: 'P:1', disciplinas: [] }, { nome: 'P:1', disciplinas: [] }, { nome: longo, disciplinas: [] }] }]);
+  assert.equal(abas[0].nome, 'A B - P 1');
+  assert.equal(abas[2].nome, 'A B - ' + 'x'.repeat(20));
+  assert.equal(abas[1].nome, 'A B - P 1 (2)');
+  assert.ok(abas.every((a) => a.nome.length <= 31 && !/[[\]:*?/\\]/.test(a.nome)));
+  assert.equal(montarAbasNotas([]).length, 1);
+  const bytes = gerarXlsx(montarAbasNotas(cursosPlanilha));
   assert.equal(bytes[0], 0x50); // "PK"
   assert.equal(bytes[1], 0x4b);
 });

@@ -222,23 +222,26 @@ export default function Notas({ user, atividades, isAvaliacoesOpen, setIsAvaliac
     }
   };
 
-  const confirmarNotaGlobal = async (avData, notaObtida) => {
-    if (notaObtida === '') return;
-    
+  // Altera uma avaliação (nota, nome, data, valor...) a partir da lista de avaliações e atualiza as tarefas ligadas a ela.
+  const atualizarAvaliacaoGlobal = async (avData, patch) => {
     const curso = cursos.find(c => c.id === avData.cursoId);
-    const periodoIndex = curso.periodos.findIndex(p => p.id === avData.periodoId);
-    const discIndex = curso.periodos[periodoIndex].disciplinas.findIndex(d => d.id === avData.disciplinaId);
-    let disciplina = curso.periodos[periodoIndex].disciplinas[discIndex];
-    
-    const avIndex = disciplina.avaliacoes.findIndex(a => a.id === avData.id);
-    disciplina.avaliacoes[avIndex].obtida = notaObtida;
-    
-    curso.periodos[periodoIndex].disciplinas[discIndex] = disciplina;
-    
-    if (user) await salvarDoc(doc(db, 'users', user.uid, 'cursos', curso.id), curso);
-    else persistirLocal(cursos.map(c => c.id === curso.id ? curso : c));
-    
-    await syncAvaliacoesComTarefas(disciplina, curso.id, curso.periodos[periodoIndex].id);
+    if (!curso) return;
+    let disciplinaNova = null;
+    const novoCurso = {
+      ...curso,
+      periodos: (curso.periodos || []).map(p => p.id !== avData.periodoId ? p : {
+        ...p,
+        disciplinas: (p.disciplinas || []).map(d => {
+          if (d.id !== avData.disciplinaId) return d;
+          disciplinaNova = { ...d, avaliacoes: (d.avaliacoes || []).map(a => a.id === avData.id ? { ...a, ...patch } : a) };
+          return disciplinaNova;
+        }),
+      }),
+    };
+    if (!disciplinaNova) return;
+    if (user) await salvarDoc(doc(db, 'users', user.uid, 'cursos', curso.id), novoCurso);
+    else persistirLocal(cursos.map(c => c.id === curso.id ? novoCurso : c));
+    await syncAvaliacoesComTarefas(disciplinaNova, curso.id, avData.periodoId);
   };
 
   const achaDisciplina = (m) => m
@@ -475,7 +478,7 @@ export default function Notas({ user, atividades, isAvaliacoesOpen, setIsAvaliac
         />
       )}
       {isAvaliacoesOpen && (
-        <ModalAvaliacoesGlobal cursos={cursos} tarefas={tarefas} atividades={atividades} vermelhas={vermelhas} onClose={() => setIsAvaliacoesOpen(false)} onConfirmar={confirmarNotaGlobal} />
+        <ModalAvaliacoesGlobal cursos={cursos} tarefas={tarefas} atividades={atividades} vermelhas={vermelhas} onClose={() => setIsAvaliacoesOpen(false)} onAtualizar={atualizarAvaliacaoGlobal} />
       )}
     </div>
   );
@@ -793,7 +796,8 @@ function ModalDisciplinaResumo({ disciplina, statusClasse, aprovacaoInicial = AP
   );
 }
 
-function ModalAvaliacoesGlobal({ cursos, tarefas, atividades = [], vermelhas = {}, onClose, onConfirmar }) {
+function ModalAvaliacoesGlobal({ cursos, tarefas, atividades = [], vermelhas = {}, onClose, onAtualizar }) {
+  const [editando, setEditando] = useState(null); // avaliação aberta no pop-up de edição
   const [minCorrecao, setMinCorrecao] = useState(true);
   const [minProximas, setMinProximas] = useState(false);
   const [minConcluidas, setMinConcluidas] = useState(true);
@@ -873,30 +877,32 @@ function ModalAvaliacoesGlobal({ cursos, tarefas, atividades = [], vermelhas = {
     return `${day}/${m}${horaStr ? ` às ${horaStr}` : ''}`;
   };
 
+  // A nota é confirmada ao sair do campo (clicar fora ou Enter); a avaliação passa para "Concluídas".
+  const confirmarAoSair = (av) => {
+    const v = inputs[av.id];
+    if (v === undefined || String(v).trim() === '' || Number.isNaN(Number(v))) return;
+    onAtualizar(av, { obtida: String(v).trim() });
+  };
+
   const renderAvItem = (av, editavel, exibirDataCompleta = false) => (
-    <div key={`${av.cursoId}_${av.id}`} style={av.cor ? { backgroundColor: av.cor, color: textoParaFundo(av.cor) } : undefined} className={`flex items-center gap-2 mb-2 p-2.5 ${av.cor ? 'border-black/20' : 'bg-zinc-800/40 border-zinc-800'} border rounded-lg`}>
-      <div className="flex-1 min-w-0 pr-2">
+    <div key={`${av.cursoId}_${av.id}`} onClick={() => setEditando(av)} style={av.cor ? { backgroundColor: av.cor, color: textoParaFundo(av.cor) } : undefined} className={`flex items-center gap-2 mb-2 p-2.5 cursor-pointer ${av.cor ? 'border-black/20' : 'bg-zinc-800/40 border-zinc-800 hover:bg-zinc-800/70'} border rounded-lg`}>
+      <div role="button" tabIndex={0} aria-label={`Editar avaliação ${av.nome || ''}`} onKeyDown={e => { if (e.key === 'Enter') setEditando(av); }} className="flex-1 min-w-0 pr-2">
         {exibirDataCompleta && <div className={`text-[11px] ${av.cor ? 'opacity-80' : 'text-zinc-400'} mb-0.5`}>{formatarDataConcluida(av.data, av.hora)}</div>}
         <div className={`text-sm font-bold ${av.cor ? '' : 'text-white'} truncate leading-tight`}>
           {av.hora ? `${av.hora} - ${av.nome}` : av.nome}
         </div>
         <div className={`text-xs ${av.cor ? 'opacity-80' : 'text-zinc-500'} truncate flex items-center gap-1`}>{av.vermelha && <IconeAviso />}{av.disciplinaNome}</div>
       </div>
-      <div className="w-12 h-10 flex items-center justify-center bg-zinc-900 border border-zinc-700 text-zinc-300 text-xs font-bold rounded shrink-0">
-        {av.max || '?'}
-      </div>
       {editavel ? (
-        <>
-          <input type="number" value={inputs[av.id] !== undefined ? inputs[av.id] : ''} onChange={e => setInputs({...inputs, [av.id]: e.target.value})} placeholder="Nota" className="w-12 h-10 bg-zinc-950 border border-zinc-700 text-center text-xs font-bold text-white rounded shrink-0" />
-          <button onClick={() => onConfirmar(av, inputs[av.id])} className="w-10 h-10 flex items-center justify-center bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded text-green-500 shrink-0 transition-colors">
-            <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg>
-          </button>
-        </>
+        <input type="number" inputMode="decimal" value={inputs[av.id] !== undefined ? inputs[av.id] : ''} onClick={e => e.stopPropagation()} onChange={e => setInputs({...inputs, [av.id]: e.target.value})} onBlur={() => confirmarAoSair(av)} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }} placeholder="Nota" aria-label={`Nota de ${av.nome || 'avaliação'}`} className="w-12 h-10 bg-zinc-950 border border-zinc-700 text-center text-xs font-bold text-white rounded shrink-0" />
       ) : (
         <div className="w-12 h-10 flex items-center justify-center bg-zinc-950 border border-zinc-700 text-white text-xs font-bold rounded shrink-0">
           {av.obtida}
         </div>
       )}
+      <div className="w-12 h-10 flex items-center justify-center bg-zinc-900 border border-zinc-700 text-zinc-300 text-xs font-bold rounded shrink-0" title="Valor da avaliação">
+        {av.max || '?'}
+      </div>
     </div>
   );
 
@@ -968,6 +974,60 @@ function ModalAvaliacoesGlobal({ cursos, tarefas, atividades = [], vermelhas = {
             )}
           </div>
 
+        </div>
+      </div>
+      {editando && <ModalEditarAvaliacao av={editando} onClose={() => setEditando(null)} onSalvar={async (patch) => { await onAtualizar(editando, patch); setEditando(null); }} />}
+    </div>
+  );
+}
+
+// Pop-up para editar uma única avaliação: nome, data (e hora), valor e nota.
+function ModalEditarAvaliacao({ av, onClose, onSalvar }) {
+  const [f, setF] = useState({ nome: av.nome || '', data: av.data || '', hora: av.hora || '', max: av.max ?? '', obtida: av.obtida ?? '' });
+  const [erro, setErro] = useState('');
+  const [salvando, setSalvando] = useState(false);
+  const num = (v) => String(v ?? '').trim().replace(',', '.');
+  const salvar = async () => {
+    const max = num(f.max), obtida = num(f.obtida);
+    if (max !== '' && (Number.isNaN(Number(max)) || Number(max) <= 0)) return setErro('O valor da avaliação deve ser um número maior que zero.');
+    if (obtida !== '' && (Number.isNaN(Number(obtida)) || Number(obtida) < 0)) return setErro('A nota deve ser um número (zero ou mais), ou ficar em branco.');
+    setErro('');
+    setSalvando(true);
+    await onSalvar({ nome: f.nome.trim(), data: f.data, hora: f.data ? f.hora : '', max, obtida });
+    setSalvando(false);
+  };
+  const campo = 'mt-0.5 bg-zinc-950 border border-zinc-700 rounded p-2 text-sm text-white';
+  return (
+    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[60] p-3" onClick={onClose}>
+      <div role="dialog" aria-modal="true" aria-label="Editar avaliação" className="bg-zinc-900 text-zinc-100 rounded-xl w-full max-w-sm p-4 shadow-2xl border border-zinc-800 space-y-3" onClick={e => e.stopPropagation()}>
+        <div className="flex justify-between items-center">
+          <div className="min-w-0">
+            <h2 className="text-lg font-bold">Editar avaliação</h2>
+            <div className="text-xs text-zinc-500 truncate">{av.disciplinaNome}</div>
+          </div>
+          <button aria-label="Fechar" onClick={onClose} className="text-zinc-400 hover:text-white text-xl leading-none">×</button>
+        </div>
+        <label className="flex flex-col text-[11px] text-zinc-400">Nome
+          <input type="text" value={f.nome} onChange={e => setF({ ...f, nome: e.target.value })} className={campo} />
+        </label>
+        <div className="grid grid-cols-2 gap-2">
+          <label className="flex flex-col text-[11px] text-zinc-400">Data
+            <input type="date" value={f.data} onChange={e => setF({ ...f, data: e.target.value })} className={`${campo} [color-scheme:dark]`} />
+          </label>
+          <label className="flex flex-col text-[11px] text-zinc-400">Hora
+            <input type="time" value={f.hora} disabled={!f.data} onChange={e => setF({ ...f, hora: e.target.value })} className={`${campo} [color-scheme:dark] disabled:opacity-40`} />
+          </label>
+          <label className="flex flex-col text-[11px] text-zinc-400">Nota obtida
+            <input type="text" inputMode="decimal" value={f.obtida} onChange={e => setF({ ...f, obtida: e.target.value })} placeholder="ainda sem nota" className={campo} />
+          </label>
+          <label className="flex flex-col text-[11px] text-zinc-400">Valor da avaliação
+            <input type="text" inputMode="decimal" value={f.max} onChange={e => setF({ ...f, max: e.target.value })} className={campo} />
+          </label>
+        </div>
+        {erro && <p role="alert" className="text-xs text-red-400">{erro}</p>}
+        <div className="flex justify-end gap-2 pt-2 border-t border-zinc-800">
+          <button onClick={onClose} className="px-3 py-1.5 bg-zinc-800 rounded text-zinc-300 hover:bg-zinc-700 text-sm font-bold">Cancelar</button>
+          <button onClick={salvar} disabled={salvando} className="px-3 py-1.5 bg-zinc-100 text-zinc-950 rounded hover:bg-zinc-300 text-sm font-bold disabled:opacity-60">Salvar</button>
         </div>
       </div>
     </div>

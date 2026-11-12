@@ -20,7 +20,7 @@ import RightMenu from '../components/RightMenu';
 import Notas from './Notas';
 import { auth, db } from '../services/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
-import { doc } from 'firebase/firestore';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { salvarDoc, apagarDoc, registrarSchema } from '../services/db';
 import { getInitials } from '../utils/defaultAvatars';
 import { diaDaMeta, progressoAtual } from '../utils/metas';
@@ -75,6 +75,24 @@ export default function Dashboard() {
     });
     return () => unsubscribeAuth();
   }, []);
+
+  // A foto vem da nuvem (users/{uid}.avatar), então aparece também em sessão nova ou outro aparelho; o localStorage é só cache.
+  useEffect(() => {
+    if (!user) return;
+    return onSnapshot(
+      doc(db, 'users', user.uid),
+      (snap) => {
+        const av = snap.exists() ? snap.data().avatar : undefined;
+        if (av === undefined) return;
+        setUserAvatar(av || '');
+        try {
+          if (av) localStorage.setItem(`profile_avatar_${user.uid}`, av);
+          else localStorage.removeItem(`profile_avatar_${user.uid}`);
+        } catch { /* sem armazenamento */ }
+      },
+      (e) => console.warn('Foto de perfil:', e?.code || e)
+    );
+  }, [user]);
 
   useEffect(() => {
     const interval = setInterval(() => setCurrentTime(new Date()), 60000);
@@ -416,11 +434,10 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col">
       <header className="flex justify-between items-center px-6 py-2 border-b border-zinc-800 shrink-0">
-        <div onClick={() => setIsSidebarOpen(true)} className="flex items-center gap-2 cursor-pointer hover:text-zinc-300">
+        <div onClick={() => setIsSidebarOpen(true)} role="button" aria-label="Abrir menu do perfil" className="flex items-center gap-2 cursor-pointer hover:text-zinc-300">
           <div className="w-8 h-8 rounded-full border-2 border-zinc-700 flex items-center justify-center overflow-hidden bg-zinc-800 text-zinc-200 font-bold text-[10px]">
             <Avatar src={userAvatar} initials={userInitials} />
           </div>
-          <span className="text-sm font-medium truncate max-w-[150px]">{userName}</span>
         </div>
 
         <div className="flex items-center gap-3">

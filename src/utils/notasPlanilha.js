@@ -1,61 +1,88 @@
-import { calcAvaliacoes, calcCRA } from './notas.js';
-import { aprovacaoDe, pontosTotaisDe } from './notasStatus.js';
+import { calcAvaliacoes } from './notas.js';
 
 // ---------- conteúdo da planilha ----------
-// Cada aba: { nome, colunas: [{ titulo, largura, num }], linhas: [[célula, ...]] } (num = número com 2 casas)
+// Uma aba por período. Cada aba: { nome, larguras: [...], mesclar: ['A1:E1'], linhas: [{ alt?, c: [{ v, e }] }] }
+// v = valor (texto, número ou vazio) e e = nome do estilo (ver ESTILOS).
+// Estrutura da aba:
+//   1) "Curso — Período"
+//   2) cabeçalho: Disciplina | Distribuídos | Obtido | %
+//   3) linha preta: nome (carga) + professor, totais da disciplina
+//   4) uma linha por avaliação: nome | valor | nota obtida | % | data
+//   ... e volta ao cabeçalho (2) para a próxima disciplina.
 
 const temNota = (v) => v !== '' && v !== undefined && v !== null && !Number.isNaN(Number(v));
 const arred = (n) => Math.round(n * 100) / 100;
+const L = (v, e) => ({ v: v === undefined ? null : v, e });
+
+const dataBr = (data, hora) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(data || '');
+  if (!m) return '';
+  return `${m[3]}/${m[2]}/${m[1]}${hora ? ` ${hora}` : ''}`;
+};
+
+// nome de aba válido no Excel: até 31 caracteres, sem []:*?/\ e único
+function nomeDeAba(texto, usados) {
+  const base = (String(texto || 'Período').replace(/[\[\]:*?/\\]/g, ' ').replace(/\s+/g, ' ').trim() || 'Período').slice(0, 31);
+  let nome = base, n = 2;
+  while (usados.has(nome.toLowerCase())) {
+    const suf = ` (${n++})`;
+    nome = base.slice(0, 31 - suf.length) + suf;
+  }
+  usados.add(nome.toLowerCase());
+  return nome;
+}
+
+export function abaDoPeriodo(curso, periodo, nome) {
+  const linhas = [{ alt: 24, c: [L(`${curso.nome || 'Curso'} — ${periodo.nome || 'Período'}`, 'titulo')] }];
+  (periodo.disciplinas || []).forEach((d) => {
+    linhas.push({ c: [L('Disciplina', 'cabEsq'), L('Distribuídos', 'cab'), L('Obtido', 'cab'), L('%', 'cab'), L('', 'cab')] });
+
+    const { maxTotal, obtidaTotal, percentual } = calcAvaliacoes(d.avaliacoes, d.usarMedia);
+    const carga = Number(d.cargaHoraria) > 0 ? ` (${d.cargaHoraria}h)` : '';
+    const titulo = `${d.nome || 'Sem nome'}${carga}`;
+    const professor = (d.professor || '').trim();
+    linhas.push({
+      alt: professor ? 32 : 20,
+      c: [
+        L(professor ? `${titulo}\n${professor}` : titulo, 'pretoTexto'),
+        L(arred(maxTotal), 'pretoNum'),
+        L(arred(obtidaTotal), 'pretoNum'),
+        L(maxTotal > 0 ? arred(percentual) : null, 'pretoPct'),
+        L('', 'pretoNum'),
+      ],
+    });
+
+    (d.avaliacoes || []).forEach((a) => {
+      const tem = temNota(a.obtida);
+      const valor = temNota(a.max) ? Number(a.max) : null;
+      linhas.push({
+        c: [
+          L(a.nome || '', 'texto'),
+          L(valor, 'num'),
+          L(tem ? Number(a.obtida) : null, 'num'),
+          L(tem && valor > 0 ? arred((Number(a.obtida) / valor) * 100) : null, 'pct'),
+          L(dataBr(a.data, a.hora), 'data'),
+        ],
+      });
+    });
+  });
+  if (!(periodo.disciplinas || []).length) linhas.push({ c: [L('Nenhuma disciplina neste período.', 'texto')] });
+  return { nome, larguras: [38, 14, 12, 10, 18], mesclar: ['A1:E1'], linhas };
+}
 
 export function montarAbasNotas(cursos = []) {
-  const resumo = { nome: 'Disciplinas', colunas: [
-    { titulo: 'Curso', largura: 24 }, { titulo: 'Período', largura: 16 }, { titulo: 'Disciplina', largura: 32 },
-    { titulo: 'Professor', largura: 22 }, { titulo: 'Status', largura: 14 }, { titulo: 'Carga (h)', largura: 10, num: true },
-    { titulo: 'Tipo de hora', largura: 16 }, { titulo: 'Pontos obtidos', largura: 14, num: true }, { titulo: 'Pontos avaliados', largura: 15, num: true },
-    { titulo: 'Nota (%)', largura: 10, num: true }, { titulo: 'Passa com (%)', largura: 13, num: true }, { titulo: 'Situação', largura: 20 }, { titulo: 'Pontos totais', largura: 13, num: true },
-  ], linhas: [] };
-  const avaliacoes = { nome: 'Avaliações', colunas: [
-    { titulo: 'Curso', largura: 24 }, { titulo: 'Período', largura: 16 }, { titulo: 'Disciplina', largura: 32 },
-    { titulo: 'Avaliação', largura: 22 }, { titulo: 'Data', largura: 12 }, { titulo: 'Hora', largura: 8 },
-    { titulo: 'Valor', largura: 9, num: true }, { titulo: 'Nota obtida', largura: 12, num: true }, { titulo: 'Aproveitamento (%)', largura: 18, num: true },
-  ], linhas: [] };
-  const medias = { nome: 'Médias', colunas: [
-    { titulo: 'Curso', largura: 24 }, { titulo: 'Período', largura: 16 }, { titulo: 'Tipo de média', largura: 20 },
-    { titulo: 'Média (%)', largura: 11, num: true }, { titulo: 'Horas concluídas', largura: 16, num: true },
-  ], linhas: [] };
-
+  const usados = new Set();
+  const abas = [];
   cursos.forEach((curso) => {
-    const todas = [];
     (curso.periodos || []).forEach((p) => {
-      let horas = 0;
-      (p.disciplinas || []).forEach((d) => {
-        todas.push(d);
-        if (d.status === 'Concluída') horas += Number(d.cargaHoraria) || 0;
-        const { maxTotal, obtidaTotal, percentual } = calcAvaliacoes(d.avaliacoes, d.usarMedia);
-        const min = aprovacaoDe(d, p);
-        const situacao = maxTotal === 0 ? 'Sem notas' : percentual >= min ? 'Acima do mínimo' : 'Abaixo do mínimo';
-        resumo.linhas.push([
-          curso.nome || '', p.nome || '', d.nome || '', d.professor || '', d.status || '', Number(d.cargaHoraria) || 0, d.tipoHora || '',
-          maxTotal > 0 ? arred(obtidaTotal) : null, maxTotal > 0 ? arred(maxTotal) : null, maxTotal > 0 ? arred(percentual) : null, min, situacao, pontosTotaisDe(d),
-        ]);
-        (d.avaliacoes || []).forEach((a) => {
-          const tem = temNota(a.obtida);
-          const valor = temNota(a.max) ? Number(a.max) : null;
-          avaliacoes.linhas.push([
-            curso.nome || '', p.nome || '', d.nome || '', a.nome || '', a.data || '', a.hora || '', valor,
-            tem ? Number(a.obtida) : null, tem && valor > 0 ? arred((Number(a.obtida) / valor) * 100) : null,
-          ]);
-        });
-      });
-      const { cra, hasNotas } = calcCRA(p.disciplinas || [], p.tipoMedia, false);
-      medias.linhas.push([curso.nome || '', p.nome || '', p.tipoMedia === 'simples' ? 'Aritmética simples' : 'Ponderada pela carga horária', hasNotas ? arred(cra) : null, horas]);
+      // se passar de 31 caracteres, encurta o nome do curso e mantém o do período
+      const per = String(p.nome || 'Período').slice(0, 20);
+      const cur = String(curso.nome || 'Curso').slice(0, Math.max(3, 31 - per.length - 3));
+      abas.push(abaDoPeriodo(curso, p, nomeDeAba(`${cur} - ${per}`, usados)));
     });
-    const geral = calcCRA(todas, 'ponderada', true);
-    const horasTotal = todas.filter((d) => d.status === 'Concluída').reduce((s, d) => s + (Number(d.cargaHoraria) || 0), 0);
-    medias.linhas.push([curso.nome || '', 'GERAL (concluídas)', 'Ponderada pela carga horária', geral.hasNotas ? arred(geral.cra) : null, horasTotal]);
   });
-
-  return [resumo, avaliacoes, medias];
+  if (abas.length === 0) abas.push({ nome: 'Notas', larguras: [40], mesclar: [], linhas: [{ c: [L('Nenhum período cadastrado.', 'texto')] }] });
+  return abas;
 }
 
 // ---------- gerador de .xlsx (sem bibliotecas) ----------
@@ -107,17 +134,44 @@ function zip(arquivos) {
   return saida;
 }
 
+// Estilos (índice em cellXfs, na ordem de styles.xml abaixo)
+const ESTILOS = { texto: 0, titulo: 1, cabEsq: 2, cab: 3, pretoTexto: 4, pretoNum: 5, pretoPct: 6, num: 7, pct: 8, data: 9 };
+
 const xmlAba = (aba) => {
-  const cols = aba.colunas.map((c, i) => `<col min="${i + 1}" max="${i + 1}" width="${c.largura || 14}" customWidth="1"/>`).join('');
+  const cols = aba.larguras.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`).join('');
   const cel = (v, ref, estilo) => {
-    if (v === null || v === undefined || v === '') return '';
-    if (typeof v === 'number' && Number.isFinite(v)) return `<c r="${ref}"${estilo ? ` s="${estilo}"` : ''}><v>${v}</v></c>`;
-    return `<c r="${ref}"${estilo ? ` s="${estilo}"` : ''} t="inlineStr"><is><t xml:space="preserve">${esc(v)}</t></is></c>`;
+    const s = ` s="${estilo}"`;
+    if (v === null || v === undefined || v === '') return `<c r="${ref}"${s}/>`;
+    if (typeof v === 'number' && Number.isFinite(v)) return `<c r="${ref}"${s}><v>${v}</v></c>`;
+    return `<c r="${ref}"${s} t="inlineStr"><is><t xml:space="preserve">${esc(v)}</t></is></c>`;
   };
-  const cab = `<row r="1">${aba.colunas.map((c, i) => cel(c.titulo, `${colLetra(i)}1`, 1)).join('')}</row>`;
-  const linhas = aba.linhas.map((l, r) => `<row r="${r + 2}">${l.map((v, i) => cel(v, `${colLetra(i)}${r + 2}`, aba.colunas[i]?.num ? 2 : 0)).join('')}</row>`).join('');
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><cols>${cols}</cols><sheetData>${cab}${linhas}</sheetData></worksheet>`;
+  const linhas = aba.linhas.map((l, r) => {
+    const n = r + 1;
+    const alt = l.alt ? ` ht="${l.alt}" customHeight="1"` : '';
+    return `<row r="${n}"${alt}>${l.c.map((c, i) => cel(c.v, `${colLetra(i)}${n}`, ESTILOS[c.e] ?? 0)).join('')}</row>`;
+  }).join('');
+  const mesclar = aba.mesclar?.length ? `<mergeCells count="${aba.mesclar.length}">${aba.mesclar.map((m) => `<mergeCell ref="${m}"/>`).join('')}</mergeCells>` : '';
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0" showGridLines="0"/></sheetViews><sheetFormatPr defaultRowHeight="18"/><cols>${cols}</cols><sheetData>${linhas}</sheetData>${mesclar}</worksheet>`;
 };
+
+const STYLES_XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+  + '<numFmts count="2"><numFmt numFmtId="164" formatCode="0.00"/><numFmt numFmtId="165" formatCode="0.00&quot;%&quot;"/></numFmts>'
+  + '<fonts count="4"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="14"/><name val="Calibri"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font></fonts>'
+  + '<fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF000000"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFD9D9D9"/><bgColor indexed="64"/></patternFill></fill></fills>'
+  + '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left/><right/><top/><bottom style="thin"><color rgb="FF000000"/></bottom><diagonal/></border></borders>'
+  + '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
+  + '<cellXfs count="10">'
+  + '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment vertical="center"/></xf>' // 0 texto
+  + '<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment vertical="center"/></xf>' // 1 titulo
+  + '<xf numFmtId="0" fontId="1" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment vertical="center"/></xf>' // 2 cabEsq
+  + '<xf numFmtId="0" fontId="1" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>' // 3 cab
+  + '<xf numFmtId="0" fontId="3" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf>' // 4 pretoTexto
+  + '<xf numFmtId="164" fontId="3" fillId="2" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>' // 5 pretoNum
+  + '<xf numFmtId="165" fontId="3" fillId="2" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>' // 6 pretoPct
+  + '<xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>' // 7 num
+  + '<xf numFmtId="165" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>' // 8 pct
+  + '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>' // 9 data
+  + '</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
 
 export function gerarXlsx(abas) {
   const cab = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
@@ -126,7 +180,7 @@ export function gerarXlsx(abas) {
     { nome: '_rels/.rels', xml: `${cab}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>` },
     { nome: 'xl/workbook.xml', xml: `${cab}<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${abas.map((a, i) => `<sheet name="${esc(a.nome.slice(0, 31))}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join('')}</sheets></workbook>` },
     { nome: 'xl/_rels/workbook.xml.rels', xml: `${cab}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${abas.map((_, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join('')}<Relationship Id="rId${abas.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>` },
-    { nome: 'xl/styles.xml', xml: `${cab}<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="1"><numFmt numFmtId="164" formatCode="0.00"/></numFmts><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>` },
+    { nome: 'xl/styles.xml', xml: STYLES_XML },
     ...abas.map((a, i) => ({ nome: `xl/worksheets/sheet${i + 1}.xml`, xml: xmlAba(a) })),
   ];
   return zip(arquivos.map(({ nome, xml }) => ({ nome, dados: enc.encode(xml) })));
