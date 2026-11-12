@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import useVoltar from '../hooks/useVoltar';
 
-export default function ActivityModal({ isOpen, onClose, onSave, onDelete, atividadeEditada, categorias, coresUsadas, modoVisualizacaoInicial = false, disciplinaVinculada = null }) {
+export default function ActivityModal({ isOpen, onClose, onSave, onDelete, atividadeEditada, categorias, coresUsadas, modoVisualizacaoInicial = false, disciplinaVinculada = null, treinos = [], treinoVinculado = null, onAbrirTreino = () => {}, modelo = null }) {
   useVoltar(isOpen, onClose);
   const predefinedColors = ['#000000', '#3b82f6', '#8b5cf6', '#ec4899', '#10b981', '#f59e0b', '#64748b'];
   const paletaCores = Array.from(new Set([...predefinedColors, ...coresUsadas]));
@@ -14,6 +14,7 @@ export default function ActivityModal({ isOpen, onClose, onSave, onDelete, ativi
   const [categoria, setCategoria] = useState(categorias[0] || 'Treinos');
   const [novaCategoria, setNovaCategoria] = useState('');
   const [detalhes, setDetalhes] = useState('');
+  const [treinoId, setTreinoId] = useState('');
   const [erro, setErro] = useState('');
   const [confirmarExclusao, setConfirmarExclusao] = useState(false);
 
@@ -29,18 +30,22 @@ export default function ActivityModal({ isOpen, onClose, onSave, onDelete, ativi
         setCorSelecionada(atividadeEditada.cor);
         setCategoria(categorias.includes(atividadeEditada.categoria) ? atividadeEditada.categoria : 'Outros');
         setDetalhes(atividadeEditada.detalhes || '');
+        setTreinoId(atividadeEditada.treinoId || '');
       } else {
         setNome('');
         setApelido('');
         setHorarios([{ dia: 'SEG', inicio: '', fim: '' }]);
         setCorSelecionada(predefinedColors[1]);
-        setCategoria(categorias[0] || 'Treinos');
+        // atividade nova; "modelo" vem de "Agendar na grade" (treino já escolhido, nome e categoria preenchidos)
+        setNome(modelo?.nome || '');
+        setCategoria(modelo?.categoria && categorias.includes(modelo.categoria) ? modelo.categoria : (categorias[0] || 'Treinos'));
         setNovaCategoria('');
-        setDetalhes('');
+        setDetalhes(modelo?.detalhes || '');
+        setTreinoId(modelo?.treinoId || '');
         setIsEditMode(true);
       }
     }
-  }, [isOpen, atividadeEditada, categorias, modoVisualizacaoInicial]);
+  }, [isOpen, atividadeEditada, categorias, modoVisualizacaoInicial, modelo]);
 
   if (!isOpen) return null;
 
@@ -66,7 +71,8 @@ export default function ActivityModal({ isOpen, onClose, onSave, onDelete, ativi
       horarios,
       cor: corSelecionada,
       categoria: categoriaFinal,
-      detalhes
+      detalhes,
+      ...(treinoId ? { treinoId } : {})
     };
 
     onSave(atividade);
@@ -139,6 +145,19 @@ export default function ActivityModal({ isOpen, onClose, onSave, onDelete, ativi
                     ) : <span className="text-zinc-500">Ainda sem notas lançadas</span>}
                   </div>
                   <div className="text-xs text-zinc-500 mt-0.5">Passa com {disciplinaVinculada.aprovacao}% de {disciplinaVinculada.pontosTotais} pontos</div>
+                </div>
+              </div>
+            )}
+            {treinoVinculado && (
+              <div>
+                <span className="text-xs text-zinc-400 block mb-1">Treino vinculado</span>
+                <div className="bg-zinc-950 p-3 rounded text-sm text-zinc-300">
+                  <div className="font-bold text-white">{treinoVinculado.nome}</div>
+                  <div className="text-xs text-zinc-500 mt-0.5">{treinoVinculado.exercicios} exercícios · {treinoVinculado.series} séries</div>
+                  <div className="flex gap-2 mt-2">
+                    <button type="button" onClick={() => onAbrirTreino(treinoVinculado.id, false)} className="text-xs px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 rounded font-bold">Ver treino</button>
+                    <button type="button" onClick={() => onAbrirTreino(treinoVinculado.id, true)} className="text-xs px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded font-bold">Registrar sessão</button>
+                  </div>
                 </div>
               </div>
             )}
@@ -216,6 +235,18 @@ export default function ActivityModal({ isOpen, onClose, onSave, onDelete, ativi
                 <input type="text" placeholder="Nome da nova categoria" value={novaCategoria} onChange={(e) => setNovaCategoria(e.target.value)} className="w-full bg-zinc-950 border border-zinc-500 rounded p-2 focus:outline-none text-zinc-100" />
               )}
             </div>
+
+            {(treinos.length > 0 || treinoId) && (
+              <div>
+                <label className="block text-sm mb-1 text-zinc-400">Treino vinculado (opcional)</label>
+                <select value={treinoId} onChange={(e) => { const v = e.target.value; setTreinoId(v); const t = treinos.find((x) => x.id === v); if (t && !nome.trim()) setNome(t.nome); }} className="w-full bg-zinc-950 border border-zinc-700 rounded p-2 outline-none">
+                  <option value="">Nenhum</option>
+                  {treinos.map((t) => <option key={t.id} value={t.id}>{t.nome}</option>)}
+                  {treinoId && !treinos.some((t) => t.id === treinoId) && <option value={treinoId}>(treino excluído)</option>}
+                </select>
+                <p className="text-[11px] text-zinc-500 mt-1">O dia e o horário são os desta atividade. Ao tocar nela na grade você abre o treino e registra a sessão.</p>
+              </div>
+            )}
 
             <div>
               <label className="block text-sm mb-1 text-zinc-400">Detalhes</label>

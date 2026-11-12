@@ -3,6 +3,8 @@ import AgendaGoogle from '../components/AgendaGoogle';
 import MedidasCorporais from '../components/MedidasCorporais';
 import ExerciciosBiblioteca from '../components/ExerciciosBiblioteca';
 import TreinosLista from '../components/TreinosLista';
+import { treinoDaAtividade, modeloAtividadeDoTreino } from '../utils/treinoAtividade';
+import { resumoTreino } from '../utils/treinoModelo';
 import MetasMenu from '../components/MetasMenu';
 import useVoltar from '../hooks/useVoltar';
 import { linhasDe, distribuirMetas, moverMeta, posicaoNovaMeta } from '../utils/metasLayout';
@@ -55,6 +57,8 @@ export default function Dashboard() {
   const sync = useGoogleAutoSync({ user, atividades, tarefas, ativo: config.integracoes.googleAutoSync });
   
   const [atividadeEditando, setAtividadeEditando] = useState(null);
+  const [modeloAtividade, setModeloAtividade] = useState(null); // pré-preenchimento de "Agendar na grade"
+  const [treinoAbrir, setTreinoAbrir] = useState(null); // { id, registrar } pedido para abrir um treino na página Treinos
   const [metaEditando, setMetaEditando] = useState(null);
   const [modoVisualizacao, setModoVisualizacao] = useState(true);
 
@@ -271,12 +275,33 @@ export default function Dashboard() {
   }, [metas, currentTime]);
 
   const abrirNovaAtividade = () => {
+    setModeloAtividade(null);
     setAtividadeEditando(null);
     setModoVisualizacao(false);
     setIsModalOpen(true);
   };
 
+  // "Agendar na grade": abre o formulário de atividade já com o treino escolhido
+  const agendarTreino = (treino) => {
+    setModeloAtividade(modeloAtividadeDoTreino(treino));
+    setAtividadeEditando(null);
+    setModoVisualizacao(false);
+    setIsModalOpen(true);
+  };
+
+  // da atividade na grade para o treino (e, se pedido, direto para o registro da sessão)
+  const abrirTreino = (id, registrar) => {
+    if (!paginasMenu.includes('Treinos') || config.blocos.treinos === false) {
+      notificar('Ative a página Treinos e o bloco "Meus treinos" em Configurações para abrir o treino.', 'info');
+      return;
+    }
+    setIsModalOpen(false);
+    setTreinoAbrir({ id, registrar: !!registrar });
+    setActivePage('Treinos');
+  };
+
   const abrirDetalhesAtividade = (atv) => {
+    setModeloAtividade(null);
     setAtividadeEditando(atv);
     setModoVisualizacao(true);
     setIsModalOpen(true);
@@ -453,7 +478,7 @@ export default function Dashboard() {
     ),
     cursos: secaoCursos,
     medidas: <MedidasCorporais user={user} medidas={medidas} setMedidas={setMedidas} sexo={config.treino.sexo} onSexo={(v) => atualizarConfig({ treino: { sexo: v } })} />,
-    treinos: <TreinosLista user={user} treinos={treinos} setTreinos={setTreinos} sessoes={sessoes} setSessoes={setSessoes} config={config} atualizarConfig={atualizarConfig} />,
+    treinos: <TreinosLista user={user} treinos={treinos} setTreinos={setTreinos} sessoes={sessoes} setSessoes={setSessoes} atividades={atividades} onAgendar={agendarTreino} abrir={treinoAbrir} onAbriu={() => setTreinoAbrir(null)} config={config} atualizarConfig={atualizarConfig} />,
     exercicios: (
       <div className="mt-2 w-full px-2 sm:px-0">
         <h2 className="text-base font-bold text-zinc-100 mb-2">Biblioteca de exercícios</h2>
@@ -537,6 +562,13 @@ export default function Dashboard() {
         categorias={categoriasTodas}
         coresUsadas={coresUsadas}
         modoVisualizacaoInicial={modoVisualizacao}
+        treinos={treinos}
+        modelo={modeloAtividade}
+        treinoVinculado={(() => {
+          const t = atividadeEditando ? treinoDaAtividade(treinos, atividadeEditando) : null;
+          return t ? { id: t.id, nome: t.nome, ...resumoTreino(t) } : null;
+        })()}
+        onAbrirTreino={abrirTreino}
         disciplinaVinculada={(() => {
           const v = atividadeEditando ? disciplinaDaAtividade(cursos, atividadeEditando.id) : null;
           return v ? { nome: v.disc.nome, ...resumoDisciplina(v.disc, v.periodo) } : null;

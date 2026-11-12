@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { doc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { salvarDoc, apagarDoc } from '../services/db';
@@ -8,6 +8,7 @@ import ConfirmModal from './ConfirmModal';
 import AvatarMuscular from './AvatarMuscular';
 import { EditorSessao, HistoricoTreino } from './SessoesTreino';
 import { hojeLocalStr } from '../utils/date';
+import { horariosDoTreino, proximoHorarioDoTreino, rotuloProximo } from '../utils/treinoAtividade';
 import { sessaoInicial, sessaoParaForm, historicoDoTreino } from '../utils/sessoes';
 import { EXERCICIOS, CATEGORIAS, MUSCULOS } from '../data/exercicios';
 import { novoItem, validarTreino, resumoTreino, intensidadesDoTreino, musculosMaisTrabalhados, moverItem, ordenarTreinos } from '../utils/treinoModelo';
@@ -115,12 +116,14 @@ function EditorTreino({ inicial, config, onClose, onSalvar }) {
 }
 
 // ---------- detalhe: avatar grande, músculos mais trabalhados e exercícios ----------
-function DetalheTreino({ treino, sessoes, config, atualizarConfig, onClose, onEditar, onExcluir, onRegistrar, onEditarSessao, onExcluirSessao }) {
+function DetalheTreino({ treino, sessoes, atividades, onAgendar, config, atualizarConfig, onClose, onEditar, onExcluir, onRegistrar, onEditarSessao, onExcluirSessao }) {
   useVoltar(true, onClose);
   const { sexo, cor, modo } = config.treino;
   const intensidades = intensidadesDoTreino(treino, achar, modo);
   const top = musculosMaisTrabalhados(intensidades, 5);
   const { exercicios, series } = resumoTreino(treino);
+  const horarios = horariosDoTreino(atividades, treino.id);
+  const proximo = proximoHorarioDoTreino(atividades, treino.id, new Date());
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-3" onClick={onClose}>
       <div role="dialog" aria-modal="true" aria-label={treino.nome} className="bg-zinc-900 text-zinc-100 rounded-xl w-full max-w-md p-4 shadow-2xl border border-zinc-800 max-h-[92vh] overflow-y-auto space-y-3" onClick={(e) => e.stopPropagation()}>
@@ -163,6 +166,19 @@ function DetalheTreino({ treino, sessoes, config, atualizarConfig, onClose, onEd
           })}
         </ol>
 
+        <div className="bg-zinc-950/50 border border-zinc-800 rounded-lg px-2.5 py-2 flex items-start justify-between gap-2">
+          <div className="min-w-0 text-xs">
+            <div className="text-zinc-400 mb-0.5">Na grade horária</div>
+            {horarios.length === 0 ? <div className="text-zinc-500">Ainda não está agendado.</div> : (
+              <>
+                <div className="text-zinc-100">{horarios.map((h) => `${h.dia} ${h.inicio}`).join(' · ')}</div>
+                {proximo && <div className="text-zinc-500">Próximo: {rotuloProximo(proximo)}</div>}
+              </>
+            )}
+          </div>
+          <button onClick={onAgendar} className="shrink-0 text-xs px-2.5 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 rounded font-bold">{horarios.length === 0 ? 'Agendar na grade' : 'Agendar outro'}</button>
+        </div>
+
         <button onClick={onRegistrar} className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-bold transition-colors">Registrar sessão</button>
 
         <div className="space-y-2">
@@ -183,7 +199,7 @@ function DetalheTreino({ treino, sessoes, config, atualizarConfig, onClose, onEd
 }
 
 // ---------- bloco principal ----------
-export default function TreinosLista({ user, treinos, setTreinos, sessoes = [], setSessoes = () => {}, config, atualizarConfig }) {
+export default function TreinosLista({ user, treinos, setTreinos, sessoes = [], setSessoes = () => {}, atividades = [], onAgendar = () => {}, abrir = null, onAbriu = () => {}, config, atualizarConfig }) {
   const [editor, setEditor] = useState(null);
   const [detalheId, setDetalheId] = useState(null);
   const [excluir, setExcluir] = useState(null);
@@ -225,6 +241,20 @@ export default function TreinosLista({ user, treinos, setTreinos, sessoes = [], 
 
   const registrar = (t) => setEditorSessao(sessaoInicial(t, historicoDoTreino(sessoes, t.id)[0], hojeLocalStr()));
 
+  // pedido vindo da grade: abre o treino (ou já o registro da sessão)
+  useEffect(() => {
+    if (!abrir) return;
+    const t = treinos.find((x) => x.id === abrir.id);
+    if (!t) {
+      if (treinos.length > 0) { notificar('Esse treino não existe mais.', 'info'); onAbriu(); }
+      return; // ainda carregando
+    }
+    setDetalheId(t.id);
+    if (abrir.registrar) setEditorSessao(sessaoInicial(t, historicoDoTreino(sessoes, t.id)[0], hojeLocalStr()));
+    onAbriu();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [abrir, treinos]);
+
   const apagar = async (t) => {
     let ok = true;
     if (user) ok = await apagarDoc(doc(db, 'users', user.uid, 'treinos', t.id));
@@ -265,7 +295,7 @@ export default function TreinosLista({ user, treinos, setTreinos, sessoes = [], 
       )}
 
       {detalhe && !editor && (
-        <DetalheTreino treino={detalhe} sessoes={historicoDoTreino(sessoes, detalhe.id)} config={config} atualizarConfig={atualizarConfig} onClose={() => setDetalheId(null)}
+        <DetalheTreino treino={detalhe} sessoes={historicoDoTreino(sessoes, detalhe.id)} atividades={atividades} onAgendar={() => onAgendar(detalhe)} config={config} atualizarConfig={atualizarConfig} onClose={() => setDetalheId(null)}
           onEditar={() => setEditor(detalhe)} onExcluir={() => setExcluir(detalhe)}
           onRegistrar={() => registrar(detalhe)} onEditarSessao={(x) => setEditorSessao(sessaoParaForm(x))} onExcluirSessao={(x) => setExcluirSessao(x)} />
       )}

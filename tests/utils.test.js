@@ -807,3 +807,44 @@ test('sessão: histórico do treino (mais recente primeiro) e evolução do exer
   assert.equal(variacaoEvolucao([ev[0]]), null);
   assert.deepEqual(evolucaoExercicio(sessoes, 'nao-existe'), []);
 });
+
+// ---------- treino ligado à atividade da grade ----------
+import { treinoDaAtividade, modeloAtividadeDoTreino, horariosDoTreino, proximoHorarioDoTreino, rotuloProximo } from '../src/utils/treinoAtividade.js';
+
+const atvsTreino = [
+  { id: 'a1', nome: 'Treino A', treinoId: 't1', horarios: [{ dia: 'QUA', inicio: '19:00', fim: '20:00' }, { dia: 'SEG', inicio: '07:00', fim: '08:00' }] },
+  { id: 'a2', nome: 'Outro', horarios: [{ dia: 'TER', inicio: '10:00', fim: '11:00' }] },
+  { id: 'a3', nome: 'Treino A (sábado)', treinoId: 't1', horarios: [{ dia: 'SÁB', inicio: '09:00', fim: '10:00' }] },
+];
+
+test('treino x atividade: encontra o treino ligado e monta o modelo da atividade nova', () => {
+  const ts = [{ id: 't1', nome: 'A', itens: [{}, {}] }];
+  assert.equal(treinoDaAtividade(ts, atvsTreino[0]).id, 't1');
+  assert.equal(treinoDaAtividade(ts, atvsTreino[1]), null);
+  assert.equal(treinoDaAtividade(ts, { treinoId: 'apagado' }), null);
+  assert.deepEqual(modeloAtividadeDoTreino(ts[0]), { nome: 'A', categoria: 'Treinos', treinoId: 't1', detalhes: '2 exercícios' });
+  assert.equal(modeloAtividadeDoTreino({ id: 'x', nome: 'B', itens: [{}] }).detalhes, '1 exercício');
+});
+
+test('treino x atividade: horários do treino em ordem de semana; só as atividades ligadas a ele', () => {
+  assert.deepEqual(horariosDoTreino(atvsTreino, 't1').map((h) => `${h.dia} ${h.inicio}`), ['SEG 07:00', 'QUA 19:00', 'SÁB 09:00']);
+  assert.deepEqual(horariosDoTreino(atvsTreino, 'nenhum'), []);
+});
+
+test('treino x atividade: próximo horário (hoje se ainda não começou, senão o seguinte)', () => {
+  const quarta1800 = new Date(2026, 10, 11, 18, 0); // 11/11/2026 é quarta-feira
+  assert.equal(quarta1800.getDay(), 3);
+  const p = proximoHorarioDoTreino(atvsTreino, 't1', quarta1800);
+  assert.deepEqual([p.dia, p.inicio, p.emDias], ['QUA', '19:00', 0]);
+  assert.equal(rotuloProximo(p), 'hoje às 19:00');
+  const quarta2000 = new Date(2026, 10, 11, 20, 0);
+  const q = proximoHorarioDoTreino(atvsTreino, 't1', quarta2000);
+  assert.deepEqual([q.dia, q.emDias], ['SÁB', 3]);
+  assert.equal(rotuloProximo(q), 'SÁB às 09:00');
+  const domingo = new Date(2026, 10, 15, 12, 0);
+  const r = proximoHorarioDoTreino(atvsTreino, 't1', domingo);
+  assert.deepEqual([r.dia, r.emDias], ['SEG', 1]);
+  assert.equal(rotuloProximo(r), 'amanhã às 07:00');
+  assert.equal(proximoHorarioDoTreino(atvsTreino, 'nenhum', domingo), null);
+  assert.equal(rotuloProximo(null), '');
+});
