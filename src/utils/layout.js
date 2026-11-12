@@ -1,5 +1,5 @@
 // Organização das páginas do menu e dos blocos dentro delas (funções puras, testadas em tests/).
-// IDs de página: 'Grade' (Rotina), 'Notas' e 'Treinos'. IDs de bloco: 'grade', 'metas', 'agenda', 'cursos', 'medidas', 'exercicios'.
+// IDs de página: 'Grade' (Rotina), 'Notas' e 'Treinos'. IDs de bloco: 'grade', 'metas', 'agenda', 'cursos', 'medidas', 'exercicios', 'treinos'.
 
 export const PAGINAS = {
   Grade: { rotulo: 'Rotina' },
@@ -12,13 +12,14 @@ export const SECOES = {
   metas: { rotulo: 'Metas diárias', origem: 'Grade' },
   agenda: { rotulo: 'Agenda (Google)', origem: 'Grade' },
   cursos: { rotulo: 'Cursos', origem: 'Notas' },
+  treinos: { rotulo: 'Meus treinos', origem: 'Treinos' },
   exercicios: { rotulo: 'Biblioteca de exercícios', origem: 'Treinos' },
   medidas: { rotulo: 'Medidas corporais', origem: 'Treinos' },
 };
 
 export const LAYOUT_PADRAO = {
   paginas: ['Grade', 'Notas', 'Treinos'],
-  secoes: { Grade: ['grade', 'metas', 'agenda'], Notas: ['cursos'], Treinos: ['exercicios', 'medidas'] },
+  secoes: { Grade: ['grade', 'metas', 'agenda'], Notas: ['cursos'], Treinos: ['treinos', 'exercicios', 'medidas'] },
 };
 
 const unico = (lista) => Array.from(new Set(lista));
@@ -76,6 +77,7 @@ export function secaoAtiva(config, id, googleOk = true) {
   if (id === 'cursos') return b.cursos !== false;
   if (id === 'medidas') return b.medidas !== false;
   if (id === 'exercicios') return b.exercicios !== false;
+  if (id === 'treinos') return b.treinos !== false;
   return false;
 }
 

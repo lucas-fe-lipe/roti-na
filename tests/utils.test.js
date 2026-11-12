@@ -599,7 +599,8 @@ test('biblioteca: todo músculo dos exercícios existe no desenho e tem nome; id
 
 test('layout: biblioteca de exercícios fica na página Treinos por padrão e liga/desliga', () => {
   const l = normalizarLayout(null);
-  assert.ok(l.secoes.Treinos.includes('exercicios'));
+  assert.deepEqual(l.secoes.Treinos, ['treinos', 'exercicios', 'medidas']);
+  assert.equal(secoesAtivasDaPagina({ blocos: { treinos: false } }, 'Treinos', false).includes('treinos'), false);
   assert.equal(secoesAtivasDaPagina({ blocos: { exercicios: false, medidas: true } }, 'Treinos', false).includes('exercicios'), false);
 });
 
@@ -693,4 +694,50 @@ test('voltar: depois de fechar uma camada, a próxima também é capturada', () 
   win.history.back();
   assert.equal(n, 11);
   assert.equal(win.saiu, false);
+});
+
+// ---------- treinos montados (modelos) ----------
+import { novoItem, validarTreino, resumoTreino, intensidadesDoTreino, musculosMaisTrabalhados, moverItem, ordenarTreinos } from '../src/utils/treinoModelo.js';
+
+test('treino: validação de nome, exercícios, séries, repetições e carga', () => {
+  const it = (o = {}) => ({ id: 'i1', exercicioId: 'supino-reto', series: '4', reps: '8-12', carga: '60,5', ...o });
+  const ok = validarTreino({ nome: '  Peito  ', itens: [it()] });
+  assert.equal(ok.ok, true);
+  assert.deepEqual(ok.treino, { nome: 'Peito', itens: [{ id: 'i1', exercicioId: 'supino-reto', series: 4, reps: '8-12', carga: 60.5 }] });
+  assert.equal(validarTreino({ nome: '', itens: [it()] }).ok, false);
+  assert.equal(validarTreino({ nome: 'X', itens: [] }).ok, false);
+  assert.equal(validarTreino({ nome: 'X', itens: [it({ series: '0' })] }).ok, false);
+  assert.equal(validarTreino({ nome: 'X', itens: [it({ series: '21' })] }).ok, false);
+  assert.equal(validarTreino({ nome: 'X', itens: [it({ reps: 'abc' })] }).ok, false);
+  assert.equal(validarTreino({ nome: 'X', itens: [it({ carga: '-5' })] }).ok, false);
+  assert.equal(validarTreino({ nome: 'X', itens: [it({ carga: '' })] }).treino.itens[0].carga, null);
+  assert.equal(validarTreino({ nome: 'X', itens: [it()] }, () => false).ok, false); // exercício removido da biblioteca
+  assert.equal(validarTreino({ nome: 'x'.repeat(61), itens: [it()] }).ok, false);
+});
+
+test('treino: novoItem gera ids diferentes; resumo soma séries', () => {
+  assert.notEqual(novoItem('a').id, novoItem('a').id);
+  assert.deepEqual(resumoTreino({ itens: [{ series: 4 }, { series: 3 }] }), { exercicios: 2, series: 7 });
+  assert.deepEqual(resumoTreino(undefined), { exercicios: 0, series: 0 });
+});
+
+test('treino: intensidade dos músculos pelo treino todo e ranking', () => {
+  const achar = (id) => EXERCICIOS.find((e) => e.id === id);
+  const t = { itens: [{ exercicioId: 'supino-reto', series: 4 }, { exercicioId: 'supino-inclinado', series: 4 }] };
+  const inten = intensidadesDoTreino(t, achar);
+  assert.ok(Math.abs(inten.chest - 0.8) < 1e-9);
+  assert.ok(inten.deltoids > 0 && inten.triceps > 0);
+  const rank = musculosMaisTrabalhados(inten, 2);
+  assert.equal(rank[0][0], 'chest');
+  assert.equal(rank.length, 2);
+  assert.equal(intensidadesDoTreino(t, achar, 'relativo').chest, 1);
+});
+
+test('treino: mover item e ordenar lista', () => {
+  const l = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+  assert.deepEqual(moverItem(l, 'b', -1).map((x) => x.id), ['b', 'a', 'c']);
+  assert.deepEqual(moverItem(l, 'b', 1).map((x) => x.id), ['a', 'c', 'b']);
+  assert.deepEqual(moverItem(l, 'a', -1), l); // já é o primeiro
+  assert.deepEqual(moverItem(l, 'z', 1), l);
+  assert.deepEqual(ordenarTreinos([{ nome: 'A', criadoEm: '2026-01-01' }, { nome: 'B', criadoEm: '2026-02-01' }, { nome: 'C' }]).map((t) => t.nome), ['B', 'A', 'C']);
 });

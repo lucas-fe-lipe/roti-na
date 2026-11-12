@@ -19,6 +19,7 @@ export default function useDados(user, activePage) {
   const [tarefas, setTarefas] = useState([]);
   const [cursos, setCursos] = useState([]);
   const [medidas, setMedidas] = useState([]);
+  const [treinos, setTreinos] = useState([]);
 
   useEffect(() => {
     if (!user) {
@@ -27,6 +28,7 @@ export default function useDados(user, activePage) {
       const mSalvas = localStorage.getItem('local_metas');
       setCursos(lerLista(localStorage.getItem('local_cursos') || '[]'));
       setMedidas(lerLista(localStorage.getItem('local_medidas') || '[]'));
+      setTreinos(lerLista(localStorage.getItem('local_treinos') || '[]'));
       if (tSalvas) setTarefas(lerLista(tSalvas));
       if (aSalvas) setAtividades(lerLista(aSalvas));
       if (mSalvas) setMetas(lerLista(mSalvas));
@@ -39,7 +41,7 @@ export default function useDados(user, activePage) {
         (snap) => setter(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
         avisarErroLeitura
       );
-    const cancelar = [ouvir('atividades', setAtividades), ouvir('metas', setMetas), ouvir('tarefas', setTarefas), ouvir('cursos', setCursos), ouvir('medidas', setMedidas)];
+    const cancelar = [ouvir('atividades', setAtividades), ouvir('metas', setMetas), ouvir('tarefas', setTarefas), ouvir('cursos', setCursos), ouvir('medidas', setMedidas), ouvir('treinos', setTreinos)];
     return () => cancelar.forEach((f) => f());
   }, [user]);
 
@@ -51,5 +53,5 @@ export default function useDados(user, activePage) {
     setCursos(lerLista(localStorage.getItem('local_cursos') || '[]'));
   }, [activePage, user]);
 
-  return { atividades, setAtividades, metas, setMetas, tarefas, setTarefas, cursos, medidas, setMedidas };
+  return { atividades, setAtividades, metas, setMetas, tarefas, setTarefas, cursos, medidas, setMedidas, treinos, setTreinos };
 }

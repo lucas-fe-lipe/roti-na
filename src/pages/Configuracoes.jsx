@@ -89,7 +89,7 @@ function OrganizarPaginas({ config, atualizarConfig, googleOk }) {
     atualizarConfig(parcial);
   };
 
-  const FLAG_SECAO = { grade: 'grade', metas: 'metas', agenda: 'agendaGoogle', cursos: 'cursos', medidas: 'medidas', exercicios: 'exercicios' };
+  const FLAG_SECAO = { grade: 'grade', metas: 'metas', agenda: 'agendaGoogle', cursos: 'cursos', medidas: 'medidas', exercicios: 'exercicios', treinos: 'treinos' };
   const FLAG_PAGINA = { Grade: 'grade', Notas: 'notas', Treinos: 'treinos' };
 
   const calcularAlvo = (tipo, id, x, y) => {

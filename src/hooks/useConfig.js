@@ -7,11 +7,11 @@ import { normalizarLayout, LAYOUT_PADRAO } from '../utils/layout';
 // Valores padrão: tudo ligado, como o app era antes das configurações existirem.
 export const CONFIG_PADRAO = {
   paginas: { grade: true, notas: true, treinos: true },
-  blocos: { grade: true, metas: true, cursos: true, medidas: true, exercicios: true, linhaAgora: true, agendaGoogle: false },
+  blocos: { grade: true, metas: true, cursos: true, medidas: true, exercicios: true, treinos: true, linhaAgora: true, agendaGoogle: false },
   layout: LAYOUT_PADRAO, // ordem das páginas e dos blocos dentro delas
   integracoes: { googleAutoSync: false },
   grade: { pxPorHora: 22 }, // altura da grade horária
-  treino: { sexo: 'm', cor: '#f97316' }, // avatar dos músculos
+  treino: { sexo: 'm', cor: '#f97316', modo: 'absoluto' }, // avatar dos músculos
   metas: { linhas: 1 }, // metas diárias em 1 ou 2 linhas
   admin: { ativo: false }, // modo administrador (só vale para a conta autorizada)
   agendaGoogle: { email: '', incluirRotiNa: true, extras: '', minimizada: false }, // fontes do bloco "Google Agenda na tela"
