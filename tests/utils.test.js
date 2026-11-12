@@ -602,3 +602,95 @@ test('layout: biblioteca de exercícios fica na página Treinos por padrão e li
   assert.ok(l.secoes.Treinos.includes('exercicios'));
   assert.equal(secoesAtivasDaPagina({ blocos: { exercicios: false, medidas: true } }, 'Treinos', false).includes('exercicios'), false);
 });
+
+// ---------- metas diárias: ordem e linhas ----------
+import { linhasDe, ordenarMetas, distribuirMetas, moverMeta, posicaoNovaMeta } from '../src/utils/metasLayout.js';
+import { criarVoltar } from '../src/utils/voltar.js';
+
+const M = (id, extra = {}) => ({ id, titulo: id, meta: 1, ...extra });
+
+test('metas: linhasDe aceita só 1 ou 2; metas antigas (sem ordem) mantêm a ordem em que vieram', () => {
+  assert.equal(linhasDe({}), 1);
+  assert.equal(linhasDe({ metas: { linhas: 2 } }), 2);
+  assert.equal(linhasDe({ metas: { linhas: 5 } }), 1);
+  assert.deepEqual(ordenarMetas([M('a'), M('b'), M('c', { ordem: 0 })]).map((m) => m.id), ['c', 'a', 'b']);
+});
+
+test('metas: com 1 linha tudo fica na primeira; com 2, separa por "linha" (padrão 1)', () => {
+  const ms = [M('a', { ordem: 0, linha: 2 }), M('b', { ordem: 1 }), M('c', { ordem: 2, linha: 2 })];
+  assert.deepEqual(distribuirMetas(ms, 1).map((l) => l.map((m) => m.id)), [['a', 'b', 'c'], []]);
+  assert.deepEqual(distribuirMetas(ms, 2).map((l) => l.map((m) => m.id)), [['b'], ['a', 'c']]);
+});
+
+test('metas: mover dentro da mesma linha e para a outra linha; devolve só o que mudou', () => {
+  const ms = [M('a', { ordem: 0, linha: 1 }), M('b', { ordem: 1, linha: 1 }), M('c', { ordem: 2, linha: 2 })];
+  assert.deepEqual(moverMeta(ms, 2, 'b', 1, 0), [{ id: 'b', ordem: 0, linha: 1 }, { id: 'a', ordem: 1, linha: 1 }]);
+  const noutra = moverMeta(ms, 2, 'a', 2, 0);
+  assert.deepEqual(noutra.map((x) => x.id).sort(), ['a', 'b', 'c'].filter((id) => noutra.some((x) => x.id === id)));
+  assert.equal(noutra.find((x) => x.id === 'a').linha, 2);
+  assert.equal(noutra.find((x) => x.id === 'a').ordem, 1);
+  assert.equal(moverMeta(ms, 2, 'nao-existe', 1, 0).length, 0);
+  // com 1 linha não grava "linha"
+  assert.ok(moverMeta([M('a', { ordem: 0 }), M('b', { ordem: 1 })], 1, 'b', 1, 0).every((x) => !('linha' in x)));
+});
+
+test('metas: meta nova vai para o fim (e para a linha 2 quando há duas)', () => {
+  assert.deepEqual(posicaoNovaMeta([], 1), { ordem: 0 });
+  assert.deepEqual(posicaoNovaMeta([M('a', { ordem: 0 }), M('b', { ordem: 4 })], 2), { ordem: 5, linha: 2 });
+  assert.deepEqual(posicaoNovaMeta([M('a'), M('b')], 1), { ordem: 2 }); // antigas, sem ordem
+});
+
+// ---------- botão voltar do celular ----------
+function janelaFalsa() {
+  const h = [{ state: null }];
+  let i = 0;
+  const ouvintes = [];
+  const win = {
+    saiu: false,
+    get tamanho() { return h.length; },
+    history: {
+      get state() { return h[i].state; },
+      pushState(s) { h.splice(i + 1); h.push({ state: s }); i += 1; },
+      back() { if (i > 0) { i -= 1; ouvintes.forEach((f) => f({ state: h[i].state })); } else win.saiu = true; },
+    },
+    addEventListener: (_t, f) => ouvintes.push(f),
+  };
+  return win;
+}
+
+test('voltar: fecha a camada do topo, uma por vez, e não sai do app', () => {
+  const win = janelaFalsa();
+  const v = criarVoltar(win);
+  const fechadas = [];
+  v.registrar(() => fechadas.push('pagina'));
+  v.registrar(() => fechadas.push('popup'));
+  assert.equal(win.tamanho, 2); // uma entrada extra, não uma por camada
+  win.history.back();
+  assert.deepEqual(fechadas, ['popup']);
+  assert.equal(win.saiu, false);
+  win.history.back();
+  assert.deepEqual(fechadas, ['popup', 'pagina']);
+  assert.equal(win.saiu, false);
+  assert.equal(v.abertas(), 0);
+});
+
+test('voltar: sem camadas abertas (ou fechadas pelo botão do app), voltar sai do app', () => {
+  const win = janelaFalsa();
+  const v = criarVoltar(win);
+  const remover = v.registrar(() => { throw new Error('não deveria fechar'); });
+  remover(); // o pop-up foi fechado pelo próprio botão
+  win.history.back();
+  assert.equal(win.saiu, true);
+});
+
+test('voltar: depois de fechar uma camada, a próxima também é capturada', () => {
+  const win = janelaFalsa();
+  const v = criarVoltar(win);
+  let n = 0;
+  v.registrar(() => { n += 1; });
+  win.history.back();
+  v.registrar(() => { n += 10; });
+  win.history.back();
+  assert.equal(n, 11);
+  assert.equal(win.saiu, false);
+});

@@ -1,5 +1,7 @@
+import useVoltar from '../hooks/useVoltar';
 // Confirmação no padrão visual do app (substitui window.confirm).
 export default function ConfirmModal({ aberto, titulo, mensagem, rotuloConfirmar = 'Excluir', onConfirmar, onCancelar }) {
+  useVoltar(aberto, onCancelar);
   if (!aberto) return null;
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[55] p-4" onClick={onCancelar}>

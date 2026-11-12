@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import useVoltar from '../hooks/useVoltar';
 import { collection, doc, onSnapshot } from 'firebase/firestore';
 import { salvarDoc, apagarDoc, avisarErroLeitura } from '../services/db';
 import { db } from '../services/firebase';
@@ -509,6 +510,7 @@ function BarraNotas({ percentual, distribuido = 0, minimo }) {
 }
 
 function ModalCurso({ cursoInicial, onClose, onSave, onDelete }) {
+  useVoltar(true, onClose);
   const [curso, setCurso] = useState(cursoInicial || { nome: '', instituicao: '', dataInicio: '', dataFim: '', tiposHoras: [{ id: Date.now().toString(), nome: 'Obrigatória', quantidade: '' }] });
   const handleTipoHoraChange = (id, field, value) => setCurso(p => ({ ...p, tiposHoras: p.tiposHoras.map(t => t.id === id ? { ...t, [field]: value } : t) }));
 
@@ -548,6 +550,7 @@ function ModalCurso({ cursoInicial, onClose, onSave, onDelete }) {
 }
 
 function ModalPeriodo({ periodoInicial, onClose, onSave, onDelete }) {
+  useVoltar(true, onClose);
   const [periodo, setPeriodo] = useState(periodoInicial || { nome: '', dataInicio: '', dataFim: '', tipoMedia: 'ponderada' });
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-3 sm:p-4">
@@ -606,6 +609,7 @@ const limparAvaliacao = (av) => {
 };
 
 function ModalDisciplina({ disciplinaInicial, tiposHoras, atividades, onClose, onSave, onDelete }) {
+  useVoltar(true, onClose);
   const [disc, setDisc] = useState(
     disciplinaInicial
       ? { ...disciplinaInicial, avaliacoes: disciplinaInicial.avaliacoes || [] }
@@ -679,6 +683,7 @@ function ModalDisciplina({ disciplinaInicial, tiposHoras, atividades, onClose, o
 
 // Pop-up que abre ao tocar numa disciplina: dados compactos + avaliações (adicionar/editar/dar nota).
 function ModalDisciplinaResumo({ disciplina, statusClasse, aprovacaoInicial = APROVACAO_PADRAO, onClose, onSalvarAvaliacoes, onEditar }) {
+  useVoltar(true, onClose);
   const original = (disciplina.avaliacoes || []).map(limparAvaliacao);
   const [avaliacoes, setAvaliacoes] = useState(original);
   const [draggedIndex, setDraggedIndex] = useState(null);
@@ -797,6 +802,7 @@ function ModalDisciplinaResumo({ disciplina, statusClasse, aprovacaoInicial = AP
 }
 
 function ModalAvaliacoesGlobal({ cursos, tarefas, atividades = [], vermelhas = {}, onClose, onAtualizar }) {
+  useVoltar(true, onClose);
   const [editando, setEditando] = useState(null); // avaliação aberta no pop-up de edição
   const [minCorrecao, setMinCorrecao] = useState(true);
   const [minProximas, setMinProximas] = useState(false);
@@ -983,6 +989,7 @@ function ModalAvaliacoesGlobal({ cursos, tarefas, atividades = [], vermelhas = {
 
 // Pop-up para editar uma única avaliação: nome, data (e hora), valor e nota.
 function ModalEditarAvaliacao({ av, onClose, onSalvar }) {
+  useVoltar(true, onClose);
   const [f, setF] = useState({ nome: av.nome || '', data: av.data || '', hora: av.hora || '', max: av.max ?? '', obtida: av.obtida ?? '' });
   const [erro, setErro] = useState('');
   const [salvando, setSalvando] = useState(false);

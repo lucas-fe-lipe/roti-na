@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
+import useVoltar from '../hooks/useVoltar';
 
 export default function ActivityModal({ isOpen, onClose, onSave, onDelete, atividadeEditada, categorias, coresUsadas, modoVisualizacaoInicial = false, disciplinaVinculada = null }) {
+  useVoltar(isOpen, onClose);
   const predefinedColors = ['#000000', '#3b82f6', '#8b5cf6', '#ec4899', '#10b981', '#f59e0b', '#64748b'];
   const paletaCores = Array.from(new Set([...predefinedColors, ...coresUsadas]));
 

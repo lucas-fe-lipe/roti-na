@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import useVoltar from '../hooks/useVoltar';
 import { hojeLocalStr } from '../utils/date';
 import { montarICS } from '../utils/ics';
 import { montarItens, normalizarLembretes, CORES_GOOGLE, MAX_LEMBRETES } from '../utils/agendaItens';
@@ -63,6 +64,7 @@ export default function ExportModal({ aberto, onFechar, user, atividades, tarefa
   const [atualizarMudancas, setAtualizarMudancas] = useState(true); // Google: atualizar o que mudou e remover o que foi excluído
   const [mapa, setMapa] = useState(null);
   const [sincronizando, setSincronizando] = useState(false);
+  useVoltar(aberto, () => { if (!sincronizando) onFechar(); });
   const [falhas, setFalhas] = useState([]);
   const [confirmouRemocao, setConfirmouRemocao] = useState(false);
   const [removerDesmarcadas, setRemoverDesmarcadas] = useState({ atividade: false, avaliacao: false }); // apagar do Google o que já foi enviado de categorias desmarcadas

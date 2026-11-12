@@ -12,6 +12,7 @@ export const CONFIG_PADRAO = {
   integracoes: { googleAutoSync: false },
   grade: { pxPorHora: 22 }, // altura da grade horária
   treino: { sexo: 'm', cor: '#f97316' }, // avatar dos músculos
+  metas: { linhas: 1 }, // metas diárias em 1 ou 2 linhas
   admin: { ativo: false }, // modo administrador (só vale para a conta autorizada)
   agendaGoogle: { email: '', incluirRotiNa: true, extras: '', minimizada: false }, // fontes do bloco "Google Agenda na tela"
 };
@@ -25,6 +26,7 @@ const mesclar = (salva) => ({
   layout: normalizarLayout(salva?.layout),
   grade: { ...CONFIG_PADRAO.grade, ...(salva?.grade || {}) },
   treino: { ...CONFIG_PADRAO.treino, ...(salva?.treino || {}) },
+  metas: { ...CONFIG_PADRAO.metas, ...(salva?.metas || {}) },
   admin: { ...CONFIG_PADRAO.admin, ...(salva?.admin || {}) },
   agendaGoogle: { ...CONFIG_PADRAO.agendaGoogle, ...(salva?.agendaGoogle || {}) },
 });
@@ -72,6 +74,7 @@ export default function useConfig(user) {
       layout: parcial.layout || atual.layout,
       grade: { ...atual.grade, ...(parcial.grade || {}) },
       treino: { ...atual.treino, ...(parcial.treino || {}) },
+      metas: { ...atual.metas, ...(parcial.metas || {}) },
       admin: { ...atual.admin, ...(parcial.admin || {}) },
       agendaGoogle: { ...atual.agendaGoogle, ...(parcial.agendaGoogle || {}) },
     });

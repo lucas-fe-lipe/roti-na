@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import useVoltar from '../hooks/useVoltar';
 import { auth, db } from '../services/firebase';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
@@ -23,6 +24,9 @@ export default function Sidebar({ isOpen, onClose, user, onProfileUpdated, ativi
   const [isDadosOpen, setIsDadosOpen] = useState(false);
   const botaoDados = 'w-full text-left px-4 py-2.5 rounded bg-zinc-800/50 hover:bg-zinc-800 text-sm text-zinc-200 transition-colors disabled:opacity-50';
   const [ocupado, setOcupado] = useState(false);
+  useVoltar(isOpen, onClose);
+  useVoltar(isDadosOpen, () => { if (!ocupado) { setIsDadosOpen(false); setBackupPendente(null); } });
+  useVoltar(isFullScreenImageOpen, () => setIsFullScreenImageOpen(false));
   const arquivoRef = useRef(null);
 
   const handleExportar = async () => {

@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef } from 'react';
+import useVoltar from '../hooks/useVoltar';
 import { doc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { salvarDoc, apagarDoc } from '../services/db';
@@ -99,6 +100,7 @@ function Grafico({ series }) {
 
 // ---------- formulário ----------
 function ModalMedida({ inicial, sexo, onSexo, onClose, onSalvar }) {
+  useVoltar(true, onClose);
   const [f, setF] = useState(inicial);
   const [erro, setErro] = useState('');
   const [mais, setMais] = useState(Object.keys(inicial.extras || {}).length > 0 || !!inicial.gordura || !!inicial.musculo);

@@ -2,6 +2,9 @@ import { useState, useEffect, useRef, Fragment } from 'react';
 import AgendaGoogle from '../components/AgendaGoogle';
 import MedidasCorporais from '../components/MedidasCorporais';
 import ExerciciosBiblioteca from '../components/ExerciciosBiblioteca';
+import MetasMenu from '../components/MetasMenu';
+import useVoltar from '../hooks/useVoltar';
+import { linhasDe, distribuirMetas, moverMeta, posicaoNovaMeta } from '../utils/metasLayout';
 import useBiblioteca from '../hooks/useBiblioteca';
 import { modoAdminAtivo } from '../utils/treino';
 import { textoParaFundo } from '../utils/cores';
@@ -30,6 +33,7 @@ import Avatar from '../components/Avatar';
 export default function Dashboard() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isGoalModalOpen, setIsGoalModalOpen] = useState(false);
+  const [isMetasMenuOpen, setIsMetasMenuOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isRightMenuOpen, setIsRightMenuOpen] = useState(false);
   const [isAvaliacoesOpen, setIsAvaliacoesOpen] = useState(false); 
@@ -43,6 +47,8 @@ export default function Dashboard() {
   const paginasMenu = paginasVisiveis(config, googleOk);
   // página aberta: a escolhida; se não houver (ou foi desativada), a primeira da ordem; sem nenhuma, as Configurações
   const paginaAtual = activePage === 'Configuracoes' ? 'Configuracoes' : (paginasMenu.includes(activePage) ? activePage : (paginasMenu[0] || 'Configuracoes'));
+  // botão voltar do celular: fora da página inicial, volta para ela (em vez de fechar o app)
+  useVoltar(paginasMenu.length > 0 && paginaAtual !== paginasMenu[0], () => setActivePage(null));
   const midias = useBiblioteca();
   const { atividades, setAtividades, metas, setMetas, tarefas, cursos, medidas, setMedidas } = useDados(user, paginaAtual);
   const sync = useGoogleAutoSync({ user, atividades, tarefas, ativo: config.integracoes.googleAutoSync });
@@ -192,6 +198,7 @@ export default function Dashboard() {
     const existente = metas.find(m => m.id === novaMeta.id);
     const agora = new Date();
     let meta = { ...(existente || {}), ...novaMeta };
+    if (!existente) meta = { ...meta, ...posicaoNovaMeta(metas, linhasDe(config)) };
     if (!existente) {
       meta.diaReferencia = diaDaMeta(agora, meta.horarioReset);
     } else if ((existente.horarioReset || '00:00') !== (meta.horarioReset || '00:00')) {
@@ -199,6 +206,19 @@ export default function Dashboard() {
       meta = { ...meta, progresso: progressoAtual(existente, agora), diaReferencia: diaDaMeta(agora, meta.horarioReset) };
     }
     await persistirMeta(meta);
+  };
+
+  // arrastar na lista "Editar" do menu de metas: grava ordem (e linha) só das metas que mudaram
+  const handleMoverMeta = async (id, linha, indice) => {
+    const mudancas = moverMeta(metas, linhasDe(config), id, linha, indice);
+    await Promise.all(mudancas.map((c) => {
+      const atual = metas.find((m) => m.id === c.id);
+      return atual ? persistirMeta({ ...atual, ordem: c.ordem, ...(c.linha ? { linha: c.linha } : {}) }) : null;
+    }));
+  };
+
+  const handleValorMeta = async (meta, valor) => {
+    await persistirMeta({ ...meta, meta: valor, progresso: Math.min(Number(meta.progresso) || 0, valor) });
   };
 
   const handleIncrementarMeta = async (metaId) => {
@@ -385,37 +405,46 @@ export default function Dashboard() {
 
       </>
     ),
-    metas: (
-      <>
-            <div className="mt-3 flex items-center gap-3 overflow-x-auto pb-1 scrollbar-none w-full px-2 sm:px-0">
-              {metas.map((m) => {
-                const progressoExibido = progressoAtual(m, currentTime);
-                const percentual = Math.min(100, (progressoExibido / m.meta) * 100);
-                return (
-                  <div key={m.id} className="relative inline-flex items-center justify-between w-auto max-w-[280px] bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden shrink-0 h-12 shadow-md">
-                    <div className="absolute top-0 left-0 bottom-0 transition-all duration-300 opacity-80 z-0" style={{ width: `${percentual}%`, backgroundColor: m.cor }}></div>
-                    <div className="relative z-10 pl-1.5 pr-0.5 flex flex-col justify-center overflow-hidden">
-                      <span className="text-xs font-bold text-white truncate">{m.titulo}</span>
-                      <span className="text-[10px] text-zinc-300 font-mono">{progressoExibido} / {m.meta} {m.unidade}</span>
-                    </div>
-                    <div className="relative z-10 flex items-center gap-0.5 pr-1.5 pl-0.5">
-                      <button aria-label={`Adicionar a ${m.titulo}`} onClick={() => handleIncrementarMeta(m.id)} className="w-7 h-7 bg-zinc-800/80 hover:bg-zinc-700 text-white rounded flex items-center justify-center text-sm transition-colors">+</button>
-                      <button aria-label={`Editar ${m.titulo}`} onClick={() => { setMetaEditando(m); setIsGoalModalOpen(true); }} className="w-7 h-7 bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 rounded flex items-center justify-center text-xs transition-colors">...</button>
-                    </div>
-                  </div>
-                );
-              })}
-
-              {metas.length === 0 ? (
-                <button onClick={() => { setMetaEditando(null); setIsGoalModalOpen(true); }} className="px-4 h-12 bg-zinc-900 border border-dashed border-zinc-700 hover:border-zinc-500 rounded-lg text-xs font-medium text-zinc-400 hover:text-zinc-100 transition-colors flex items-center gap-2 shrink-0">
-                  <span className="text-base">+</span> Adicionar meta diária
-                </button>
-              ) : (
-                <button onClick={() => { setMetaEditando(null); setIsGoalModalOpen(true); }} className="w-12 h-12 bg-zinc-900 border border-dashed border-zinc-700 hover:border-zinc-500 rounded-lg text-lg font-medium text-zinc-400 hover:text-zinc-100 transition-colors flex items-center justify-center shrink-0" title="Adicionar nova meta">+</button>
-              )}
+    metas: (() => {
+      const nLinhas = linhasDe(config);
+      const [linha1, linha2] = distribuirMetas(metas, nLinhas);
+      const abrirMenu = () => setIsMetasMenuOpen(true);
+      const blocoMeta = (m) => {
+        const progressoExibido = progressoAtual(m, currentTime);
+        const percentual = Math.min(100, (progressoExibido / m.meta) * 100);
+        return (
+          <div key={m.id} className="relative inline-flex items-center justify-between w-auto max-w-[280px] bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden shrink-0 h-12 shadow-md">
+            <div className="absolute top-0 left-0 bottom-0 transition-all duration-300 opacity-80 z-0" style={{ width: `${percentual}%`, backgroundColor: m.cor }}></div>
+            <div className="relative z-10 pl-1.5 pr-0.5 flex flex-col justify-center overflow-hidden">
+              <span className="text-xs font-bold text-white truncate">{m.titulo}</span>
+              <span className="text-[10px] text-zinc-300 font-mono">{progressoExibido} / {m.meta} {m.unidade}</span>
             </div>
-      </>
-    ),
+            <div className="relative z-10 flex items-center gap-0.5 pr-1.5 pl-0.5">
+              <button aria-label={`Adicionar a ${m.titulo}`} onClick={() => handleIncrementarMeta(m.id)} className="w-7 h-7 bg-zinc-800/80 hover:bg-zinc-700 text-white rounded flex items-center justify-center text-sm transition-colors">+</button>
+            </div>
+          </div>
+        );
+      };
+      const botaoMais = metas.length === 0 ? (
+        <button onClick={() => { setMetaEditando(null); setIsGoalModalOpen(true); }} className="px-4 h-12 bg-zinc-900 border border-dashed border-zinc-700 hover:border-zinc-500 rounded-lg text-xs font-medium text-zinc-400 hover:text-zinc-100 transition-colors flex items-center gap-2 shrink-0">
+          <span className="text-base">+</span> Adicionar meta diária
+        </button>
+      ) : (
+        <button onClick={abrirMenu} aria-label="Menu das metas diárias" className="w-12 h-12 bg-zinc-900 border border-dashed border-zinc-700 hover:border-zinc-500 rounded-lg text-lg font-medium text-zinc-400 hover:text-zinc-100 transition-colors flex items-center justify-center shrink-0" title="Adicionar ou organizar metas">+</button>
+      );
+      const faixa = (lista, comMais) => (
+        <div className="flex items-center gap-3 overflow-x-auto pb-1 scrollbar-none w-full px-2 sm:px-0">
+          {lista.map(blocoMeta)}
+          {comMais && botaoMais}
+        </div>
+      );
+      return (
+        <div className="mt-3 flex flex-col gap-2 w-full">
+          {faixa(linha1, nLinhas === 1)}
+          {nLinhas === 2 && faixa(linha2, true)}
+        </div>
+      );
+    })(),
     agenda: (
       <>
               <AgendaGoogle user={user} agendas={sync.agendas} config={config} atualizarConfig={atualizarConfig} />
@@ -510,6 +539,17 @@ export default function Dashboard() {
           const v = atividadeEditando ? disciplinaDaAtividade(cursos, atividadeEditando.id) : null;
           return v ? { nome: v.disc.nome, ...resumoDisciplina(v.disc, v.periodo) } : null;
         })()}
+      />
+      <MetasMenu
+        isOpen={isMetasMenuOpen}
+        onClose={() => setIsMetasMenuOpen(false)}
+        metas={metas}
+        linhas={linhasDe(config)}
+        onLinhas={(n) => atualizarConfig({ metas: { linhas: n } })}
+        onAdicionar={() => { setIsMetasMenuOpen(false); setMetaEditando(null); setIsGoalModalOpen(true); }}
+        onEditar={(m) => { setIsMetasMenuOpen(false); setMetaEditando(m); setIsGoalModalOpen(true); }}
+        onValor={handleValorMeta}
+        onMover={handleMoverMeta}
       />
       <GoalModal 
         isOpen={isGoalModalOpen}

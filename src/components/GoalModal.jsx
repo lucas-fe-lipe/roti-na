@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
+import useVoltar from '../hooks/useVoltar';
 
 export default function GoalModal({ isOpen, onClose, onSave, onDelete, onReset, metaEditada }) {
+  useVoltar(isOpen, onClose);
   const [titulo, setTitulo] = useState('');
   const [meta, setMeta] = useState('');
   const [unidade, setUnidade] = useState('');
