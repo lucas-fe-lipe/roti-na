@@ -4,7 +4,10 @@ import { db } from '../services/firebase';
 import { salvarDoc } from '../services/db';
 import { notificar } from '../utils/toast';
 import AvatarMuscular from './AvatarMuscular';
-import { EXERCICIOS, CATEGORIAS, MUSCULOS, P, S } from '../data/exercicios';
+import ExercicioEditor from './ExercicioEditor';
+import ConfirmModal from './ConfirmModal';
+import { todosExercicios, CATEGORIAS, MUSCULOS, P, S } from '../data/exercicios';
+import { usoDoExercicio } from '../utils/exercicioCustom';
 import { intensidadeDoExercicio, midiaDoLink, linkValido } from '../utils/treino';
 
 const PRESETS = ['#f97316', '#ef4444', '#eab308', '#22c55e', '#06b6d4', '#3b82f6', '#a855f7', '#ec4899'];
@@ -43,10 +46,10 @@ function EditorMidia({ exercicio, atual }) {
   );
 }
 
-function Detalhe({ ex, sexo, cor, midia, admin, aoEscolher }) {
+function Detalhe({ ex, sexo, cor, midia, admin, aoEscolher, onEditar, onExcluir }) {
   const principais = Object.entries(ex.m).sort((a, b) => b[1] - a[1]);
   const topo = principais[0]?.[0];
-  const alternativas = EXERCICIOS.filter((o) => o.id !== ex.id && o.m[topo] >= P).slice(0, 8);
+  const alternativas = todosExercicios().filter((o) => o.id !== ex.id && o.m[topo] >= P).slice(0, 8);
   return (
     <div className="flex flex-col gap-3 pt-2">
       {midia && <Midia link={midia} />}
@@ -69,21 +72,35 @@ function Detalhe({ ex, sexo, cor, midia, admin, aoEscolher }) {
           </div>
         </div>
       )}
-      {admin && <EditorMidia key={ex.id + (midia || '')} exercicio={ex} atual={midia} />}
+      {ex.custom && (
+        <div className="flex justify-end gap-1">
+          <button onClick={() => onEditar(ex)} className="text-xs px-2 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded">Editar</button>
+          <button onClick={() => onExcluir(ex)} className="text-xs px-2 py-1 text-red-400 hover:text-red-300">Excluir</button>
+        </div>
+      )}
+      {admin && !ex.custom && <EditorMidia key={ex.id + (midia || '')} exercicio={ex} atual={midia} />}
     </div>
   );
 }
 
-export default function ExerciciosBiblioteca({ config, atualizarConfig, midias, admin }) {
+export default function ExerciciosBiblioteca({ config, atualizarConfig, midias, admin, exCustom, treinos = [], sessoes = [] }) {
   const [busca, setBusca] = useState('');
   const [cat, setCat] = useState(null);
   const [aberto, setAberto] = useState(null);
+  const [editor, setEditor] = useState(null);
+  const [excluir, setExcluir] = useState(null);
   const { sexo, cor } = config.treino;
+  const nCustom = exCustom?.lista?.length || 0;
 
   const lista = useMemo(() => {
     const q = busca.trim().toLowerCase();
-    return EXERCICIOS.filter((e) => (!cat || e.cat === cat) && (!q || e.nome.toLowerCase().includes(q)));
-  }, [busca, cat]);
+    return todosExercicios().filter((e) => (!cat || e.cat === cat) && (!q || e.nome.toLowerCase().includes(q)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [busca, cat, nCustom]);
+
+  const uso = excluir ? usoDoExercicio(excluir.id, treinos, sessoes) : { treinos: 0, sessoes: 0 };
+  const salvarEx = async (ex) => { const c = await exCustom.salvar(ex); if (c) { notificar('Exercício salvo.', 'sucesso'); setEditor(null); setAberto(c.id); } };
+  const apagarEx = async () => { const ex = excluir; setExcluir(null); if (await exCustom.apagar(ex)) { setAberto(null); notificar('Exercício excluído.', 'info'); } };
 
   return (
     <div className="flex flex-col gap-3">
@@ -101,6 +118,7 @@ export default function ExerciciosBiblioteca({ config, atualizarConfig, midias, 
         </div>
       </div>
 
+      {exCustom && <button onClick={() => setEditor({})} className="self-start text-xs font-bold px-3 py-1.5 bg-zinc-100 text-zinc-950 rounded hover:bg-zinc-300">+ Criar exercício</button>}
       <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar exercício…" aria-label="Buscar exercício" className="bg-zinc-900 border border-zinc-800 rounded px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-zinc-500" />
       <div className="flex flex-wrap gap-1.5">
         {[null, ...CATEGORIAS].map((c) => (
@@ -115,14 +133,16 @@ export default function ExerciciosBiblioteca({ config, atualizarConfig, midias, 
           return (
             <li key={e.id} className="bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2">
               <button onClick={() => setAberto(ativo ? null : e.id)} aria-expanded={ativo} className="w-full flex items-center justify-between text-left gap-2">
-                <span className="text-sm text-zinc-100">{e.nome}</span>
+                <span className="text-sm text-zinc-100">{e.nome}{e.custom && <span className="text-[10px] text-zinc-500"> · seu</span>}</span>
                 <span className="text-[11px] text-zinc-500 shrink-0">{midias[e.id] ? '▶ GIF · ' : ''}{e.cat}</span>
               </button>
-              {ativo && <Detalhe ex={e} sexo={sexo} cor={cor} midia={midias[e.id]} admin={admin} aoEscolher={setAberto} />}
+              {ativo && <Detalhe ex={e} sexo={sexo} cor={cor} midia={midias[e.id]} admin={admin} aoEscolher={setAberto} onEditar={setEditor} onExcluir={setExcluir} />}
             </li>
           );
         })}
       </ul>
+      {editor && <ExercicioEditor inicial={editor.id ? editor : null} config={config} onClose={() => setEditor(null)} onSalvar={salvarEx} />}
+      <ConfirmModal aberto={!!excluir} titulo="Excluir exercício" mensagem={excluir ? `Excluir "${excluir.nome}"?${uso.treinos || uso.sessoes ? ` Ele aparece em ${uso.treinos} treino(s) e ${uso.sessoes} sessão(ões): nos treinos você precisará trocá-lo para salvar; o histórico mostra "Exercício removido".` : ''}` : ''} onConfirmar={apagarEx} onCancelar={() => setExcluir(null)} />
     </div>
   );
 }

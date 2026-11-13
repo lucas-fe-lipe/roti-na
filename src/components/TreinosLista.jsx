@@ -5,19 +5,19 @@ import { salvarDoc, apagarDoc } from '../services/db';
 import { notificar } from '../utils/toast';
 import useVoltar from '../hooks/useVoltar';
 import ConfirmModal from './ConfirmModal';
+import ExercicioEditor from './ExercicioEditor';
 import AvatarMuscular from './AvatarMuscular';
 import { EditorSessao, HistoricoTreino } from './SessoesTreino';
 import { hojeLocalStr } from '../utils/date';
 import { horariosDoTreino, proximoHorarioDoTreino, rotuloProximo } from '../utils/treinoAtividade';
 import { sessaoInicial, sessaoParaForm, historicoDoTreino } from '../utils/sessoes';
-import { EXERCICIOS, CATEGORIAS, MUSCULOS, rotuloVariacao } from '../data/exercicios';
+import { achar, todosExercicios, CATEGORIAS, MUSCULOS, rotuloVariacao } from '../data/exercicios';
 import { novoItem, validarTreino, resumoTreino, intensidadesDoTreino, musculosMaisTrabalhados, moverItem, ordenarTreinos } from '../utils/treinoModelo';
 
-const achar = (id) => EXERCICIOS.find((e) => e.id === id);
 const campo = 'bg-zinc-950 border border-zinc-700 rounded px-1.5 py-1.5 text-xs text-white text-center';
 
 // ---------- editor: nome + exercícios (séries, repetições, carga) + avatar ao vivo ----------
-function EditorTreino({ inicial, config, onClose, onSalvar }) {
+function EditorTreino({ inicial, config, onClose, onSalvar, exCustom }) {
   useVoltar(true, onClose);
   const [nome, setNome] = useState(inicial.nome || '');
   const [itens, setItens] = useState(inicial.itens || []);
@@ -26,13 +26,16 @@ function EditorTreino({ inicial, config, onClose, onSalvar }) {
   const [escolhendo, setEscolhendo] = useState(!(inicial.itens || []).length);
   const [busca, setBusca] = useState('');
   const [cat, setCat] = useState(null);
+  const [novoEx, setNovoEx] = useState(false);
   const { sexo, cor, modo } = config.treino;
+  const nCustom = exCustom?.lista?.length || 0;
 
   const intensidades = useMemo(() => intensidadesDoTreino({ itens }, achar, modo), [itens, modo]);
   const lista = useMemo(() => {
     const q = busca.trim().toLowerCase();
-    return EXERCICIOS.filter((e) => (!cat || e.cat === cat) && (!q || e.nome.toLowerCase().includes(q)));
-  }, [busca, cat]);
+    return todosExercicios().filter((e) => (!cat || e.cat === cat) && (!q || e.nome.toLowerCase().includes(q)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [busca, cat, nCustom]);
 
   const mudar = (id, f, v) => setItens((l) => l.map((i) => (i.id === id ? { ...i, [f]: v } : i)));
 
@@ -47,6 +50,7 @@ function EditorTreino({ inicial, config, onClose, onSalvar }) {
 
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-3" onClick={onClose}>
+      {novoEx && <ExercicioEditor config={config} onClose={() => setNovoEx(false)} onSalvar={async (ex) => { const c = await exCustom.salvar(ex); if (c) { setItens((l) => [...l, novoItem(c.id)]); setNovoEx(false); notificar('Exercício criado e adicionado ao treino.', 'sucesso'); } }} />}
       <div role="dialog" aria-modal="true" aria-label="Treino" className="bg-zinc-900 text-zinc-100 rounded-xl w-full max-w-lg p-4 shadow-2xl border border-zinc-800 max-h-[92vh] overflow-y-auto space-y-3" onClick={(e) => e.stopPropagation()}>
         <div className="flex justify-between items-center">
           <h2 className="text-lg font-bold">{inicial.id ? 'Editar treino' : 'Novo treino'}</h2>
@@ -112,10 +116,11 @@ function EditorTreino({ inicial, config, onClose, onSalvar }) {
               ))}
             </div>
             <div className="max-h-48 overflow-y-auto flex flex-col gap-1">
+              {exCustom && <button type="button" onClick={() => setNovoEx(true)} className="text-left text-xs px-2 py-1.5 rounded border border-dashed border-zinc-600 text-zinc-200 hover:bg-zinc-800">+ Criar exercício que não está na biblioteca</button>}
               {lista.length === 0 && <span className="text-xs text-zinc-500 py-1">Nenhum exercício encontrado.</span>}
               {lista.map((e) => (
                 <button key={e.id} type="button" onClick={() => setItens((l) => [...l, novoItem(e.id)])} className="flex items-center justify-between text-left text-xs px-2 py-1.5 rounded bg-zinc-800/60 hover:bg-zinc-800 text-zinc-100">
-                  <span>{e.nome}</span><span className="text-zinc-500 text-[11px]">+ {e.cat}</span>
+                  <span>{e.nome}{e.custom && <span className="text-zinc-500 text-[10px]"> · seu</span>}</span><span className="text-zinc-500 text-[11px]">+ {e.cat}</span>
                 </button>
               ))}
             </div>
@@ -216,7 +221,7 @@ function DetalheTreino({ treino, sessoes, atividades, onAgendar, config, atualiz
 }
 
 // ---------- bloco principal ----------
-export default function TreinosLista({ user, treinos, setTreinos, sessoes = [], setSessoes = () => {}, atividades = [], onAgendar = () => {}, abrir = null, onAbriu = () => {}, config, atualizarConfig }) {
+export default function TreinosLista({ user, treinos, setTreinos, sessoes = [], setSessoes = () => {}, atividades = [], onAgendar = () => {}, abrir = null, onAbriu = () => {}, config, atualizarConfig, exCustom }) {
   const [editor, setEditor] = useState(null);
   const [detalheId, setDetalheId] = useState(null);
   const [excluir, setExcluir] = useState(null);
@@ -317,7 +322,7 @@ export default function TreinosLista({ user, treinos, setTreinos, sessoes = [], 
           onRegistrar={() => registrar(detalhe)} onEditarSessao={(x) => setEditorSessao(sessaoParaForm(x))} onExcluirSessao={(x) => setExcluirSessao(x)} />
       )}
       {editorSessao && <EditorSessao inicial={editorSessao} config={config} onClose={() => setEditorSessao(null)} onSalvar={salvarSessao} />}
-      {editor && <EditorTreino inicial={editor} config={config} onClose={() => setEditor(null)} onSalvar={salvar} />}
+      {editor && <EditorTreino inicial={editor} config={config} onClose={() => setEditor(null)} onSalvar={salvar} exCustom={exCustom} />}
       <ConfirmModal aberto={!!excluirSessao} titulo="Excluir sessão" mensagem={excluirSessao ? `Excluir a sessão de ${excluirSessao.data.split('-').reverse().join('/')}?` : ''}
         onCancelar={() => setExcluirSessao(null)} onConfirmar={() => { const x = excluirSessao; setExcluirSessao(null); apagarSessao(x); }} />
       <ConfirmModal aberto={!!excluir} titulo="Excluir treino" mensagem={excluir ? `Excluir o treino "${excluir.nome}"?` : ''}

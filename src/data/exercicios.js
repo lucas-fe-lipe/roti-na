@@ -146,6 +146,11 @@ export const EXERCICIOS = [
   E('elevacao-pernas-barra', 'Elevação de pernas na barra', 'Abdômen', { 'abs-lower': P, 'abs-middle': S, 'obliques-lower': S, forearms: S }),
 ];
 
-export const porId = (id) => EXERCICIOS.find((e) => e.id === id) || null;
+// Exercícios criados pelo usuário (vêm da conta ou do armazenamento local); o app registra aqui para todos os lookups.
+let custom = [];
+export const registrarCustom = (lista) => { custom = Array.isArray(lista) ? lista : []; };
+export const todosExercicios = () => (custom.length ? [...EXERCICIOS, ...custom] : EXERCICIOS);
+export const achar = (id) => todosExercicios().find((e) => e.id === id) || null;
+export const porId = achar;
 // Texto da variação escolhida: "Halteres · unilateral"
 export const rotuloVariacao = (v, uni) => [v, uni ? 'unilateral' : ''].filter(Boolean).join(' · ');

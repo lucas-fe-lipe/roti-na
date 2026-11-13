@@ -878,3 +878,30 @@ test('treino/sessão: variação e unilateral só aparecem quando escolhidos e s
   assert.equal(evolucaoExercicio(sess, 'supino-reto').length, 2);
   assert.deepEqual(evolucaoExercicio(sess, 'supino-reto', 'Halteres').map((p) => p.cargaMax), [24]);
 });
+
+import { validarExercicio, proximoNivel, usoDoExercicio } from '../src/utils/exercicioCustom.js';
+import { registrarCustom, achar as acharEx, todosExercicios } from '../src/data/exercicios.js';
+
+test('exercício próprio: validação de nome, categoria, músculos e nome repetido', () => {
+  const ok = validarExercicio({ nome: '  Remada   no TRX ', cat: 'Costas', m: { lats: 1, biceps: 0.5, xx: 1, chest: 0.3 } }, []);
+  assert.equal(ok.ok, true);
+  assert.deepEqual(ok.exercicio, { nome: 'Remada no TRX', cat: 'Costas', m: { lats: 1, biceps: 0.5 } });
+  assert.equal(validarExercicio({ nome: '', cat: 'Costas', m: { lats: 1 } }).ok, false);
+  assert.equal(validarExercicio({ nome: 'x'.repeat(51), cat: 'Costas', m: { lats: 1 } }).ok, false);
+  assert.equal(validarExercicio({ nome: 'A', cat: 'Outra', m: { lats: 1 } }).ok, false);
+  assert.equal(validarExercicio({ nome: 'A', cat: 'Costas', m: {} }).ok, false);
+  assert.equal(validarExercicio({ nome: 'supino reto', cat: 'Peito', m: { chest: 1 } }, todosExercicios()).ok, false);
+  assert.equal(validarExercicio({ nome: 'Meu', cat: 'Peito', m: { chest: 1 } }, [{ id: 'c1', nome: 'meu' }], 'c1').ok, true); // editando o próprio
+});
+
+test('exercício próprio: ciclo de níveis, registro nos lookups e uso', () => {
+  assert.deepEqual([0, 0.25, 0.5, 1].map(proximoNivel), [0.25, 0.5, 1, 0]);
+  assert.equal(acharEx('c1'), null);
+  registrarCustom([{ id: 'c1', nome: 'Meu', cat: 'Costas', m: { lats: 1 }, custom: true }]);
+  assert.equal(acharEx('c1').nome, 'Meu');
+  assert.ok(todosExercicios().length > 96);
+  assert.deepEqual(intensidadeDoTreino([{ exercicioId: 'c1', series: 5 }], acharEx), { lats: 0.5 });
+  registrarCustom([]);
+  assert.equal(acharEx('c1'), null);
+  assert.deepEqual(usoDoExercicio('c1', [{ itens: [{ exercicioId: 'c1' }] }, { itens: [] }], [{ itens: [{ exercicioId: 'c1' }] }, { itens: [{ exercicioId: 'c1' }] }]), { treinos: 1, sessoes: 2 });
+});

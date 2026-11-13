@@ -1,11 +1,10 @@
 import { useState, useMemo } from 'react';
 import useVoltar from '../hooks/useVoltar';
 import AvatarMuscular from './AvatarMuscular';
-import { EXERCICIOS, rotuloVariacao } from '../data/exercicios';
+import { achar, rotuloVariacao } from '../data/exercicios';
 import { hojeLocalStr } from '../utils/date';
 import { validarSessao, resumoSessao, intensidadesDaSessao, evolucaoExercicio, variacaoEvolucao } from '../utils/sessoes';
 
-const achar = (id) => EXERCICIOS.find((e) => e.id === id);
 const fmtData = (d) => { const [y, m, dia] = String(d).split('-'); return `${dia}/${m}/${y}`; };
 const fmtCurta = (d) => { const [, m, dia] = String(d).split('-'); return `${dia}/${m}`; };
 const kg = (n, c = 1) => Number(n).toFixed(c).replace('.', ',').replace(/,0$/, '');

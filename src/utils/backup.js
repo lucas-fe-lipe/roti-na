@@ -3,7 +3,7 @@ import { db } from '../services/firebase';
 import { SCHEMA_VERSION } from '../services/db';
 import { hojeLocalStr } from './date';
 
-const COLECOES = ['atividades', 'tarefas', 'metas', 'cursos', 'medidas', 'treinos', 'sessoes'];
+const COLECOES = ['atividades', 'tarefas', 'metas', 'cursos', 'medidas', 'treinos', 'sessoes', 'exercicios'];
 const CHAVE_LOCAL = {
   atividades: 'local_atividades',
   tarefas: 'local_tarefas',
@@ -12,6 +12,7 @@ const CHAVE_LOCAL = {
   medidas: 'local_medidas',
   treinos: 'local_treinos',
   sessoes: 'local_sessoes',
+  exercicios: 'local_exercicios',
 };
 
 const lerLocal = (colecao) => {

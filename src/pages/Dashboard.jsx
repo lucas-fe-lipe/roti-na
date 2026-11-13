@@ -9,6 +9,8 @@ import MetasMenu from '../components/MetasMenu';
 import useVoltar from '../hooks/useVoltar';
 import { linhasDe, distribuirMetas, moverMeta, posicaoNovaMeta } from '../utils/metasLayout';
 import useBiblioteca from '../hooks/useBiblioteca';
+import useExerciciosCustom from '../hooks/useExerciciosCustom';
+import { registrarCustom } from '../data/exercicios';
 import { modoAdminAtivo } from '../utils/treino';
 import { textoParaFundo } from '../utils/cores';
 import { paginasVisiveis, secoesAtivasDaPagina, PAGINAS } from '../utils/layout';
@@ -53,7 +55,9 @@ export default function Dashboard() {
   // botão voltar do celular: fora da página inicial, volta para ela (em vez de fechar o app)
   useVoltar(paginasMenu.length > 0 && paginaAtual !== paginasMenu[0], () => setActivePage(null));
   const midias = useBiblioteca();
-  const { atividades, setAtividades, metas, setMetas, tarefas, cursos, medidas, setMedidas, treinos, setTreinos, sessoes, setSessoes } = useDados(user, paginaAtual);
+  const { atividades, setAtividades, metas, setMetas, tarefas, cursos, medidas, setMedidas, treinos, setTreinos, sessoes, setSessoes, exerciciosCustom, setExerciciosCustom } = useDados(user, paginaAtual);
+  registrarCustom(exerciciosCustom);
+  const exCustom = { lista: exerciciosCustom, ...useExerciciosCustom(user, exerciciosCustom, setExerciciosCustom) };
   const sync = useGoogleAutoSync({ user, atividades, tarefas, ativo: config.integracoes.googleAutoSync });
   
   const [atividadeEditando, setAtividadeEditando] = useState(null);
@@ -478,11 +482,11 @@ export default function Dashboard() {
     ),
     cursos: secaoCursos,
     medidas: <MedidasCorporais user={user} medidas={medidas} setMedidas={setMedidas} sexo={config.treino.sexo} onSexo={(v) => atualizarConfig({ treino: { sexo: v } })} />,
-    treinos: <TreinosLista user={user} treinos={treinos} setTreinos={setTreinos} sessoes={sessoes} setSessoes={setSessoes} atividades={atividades} onAgendar={agendarTreino} abrir={treinoAbrir} onAbriu={() => setTreinoAbrir(null)} config={config} atualizarConfig={atualizarConfig} />,
+    treinos: <TreinosLista user={user} treinos={treinos} setTreinos={setTreinos} sessoes={sessoes} setSessoes={setSessoes} atividades={atividades} onAgendar={agendarTreino} abrir={treinoAbrir} onAbriu={() => setTreinoAbrir(null)} config={config} atualizarConfig={atualizarConfig} exCustom={exCustom} />,
     exercicios: (
       <div className="mt-2 w-full px-2 sm:px-0">
         <h2 className="text-base font-bold text-zinc-100 mb-2">Biblioteca de exercícios</h2>
-        <ExerciciosBiblioteca config={config} atualizarConfig={atualizarConfig} midias={midias} admin={modoAdminAtivo(user, config)} />
+        <ExerciciosBiblioteca config={config} atualizarConfig={atualizarConfig} midias={midias} admin={modoAdminAtivo(user, config)} exCustom={exCustom} treinos={treinos} sessoes={sessoes} />
       </div>
     ),
   };
