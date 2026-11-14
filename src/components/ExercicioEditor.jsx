@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import useVoltar from '../hooks/useVoltar';
 import AvatarMuscular from './AvatarMuscular';
-import { CATEGORIAS, MUSCULOS, todosExercicios } from '../data/exercicios';
+import { CATEGORIAS, MUSCULOS, EQP, todosExercicios } from '../data/exercicios';
 import { validarExercicio, proximoNivel, rotuloNivel } from '../utils/exercicioCustom';
 import { intensidadeDoExercicio } from '../utils/treino';
 
@@ -11,13 +11,14 @@ export default function ExercicioEditor({ inicial, config, onSalvar, onClose }) 
   const [nome, setNome] = useState(inicial?.nome || '');
   const [cat, setCat] = useState(inicial?.cat || '');
   const [m, setM] = useState(inicial?.m || {});
+  const [eqp, setEqp] = useState(inicial?.eqp || []);
   const [erro, setErro] = useState('');
   const [salvando, setSalvando] = useState(false);
   const { sexo, cor } = config.treino;
   const intensidades = useMemo(() => intensidadeDoExercicio({ m }), [m]);
 
   const salvar = async () => {
-    const r = validarExercicio({ nome, cat, m }, todosExercicios(), inicial?.id);
+    const r = validarExercicio({ nome, cat, m, eqp }, todosExercicios(), inicial?.id);
     if (!r.ok) return setErro(r.erro);
     setErro('');
     setSalvando(true);
@@ -46,6 +47,14 @@ export default function ExercicioEditor({ inicial, config, onSalvar, onClose }) 
           {CATEGORIAS.map((c) => (
             <button key={c} type="button" onClick={() => setCat(c)} aria-pressed={cat === c} className={`text-xs px-2.5 py-1 rounded-full border ${cat === c ? 'bg-zinc-100 text-zinc-900 border-zinc-100 font-bold' : 'border-zinc-700 text-zinc-400 hover:text-zinc-100'}`}>{c}</button>
           ))}
+        </div>
+        <div className="flex flex-col gap-1">
+          <span className="text-[11px] text-zinc-400">Equipamento (pode marcar mais de um)</span>
+          <div className="flex flex-wrap gap-1.5" role="group" aria-label="Equipamento">
+            {Object.entries(EQP).map(([k, r]) => (
+              <button key={k} type="button" aria-pressed={eqp.includes(k)} onClick={() => setEqp((l) => (l.includes(k) ? l.filter((x) => x !== k) : [...l, k]))} className={`text-xs px-2.5 py-1 rounded-full border ${eqp.includes(k) ? 'bg-zinc-100 text-zinc-900 border-zinc-100 font-bold' : 'border-zinc-700 text-zinc-400 hover:text-zinc-100'}`}>{r}</button>
+            ))}
+          </div>
         </div>
         <AvatarMuscular sexo={sexo} cor={cor} intensidades={intensidades} className="max-w-[14rem] mx-auto" />
         <p className="text-[11px] text-zinc-500">Toque num músculo para alternar: — → leve → auxiliar → principal.</p>

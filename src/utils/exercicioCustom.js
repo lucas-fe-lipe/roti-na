@@ -1,5 +1,5 @@
 // Exercícios criados pelo usuário: validação e uso. Funções puras, testadas em tests/.
-import { MUSCULOS, CATEGORIAS, P, S, L } from '../data/exercicios.js';
+import { MUSCULOS, CATEGORIAS, EQP, P, S, L } from '../data/exercicios.js';
 
 export const NIVEIS = [0, L, S, P]; // desligado, leve, auxiliar, principal
 export const rotuloNivel = (w) => (w >= P ? 'Principal' : w >= S ? 'Auxiliar' : w >= L ? 'Leve' : '—');
@@ -21,7 +21,8 @@ export function validarExercicio(form, outros = [], idAtual = null) {
   if (Object.keys(m).length === 0) return { ok: false, erro: 'Marque pelo menos um músculo trabalhado.' };
   const chave = nome.toLocaleLowerCase('pt-BR');
   if (outros.some((e) => e.id !== idAtual && String(e.nome).toLocaleLowerCase('pt-BR') === chave)) return { ok: false, erro: 'Já existe um exercício com esse nome.' };
-  return { ok: true, exercicio: { nome, cat: form.cat, m } };
+  const eqp = (Array.isArray(form?.eqp) ? form.eqp : []).filter((x) => EQP[x]);
+  return { ok: true, exercicio: { nome, cat: form.cat, m, ...(eqp.length ? { eqp } : {}) } };
 }
 
 // Quantos treinos e sessões usam o exercício (para avisar antes de excluir)

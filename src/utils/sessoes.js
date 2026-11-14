@@ -1,7 +1,7 @@
 // Sessões de treino (o que foi realmente feito): preencher, validar, volume, histórico e evolução.
 // Funções puras, testadas em tests/. Uma sessão: { id, treinoId, treinoNome, data, itens: [{ exercicioId, series: [{ reps, carga }] }], obs }.
 import { intensidadeDoTreino } from './treino.js';
-import { extrasDoItem } from './treinoModelo.js';
+import { extrasDoItem, setsDoItem } from './treinoModelo.js';
 
 const texto = (v) => (v === null || v === undefined ? '' : String(v));
 const primeiroNumero = (reps) => { const m = /^\d{1,3}/.exec(texto(reps).trim()); return m ? m[0] : ''; };
@@ -21,7 +21,7 @@ export function sessaoInicial(treino, ultima, data) {
       const anteriores = feitos.get(it.exercicioId);
       const series = anteriores && anteriores.length
         ? anteriores.map((s) => ({ id: idLinha(), reps: texto(s.reps), carga: texto(s.carga) }))
-        : Array.from({ length: Number(it.series) || 1 }, () => ({ id: idLinha(), reps: primeiroNumero(it.reps), carga: texto(it.carga) }));
+        : (setsDoItem(it).length ? setsDoItem(it) : [{ reps: it.reps, carga: it.carga }]).map((x) => ({ id: idLinha(), reps: primeiroNumero(x.reps), carga: texto(x.carga).split('-')[0] }));
       return { exercicioId: it.exercicioId, series, ...extrasDoItem(it) };
     }),
   };

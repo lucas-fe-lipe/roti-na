@@ -8,20 +8,11 @@ import ExercicioEditor from './ExercicioEditor';
 import ConfirmModal from './ConfirmModal';
 import { todosExercicios, CATEGORIAS, MUSCULOS, P, S } from '../data/exercicios';
 import { usoDoExercicio } from '../utils/exercicioCustom';
-import { intensidadeDoExercicio, midiaDoLink, linkValido } from '../utils/treino';
+import { intensidadeDoExercicio, linkValido } from '../utils/treino';
+import Midia from './MidiaExercicio';
 
 const PRESETS = ['#f97316', '#ef4444', '#eab308', '#22c55e', '#06b6d4', '#3b82f6', '#a855f7', '#ec4899'];
 const rotuloPeso = (w) => (w >= P ? 'principal' : w >= S ? 'auxiliar' : 'leve');
-
-function Midia({ link }) {
-  const [falhou, setFalhou] = useState(false);
-  const m = midiaDoLink(link);
-  if (!m) return null;
-  if (!falhou || !m.iframe) {
-    return <img src={m.img} alt="Demonstração do exercício" loading="lazy" referrerPolicy="no-referrer" onError={() => setFalhou(true)} className="w-full max-h-72 object-contain rounded-lg bg-black" />;
-  }
-  return <iframe src={m.iframe} title="Demonstração do exercício" className="w-full h-64 rounded-lg border-0 bg-black" allow="autoplay" />;
-}
 
 function EditorMidia({ exercicio, atual }) {
   const [texto, setTexto] = useState(atual || '');

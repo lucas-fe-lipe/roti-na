@@ -8,7 +8,7 @@ export default function useExerciciosCustom(user, lista, setLista) {
 
   const salvar = async (ex) => {
     const id = ex.id || `c${Date.now().toString(36)}`;
-    const completo = { id, nome: ex.nome, cat: ex.cat, m: ex.m, custom: true, criadoEm: ex.criadoEm || new Date().toISOString() };
+    const completo = { id, nome: ex.nome, cat: ex.cat, m: ex.m, ...(ex.eqp ? { eqp: ex.eqp } : {}), custom: true, criadoEm: ex.criadoEm || new Date().toISOString() };
     let ok = true;
     if (user) ok = await salvarDoc(doc(db, 'users', user.uid, 'exercicios', id), completo);
     else local([...lista.filter((x) => x.id !== id), completo]);

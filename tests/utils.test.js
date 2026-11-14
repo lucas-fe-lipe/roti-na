@@ -1011,3 +1011,54 @@ test('treinos: calorias estimadas, volume e distância', () => {
   const linhas = resumoDoTreino({ tipo: 'forca', duracao: { min: 60, max: 60 }, itens: [{ series: 3, reps: '10', carga: 20 }] }, 70).map((l) => l.rotulo);
   assert.deepEqual(linhas, ['Exercícios', 'Repetições', 'Peso levantado', 'Duração', 'Calorias']);
 });
+
+import { filtrarExercicios, equipamentosDe, atendeCategoria } from '../src/data/exercicios.js';
+
+test('filtros da biblioteca: categorias exigem todas, equipamentos aceitam qualquer um', () => {
+  const todos = todosExercicios();
+  const ids = (l) => l.map((e) => e.id);
+  // Peito + Ombros: supino inclinado atende (deltoide principal); supino reto (deltoide auxiliar) também
+  const pe = filtrarExercicios(todos, { cats: ['Peito', 'Ombros'] });
+  assert.ok(ids(pe).includes('supino-inclinado'));
+  assert.ok(!ids(pe).includes('agachamento'));
+  assert.ok(pe.length < filtrarExercicios(todos, { cats: ['Peito'] }).length + 1);
+  assert.ok(ids(filtrarExercicios(todos, { cats: ['Peito'] })).includes('supino-reto'));
+  assert.ok(!ids(filtrarExercicios(todos, { cats: ['Peito', 'Pernas'] })).includes('supino-reto'));
+  // equipamentos: máquinas OU barras
+  const mb = filtrarExercicios(todos, { eqps: ['maquinas', 'barras'] });
+  assert.ok(ids(mb).includes('cadeira-abdutora') && ids(mb).includes('barra-fixa-supinada'));
+  assert.ok(!ids(mb).includes('prancha'));
+  assert.ok(ids(filtrarExercicios(todos, { eqps: ['corpo'] })).includes('flexao'));
+  assert.deepEqual(equipamentosDe({ id: 'x', eqp: ['livres'] }), ['livres']);
+  assert.ok(equipamentosDe(todos.find((e) => e.id === 'barra-fixa')).includes('barras'));
+  assert.equal(filtrarExercicios(todos, { busca: 'abdutora' }).length, 1);
+  assert.equal(atendeCategoria({ cat: 'Costas', m: { lats: 1 } }, 'Peito'), false);
+  // todo exercício tem pelo menos um equipamento válido
+  todos.forEach((e) => assert.ok(equipamentosDe(e).length >= 1));
+});
+
+import { novoItemComSets, setsDoItem, textoSeries, validarSet } from '../src/utils/treinoModelo.js';
+
+test('séries próprias: faixas, agrupamento no texto e compatibilidade com o formato antigo', () => {
+  assert.equal(validarSet({ reps: '5-7', carga: '20-25' }).ok, true);
+  assert.equal(validarSet({ reps: '7-5', carga: '' }).ok, false);
+  assert.equal(validarSet({ reps: '10', carga: '25-20' }).ok, false);
+  assert.equal(validarSet({ reps: '10', carga: '1001' }).ok, false);
+  assert.deepEqual(validarSet({ reps: '10', carga: '22,5' }).set, { reps: '10', carga: '22.5' });
+  const item = novoItemComSets('supino-reto', [{ reps: '10', carga: '20' }, { reps: '10', carga: '20' }, { reps: '8', carga: '25' }]);
+  assert.equal(textoSeries(item), '2 × 10 · 20 kg | 1 × 8 · 25 kg');
+  assert.equal(textoSeries({ series: 3, reps: '10', carga: 20 }), '3 × 10 · 20 kg'); // formato antigo
+  assert.equal(setsDoItem({ series: 2, reps: '12', carga: null }).length, 2);
+  const r = validarTreinoGeral({ tipo: 'forca', nome: 'A', itens: [item] });
+  assert.equal(r.ok, true);
+  assert.equal(r.treino.itens[0].series, 3);
+  assert.equal(r.treino.itens[0].reps, '10');
+  assert.equal(r.treino.itens[0].carga, 20);
+  assert.equal(r.treino.itens[0].sets.length, 3);
+  assert.equal(validarTreinoGeral({ tipo: 'forca', nome: 'A', itens: [{ ...item, sets: [{ reps: 'x', carga: '' }] }] }).ok, false);
+  // volume com faixas: (5-7 → 6) × (20-25 → 22,5) + 10 × 20
+  assert.equal(volumeKg({ itens: [{ sets: [{ reps: '5-7', carga: '20-25' }, { reps: '10', carga: '20' }] }] }), 6 * 22.5 + 200);
+  // a sessão começa com as séries planejadas (primeira repetição e peso mínimo da faixa)
+  const f = sessaoInicial({ id: 't', nome: 'A', itens: [{ ...item, sets: [{ reps: '5-7', carga: '20-25' }, { reps: '10', carga: '' }] }] }, null, '2026-11-12');
+  assert.deepEqual(f.itens[0].series.map((x) => [x.reps, x.carga]), [['5', '20'], ['10', '']]);
+});

@@ -1,6 +1,6 @@
 // Tipos de treino (força, cardio, outro): faixas, validação, resumo e estimativa de calorias.
 // Funções puras, testadas em tests/.
-import { validarTreino } from './treinoModelo.js';
+import { validarTreino, setsDoItem } from './treinoModelo.js';
 
 export const TIPOS = {
   forca: { nome: 'Força', desc: 'Musculação, calistenia, crossfit, funcional…' },
@@ -61,13 +61,10 @@ export const distanciaEmKm = (d) => {
   return { min: d.faixa.min * k, max: d.faixa.max * k };
 };
 
-// Peso levantado (kg) = séries × repetições × carga; usa o meio das faixas
+// Peso levantado (kg) = soma de repetições × carga de cada série; usa o meio das faixas
+const meioTexto = (t) => { const v = String(t || '').split('-').map(Number).filter((n) => n > 0); return v.length ? v.reduce((x, y) => x + y, 0) / v.length : 0; };
 export function volumeKg(treino) {
-  return (treino?.itens || []).reduce((s, i) => {
-    const reps = String(i.reps || '').split('-').map(Number).filter((n) => n > 0);
-    const r = reps.length ? reps.reduce((a, b) => a + b, 0) / reps.length : 0;
-    return s + (Number(i.series) || 0) * r * (Number(i.carga) || 0);
-  }, 0);
+  return (treino?.itens || []).reduce((s, i) => s + setsDoItem(i).reduce((t, x) => t + meioTexto(x.reps) * meioTexto(x.carga), 0), 0);
 }
 
 // Calorias estimadas: MET × peso (kg) × horas. Devolve { min, max } (kcal) ou null se faltar dado.
@@ -105,7 +102,7 @@ export function resumoDoTreino(treino, pesoKg) {
     const itens = treino.itens || [];
     const series = itens.reduce((s, i) => s + (Number(i.series) || 0), 0);
     l.push({ rotulo: 'Exercícios', valor: `${itens.length} · ${series} séries` });
-    const reps = itens.reduce((s, i) => s + (Number(i.series) || 0) * (Number(String(i.reps).split('-')[0]) || 0), 0);
+    const reps = itens.reduce((s, i) => s + setsDoItem(i).reduce((t, x) => t + (Number(String(x.reps).split('-')[0]) || 0), 0), 0);
     if (reps) l.push({ rotulo: 'Repetições', valor: `${reps}+` });
     const v = Math.round(volumeKg(treino));
     if (v) l.push({ rotulo: 'Peso levantado', valor: `${v.toLocaleString('pt-BR')} kg` });

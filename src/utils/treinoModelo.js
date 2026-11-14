@@ -4,7 +4,41 @@ import { intensidadeDoTreino } from './treino.js';
 export const LIMITE_ITENS = 40;
 
 let seq = 0;
-export const novoItem = (exercicioId) => ({ id: `${Date.now().toString(36)}${(seq++).toString(36)}`, exercicioId, series: '3', reps: '10', carga: '' });
+const idItem = () => `${Date.now().toString(36)}${(seq++).toString(36)}`;
+export const novoItem = (exercicioId) => ({ id: idItem(), exercicioId, series: '3', reps: '10', carga: '' });
+// Item com séries próprias: sets = [{ reps: '5-7', carga: '20-25' }, ...] (repetições e carga em número ou faixa)
+export const novoItemComSets = (exercicioId, sets, extras = {}) => ({ id: idItem(), exercicioId, series: String(sets.length), reps: String(sets[0]?.reps ?? ''), carga: String(sets[0]?.carga ?? ''), sets: sets.map((x) => ({ reps: String(x.reps ?? ''), carga: String(x.carga ?? '') })), ...extras });
+
+const texto = (v) => (v === null || v === undefined ? '' : String(v));
+// Séries do item como lista [{ reps, carga }] (textos): usa "sets" se houver; senão repete reps/carga "series" vezes
+export const setsDoItem = (it) => (Array.isArray(it?.sets) && it.sets.length
+  ? it.sets.map((x) => ({ reps: texto(x.reps), carga: texto(x.carga) }))
+  : Array.from({ length: Number(it?.series) || 0 }, () => ({ reps: texto(it?.reps), carga: texto(it?.carga) })));
+
+const comVirgula = (t) => texto(t).replace('.', ',');
+// "3 × 10 · 20 kg" (séries iguais agrupadas); séries diferentes ficam separadas por " | "
+export function textoSeries(it) {
+  const sets = setsDoItem(it);
+  const grupos = [];
+  sets.forEach((x) => {
+    const ultimo = grupos[grupos.length - 1];
+    if (ultimo && ultimo.reps === x.reps && ultimo.carga === x.carga) ultimo.n += 1;
+    else grupos.push({ n: 1, reps: x.reps, carga: x.carga });
+  });
+  return grupos.map((g) => `${g.n} × ${g.reps}${g.carga ? ` · ${comVirgula(g.carga)} kg` : ''}`).join(' | ');
+}
+
+// Valida e normaliza uma série: { ok, set } | { ok:false, erro }
+export function validarSet(x) {
+  const reps = texto(x?.reps).trim();
+  const m = /^(\d{1,3})(?:-(\d{1,3}))?$/.exec(reps);
+  if (!m || Number(m[1]) < 1 || (m[2] !== undefined && Number(m[2]) < Number(m[1]))) return { ok: false, erro: 'As repetições devem ser um número (ex.: 10) ou uma faixa (ex.: 5-7).' };
+  const c = texto(x?.carga).trim().replace(/,/g, '.').replace(/\s+/g, '');
+  if (c === '') return { ok: true, set: { reps, carga: '' } };
+  const n = /^(\d+(?:\.\d+)?)(?:-(\d+(?:\.\d+)?))?$/.exec(c);
+  if (!n || Number(n[1]) > 1000 || (n[2] !== undefined && (Number(n[2]) > 1000 || Number(n[2]) < Number(n[1])))) return { ok: false, erro: 'O peso deve ser um número em kg (ex.: 20) ou uma faixa (ex.: 20-25), até 1000.' };
+  return { ok: true, set: { reps, carga: c } };
+}
 
 // Variação (equipamento/execução) e unilateral: só entram no item quando escolhidos
 export const extrasDoItem = (it) => {
@@ -31,6 +65,19 @@ export function validarTreino(form, existe = () => true) {
 
   const saida = [];
   for (const it of itens) {
+    if (Array.isArray(it.sets) && it.sets.length) {
+      if (!existe(it.exercicioId)) return { ok: false, erro: 'Há um exercício que não existe mais na biblioteca. Remova-o e salve de novo.' };
+      if (it.sets.length > 20) return { ok: false, erro: 'Cada exercício pode ter até 20 séries.' };
+      const sets = [];
+      for (const x of it.sets) {
+        const r = validarSet(x);
+        if (!r.ok) return r;
+        sets.push(r.set);
+      }
+      const primeira = Number(String(sets[0].carga).split('-')[0]);
+      saida.push({ id: it.id, exercicioId: it.exercicioId, series: sets.length, reps: sets[0].reps, carga: sets[0].carga === '' ? null : primeira, sets, ...extrasDoItem(it) });
+      continue;
+    }
     if (!existe(it.exercicioId)) return { ok: false, erro: 'Há um exercício que não existe mais na biblioteca. Remova-o e salve de novo.' };
     const series = inteiro(it.series);
     if (!(series >= 1 && series <= 20)) return { ok: false, erro: 'As séries de cada exercício devem ser de 1 a 20.' };

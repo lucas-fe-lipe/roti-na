@@ -154,3 +154,50 @@ export const achar = (id) => todosExercicios().find((e) => e.id === id) || null;
 export const porId = achar;
 // Texto da variação escolhida: "Halteres · unilateral"
 export const rotuloVariacao = (v, uni) => [v, uni ? 'unilateral' : ''].filter(Boolean).join(' · ');
+
+// ---------- equipamentos e filtros ----------
+export const EQP = { maquinas: 'Máquinas', livres: 'Pesos livres', barras: 'Barras (fixa e paralelas)', corpo: 'Só o corpo' };
+
+// Músculos que "pertencem" a cada categoria: um exercício atende a categoria se é dela
+// ou se exige algum desses músculos pelo menos como auxiliar.
+export const CAT_MUSCULOS = {
+  Peito: ['chest'],
+  Costas: ['lats', 'trapezius', 'lower-back', 'rear-deltoids'],
+  Ombros: ['deltoids', 'rear-deltoids'],
+  Braços: ['biceps', 'triceps', 'forearms'],
+  Pernas: ['quads', 'quads-outer', 'adductors', 'hamstrings', 'glutes', 'calves', 'shins', 'shins-outer'],
+  Abdômen: ['abs-upper', 'abs-middle', 'abs-lower', 'obliques', 'obliques-lower'],
+};
+export const atendeCategoria = (ex, cat) => ex.cat === cat || (CAT_MUSCULOS[cat] || []).some((g) => (ex.m?.[g] || 0) >= S);
+
+const BARRAS = /^(barra-fixa|paralelas|elevacao-pernas-barra)/;
+const EXTRA_EQP = {
+  crossover: ['maquinas'], 'crossover-baixo': ['maquinas'], 'face-pull': ['maquinas'], 'abducao-polia': ['maquinas'], 'abdominal-polia': ['maquinas'],
+  'desenvolvimento-arnold': ['livres'], 'agachamento-goblet': ['livres'], 'abdominal-canivete': ['corpo'], prancha: ['corpo'], 'prancha-lateral': ['corpo'],
+  'roda-abdominal': ['livres'], 'russian-twist': ['corpo', 'livres'], 'triceps-banco': ['corpo'], 'abdominal-infra': ['corpo'],
+};
+// Equipamentos de um exercício: os do próprio exercício (criados pelo usuário) ou deduzidos das variações.
+export function equipamentosDe(ex) {
+  if (Array.isArray(ex.eqp) && ex.eqp.length) return ex.eqp;
+  if (EXTRA_EQP[ex.id]) return EXTRA_EQP[ex.id];
+  const r = new Set();
+  if (BARRAS.test(ex.id)) r.add('barras');
+  (ex.eq || []).forEach((v) => {
+    if (/^(Máquina|Polia|Smith|Leg press)/.test(v)) r.add('maquinas');
+    else if (/^(Barra|Halteres|Com peso)/.test(v) && !BARRAS.test(ex.id)) r.add('livres');
+    else if (/^(Livre|Com elástico|Negativa|Apoio)/.test(v) && !BARRAS.test(ex.id)) r.add('corpo');
+  });
+  if (r.size === 0) r.add('corpo');
+  return [...r];
+}
+
+// Filtros: categorias = TODAS as selecionadas; equipamentos = PELO MENOS UM dos selecionados.
+export function filtrarExercicios(lista, { busca = '', cats = [], eqps = [] } = {}) {
+  const q = busca.trim().toLowerCase();
+  return lista.filter((e) => {
+    if (q && !e.nome.toLowerCase().includes(q)) return false;
+    if (cats.length && !cats.every((c) => atendeCategoria(e, c))) return false;
+    if (eqps.length && !equipamentosDe(e).some((x) => eqps.includes(x))) return false;
+    return true;
+  });
+}

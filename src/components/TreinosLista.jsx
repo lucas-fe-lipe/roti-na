@@ -5,7 +5,8 @@ import { salvarDoc, apagarDoc } from '../services/db';
 import { notificar } from '../utils/toast';
 import useVoltar from '../hooks/useVoltar';
 import ConfirmModal from './ConfirmModal';
-import ExercicioEditor from './ExercicioEditor';
+import PickerExercicios from './PickerExercicios';
+import SeriesPopup from './SeriesPopup';
 import AvatarMuscular from './AvatarMuscular';
 import IconeTreino, { chaveIcone } from './IconeTreino';
 import CampoFaixa from './CampoFaixa';
@@ -14,14 +15,14 @@ import { EditorSessao, HistoricoTreino } from './SessoesTreino';
 import { hojeLocalStr } from '../utils/date';
 import { horariosDoTreino, proximoHorarioDoTreino, rotuloProximo } from '../utils/treinoAtividade';
 import { sessaoInicial, sessaoParaForm, historicoDoTreino } from '../utils/sessoes';
-import { achar, todosExercicios, CATEGORIAS, MUSCULOS, rotuloVariacao } from '../data/exercicios';
+import { achar, MUSCULOS, rotuloVariacao } from '../data/exercicios';
 import { tipoDe, TIPOS, resumoDoTreino, validarTreinoGeral, faixaParaTexto } from '../utils/treinoTipos';
-import { novoItem, intensidadesDoTreino, musculosMaisTrabalhados, moverItem, ordenarTreinos } from '../utils/treinoModelo';
+import { novoItemComSets, textoSeries, intensidadesDoTreino, musculosMaisTrabalhados, moverItem, ordenarTreinos } from '../utils/treinoModelo';
 
 const campo = 'bg-zinc-950 border border-zinc-700 rounded px-1.5 py-1.5 text-xs text-white text-center';
 
-// ---------- editor: nome + exercícios (séries, repetições, carga) + avatar ao vivo ----------
-function EditorTreino({ inicial, config, onClose, onSalvar, exCustom, atividades = [], vinculoInicial = '' }) {
+// ---------- editor do treino de força: nome, duração, vínculo, exercícios (séries/reps/peso) e avatar ao vivo ----------
+function EditorTreino({ inicial, config, onClose, onSalvar, exCustom, midias, atividades = [], vinculoInicial = '' }) {
   useVoltar(true, onClose);
   const [nome, setNome] = useState(inicial.nome || '');
   const [itens, setItens] = useState(inicial.itens || []);
@@ -29,21 +30,12 @@ function EditorTreino({ inicial, config, onClose, onSalvar, exCustom, atividades
   const [vinculo, setVinculo] = useState(vinculoInicial);
   const [erro, setErro] = useState('');
   const [salvando, setSalvando] = useState(false);
-  const [escolhendo, setEscolhendo] = useState(!(inicial.itens || []).length);
-  const [busca, setBusca] = useState('');
-  const [cat, setCat] = useState(null);
-  const [novoEx, setNovoEx] = useState(false);
+  const [picker, setPicker] = useState(false);
+  const [seriesPara, setSeriesPara] = useState(null); // { exercicio, item? }
+  const [remover, setRemover] = useState(null);
   const { sexo, cor, modo } = config.treino;
-  const nCustom = exCustom?.lista?.length || 0;
 
   const intensidades = useMemo(() => intensidadesDoTreino({ itens }, achar, modo), [itens, modo]);
-  const lista = useMemo(() => {
-    const q = busca.trim().toLowerCase();
-    return todosExercicios().filter((e) => (!cat || e.cat === cat) && (!q || e.nome.toLowerCase().includes(q)));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [busca, cat, nCustom]);
-
-  const mudar = (id, f, v) => setItens((l) => l.map((i) => (i.id === id ? { ...i, [f]: v } : i)));
 
   const salvar = async () => {
     const r = validarTreinoGeral({ tipo: 'forca', nome, itens, duracaoTexto }, (id) => !!achar(id));
@@ -54,9 +46,23 @@ function EditorTreino({ inicial, config, onClose, onSalvar, exCustom, atividades
     setSalvando(false);
   };
 
+  const confirmarSeries = ({ sets, variacao, unilateral }) => {
+    const extras = { ...(variacao ? { variacao } : {}), ...(unilateral ? { unilateral: true } : {}) };
+    if (seriesPara.item) {
+      setItens((l) => l.map((i) => {
+        if (i.id !== seriesPara.item.id) return i;
+        const { variacao: _v, unilateral: _u, ...resto } = i;
+        return { ...resto, ...novoItemComSets(i.exercicioId, sets, extras), id: i.id };
+      }));
+    } else {
+      setItens((l) => [...l, novoItemComSets(seriesPara.exercicio.id, sets, extras)]);
+      setPicker(false);
+    }
+    setSeriesPara(null);
+  };
+
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-3" onClick={onClose}>
-      {novoEx && <ExercicioEditor config={config} onClose={() => setNovoEx(false)} onSalvar={async (ex) => { const c = await exCustom.salvar(ex); if (c) { setItens((l) => [...l, novoItem(c.id)]); setNovoEx(false); notificar('Exercício criado e adicionado ao treino.', 'sucesso'); } }} />}
       <div role="dialog" aria-modal="true" aria-label="Treino" className="bg-zinc-900 text-zinc-100 rounded-xl w-full max-w-lg p-4 shadow-2xl border border-zinc-800 max-h-[92vh] overflow-y-auto space-y-3" onClick={(e) => e.stopPropagation()}>
         <div className="flex justify-between items-center">
           <h2 className="text-lg font-bold">{inicial.id ? 'Editar treino' : 'Novo treino de força'}</h2>
@@ -66,75 +72,31 @@ function EditorTreino({ inicial, config, onClose, onSalvar, exCustom, atividades
         <label className="flex flex-col text-[11px] text-zinc-400">Nome do treino
           <input type="text" maxLength={60} value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Ex.: Treino A – Peito e tríceps" className="mt-0.5 bg-zinc-950 border border-zinc-700 rounded p-2 text-sm text-white" />
         </label>
-
-        <CampoFaixa rotulo="Duração (opcional)" sufixo={<span className="text-xs text-zinc-400 shrink-0">min</span>} valor={duracaoTexto} onChange={setDuracaoTexto} placeholder="60" />
+        <CampoFaixa rotulo="Duração" sufixo={<span className="text-xs text-zinc-400 shrink-0">min</span>} valor={duracaoTexto} onChange={setDuracaoTexto} placeholder="60" />
         <VinculoAtividade valor={vinculo} onChange={setVinculo} atividades={atividades} treinoId={inicial.id} />
 
         {itens.length > 0 && <AvatarMuscular sexo={sexo} cor={cor} intensidades={intensidades} className="max-w-xs mx-auto" />}
 
-        <div className="flex flex-col gap-1.5">
-          {itens.length > 0 && (
-            <div className="grid grid-cols-[1fr_2.6rem_3.4rem_3.4rem_4.2rem] gap-1 text-[10px] text-zinc-500 px-1">
-              <span>Exercício</span><span className="text-center">Séries</span><span className="text-center">Reps</span><span className="text-center">Kg</span><span />
-            </div>
-          )}
+        <ol className="flex flex-col gap-1.5">
           {itens.map((it, i) => {
             const ex = achar(it.exercicioId);
             return (
-              <div key={it.id} className="bg-zinc-950/50 border border-zinc-800 rounded-lg p-1 space-y-1">
-              <div className="grid grid-cols-[1fr_2.6rem_3.4rem_3.4rem_4.2rem] gap-1 items-center">
-                <span className="text-xs text-zinc-100 truncate px-1" title={ex?.nome}>{ex ? ex.nome : 'Exercício removido'}</span>
-                <input aria-label={`Séries de ${ex?.nome || ''}`} inputMode="numeric" value={it.series} onChange={(e) => mudar(it.id, 'series', e.target.value)} className={campo} />
-                <input aria-label={`Repetições de ${ex?.nome || ''}`} value={it.reps} onChange={(e) => mudar(it.id, 'reps', e.target.value)} className={campo} />
-                <input aria-label={`Carga de ${ex?.nome || ''} em kg`} inputMode="decimal" value={it.carga ?? ''} onChange={(e) => mudar(it.id, 'carga', e.target.value)} placeholder="–" className={campo} />
-                <div className="flex justify-end">
-                  <button type="button" aria-label="Subir" disabled={i === 0} onClick={() => setItens((l) => moverItem(l, it.id, -1))} className="w-5 h-6 text-zinc-400 hover:text-white disabled:opacity-25">▲</button>
-                  <button type="button" aria-label="Descer" disabled={i === itens.length - 1} onClick={() => setItens((l) => moverItem(l, it.id, 1))} className="w-5 h-6 text-zinc-400 hover:text-white disabled:opacity-25">▼</button>
-                  <button type="button" aria-label={`Remover ${ex?.nome || 'exercício'}`} onClick={() => setItens((l) => l.filter((x) => x.id !== it.id))} className="w-5 h-6 text-red-500 hover:text-red-400 font-bold">×</button>
+              <li key={it.id} className="flex items-center gap-1 bg-zinc-950/50 border border-zinc-800 rounded-lg p-1.5">
+                <div className="flex flex-col shrink-0">
+                  <button type="button" aria-label="Subir" disabled={i === 0} onClick={() => setItens((l) => moverItem(l, it.id, -1))} className="w-6 h-5 text-zinc-400 hover:text-white disabled:opacity-25 text-xs">▲</button>
+                  <button type="button" aria-label="Descer" disabled={i === itens.length - 1} onClick={() => setItens((l) => moverItem(l, it.id, 1))} className="w-6 h-5 text-zinc-400 hover:text-white disabled:opacity-25 text-xs">▼</button>
                 </div>
-              </div>
-              {ex && (ex.eq || ex.uni) && (
-                <div className="flex items-center gap-2 px-1">
-                  {ex.eq && (
-                    <select aria-label={`Variação de ${ex.nome}`} value={it.variacao || ''} onChange={(e) => mudar(it.id, 'variacao', e.target.value)} className="flex-1 min-w-0 bg-zinc-900 border border-zinc-700 rounded px-1.5 py-1 text-[11px] text-zinc-200">
-                      <option value="">Variação: não definida</option>
-                      {ex.eq.map((v) => <option key={v} value={v}>{v}</option>)}
-                    </select>
-                  )}
-                  {ex.uni && (
-                    <label className="flex items-center gap-1 text-[11px] text-zinc-300 shrink-0">
-                      <input type="checkbox" checked={!!it.unilateral} onChange={(e) => mudar(it.id, 'unilateral', e.target.checked)} /> Unilateral
-                    </label>
-                  )}
-                </div>
-              )}
-            </div>
+                <button type="button" onClick={() => ex && setSeriesPara({ exercicio: ex, item: it })} className="flex-1 min-w-0 text-left" aria-label={`Editar séries de ${ex?.nome || 'exercício'}`}>
+                  <span className="block text-xs text-zinc-100 truncate">{ex ? ex.nome : 'Exercício removido'}{(it.variacao || it.unilateral) && <span className="text-zinc-500"> ({rotuloVariacao(it.variacao, it.unilateral)})</span>}</span>
+                  <span className="block text-[11px] text-zinc-400 truncate">{textoSeries(it)}</span>
+                </button>
+                <button type="button" aria-label={`Remover ${ex?.nome || 'exercício'}`} onClick={() => setRemover(it)} className="w-7 h-7 shrink-0 text-red-500 hover:text-red-400 font-bold">×</button>
+              </li>
             );
           })}
-        </div>
+        </ol>
 
-        <button type="button" onClick={() => setEscolhendo((v) => !v)} aria-expanded={escolhendo} className="text-xs font-bold text-zinc-300 hover:text-white">
-          {escolhendo ? '▼︎' : '▶︎'} Adicionar exercício
-        </button>
-        {escolhendo && (
-          <div className="flex flex-col gap-2 border border-zinc-800 rounded-lg p-2">
-            <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar exercício…" aria-label="Buscar exercício" className="bg-zinc-950 border border-zinc-700 rounded px-2 py-1.5 text-xs text-white" />
-            <div className="flex flex-wrap gap-1">
-              {[null, ...CATEGORIAS].map((c) => (
-                <button key={c || 'todos'} type="button" onClick={() => setCat(c)} aria-pressed={cat === c} className={`text-[11px] px-2 py-0.5 rounded-full border ${cat === c ? 'bg-zinc-100 text-zinc-900 border-zinc-100 font-bold' : 'border-zinc-700 text-zinc-400 hover:text-zinc-100'}`}>{c || 'Todos'}</button>
-              ))}
-            </div>
-            <div className="max-h-48 overflow-y-auto flex flex-col gap-1">
-              {exCustom && <button type="button" onClick={() => setNovoEx(true)} className="text-left text-xs px-2 py-1.5 rounded border border-dashed border-zinc-600 text-zinc-200 hover:bg-zinc-800">+ Criar exercício que não está na biblioteca</button>}
-              {lista.length === 0 && <span className="text-xs text-zinc-500 py-1">Nenhum exercício encontrado.</span>}
-              {lista.map((e) => (
-                <button key={e.id} type="button" onClick={() => setItens((l) => [...l, novoItem(e.id)])} className="flex items-center justify-between text-left text-xs px-2 py-1.5 rounded bg-zinc-800/60 hover:bg-zinc-800 text-zinc-100">
-                  <span>{e.nome}{e.custom && <span className="text-zinc-500 text-[10px]"> · seu</span>}</span><span className="text-zinc-500 text-[11px]">+ {e.cat}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+        <button type="button" onClick={() => setPicker(true)} className="w-full py-2 border border-dashed border-zinc-600 rounded-lg text-sm font-bold text-zinc-200 hover:bg-zinc-800">+ Adicionar exercício</button>
 
         {erro && <p role="alert" className="text-xs text-red-400">{erro}</p>}
         <div className="flex justify-end gap-2 pt-2 border-t border-zinc-800">
@@ -142,6 +104,10 @@ function EditorTreino({ inicial, config, onClose, onSalvar, exCustom, atividades
           <button onClick={salvar} disabled={salvando} className="px-3 py-1.5 bg-zinc-100 text-zinc-950 rounded hover:bg-zinc-300 text-sm font-bold disabled:opacity-60">Salvar</button>
         </div>
       </div>
+      {picker && <PickerExercicios config={config} midias={midias} exCustom={exCustom} onClose={() => setPicker(false)} onEscolher={(e) => setSeriesPara({ exercicio: e })} />}
+      {seriesPara && <SeriesPopup exercicio={seriesPara.exercicio} item={seriesPara.item} rotuloBotao={seriesPara.item ? 'Salvar' : 'Adicionar'} onClose={() => setSeriesPara(null)} onSalvar={confirmarSeries} />}
+      <ConfirmModal aberto={!!remover} titulo="Remover exercício" mensagem={remover ? `Remover "${achar(remover.exercicioId)?.nome || 'este exercício'}" do treino?` : ''}
+        onCancelar={() => setRemover(null)} onConfirmar={() => { const r = remover; setRemover(null); setItens((l) => l.filter((x) => x.id !== r.id)); }} />
     </div>
   );
 }
@@ -222,7 +188,7 @@ function DetalheTreino({ treino, pesoKg, sessoes, atividades, onAgendar, config,
             return (
               <li key={it.id} className="flex items-center justify-between gap-2 bg-zinc-950/50 border border-zinc-800 rounded-lg px-2.5 py-1.5">
                 <span className="text-xs text-zinc-100 truncate"><span className="text-zinc-500 mr-1.5">{i + 1}.</span>{ex ? ex.nome : 'Exercício removido'}{(it.variacao || it.unilateral) && <span className="text-zinc-500"> ({rotuloVariacao(it.variacao, it.unilateral)})</span>}</span>
-                <span className="text-xs text-zinc-300 shrink-0">{it.series} × {it.reps}{it.carga ? ` · ${String(it.carga).replace('.', ',')} kg` : ''}</span>
+                <span className="text-xs text-zinc-300 shrink-0 text-right">{textoSeries(it)}</span>
               </li>
             );
           })}
@@ -269,7 +235,7 @@ function DetalheTreino({ treino, pesoKg, sessoes, atividades, onAgendar, config,
 }
 
 // ---------- bloco principal ----------
-export default function TreinosLista({ user, treinos, setTreinos, sessoes = [], setSessoes = () => {}, atividades = [], onAgendar = () => {}, onVincular = () => {}, pesoKg = null, abrir = null, onAbriu = () => {}, config, atualizarConfig, exCustom }) {
+export default function TreinosLista({ user, treinos, setTreinos, sessoes = [], setSessoes = () => {}, atividades = [], onAgendar = () => {}, onVincular = () => {}, pesoKg = null, abrir = null, onAbriu = () => {}, config, atualizarConfig, exCustom, midias = {} }) {
   const [editor, setEditor] = useState(null);
   const [escolhendoTipo, setEscolhendoTipo] = useState(false);
   const [ampliar, setAmpliar] = useState(null);
@@ -391,7 +357,7 @@ export default function TreinosLista({ user, treinos, setTreinos, sessoes = [], 
       {editorSessao && <EditorSessao inicial={editorSessao} config={config} onClose={() => setEditorSessao(null)} onSalvar={salvarSessao} />}
       {escolhendoTipo && <EscolherTipo onEscolher={novo} onClose={() => setEscolhendoTipo(false)} />}
       {ampliar && <ImagemAmpliada treino={ampliar} config={config} onClose={() => setAmpliar(null)} />}
-      {editor && tipoDe(editor) === 'forca' && <EditorTreino inicial={editor} config={config} onClose={() => setEditor(null)} onSalvar={salvar} exCustom={exCustom} atividades={atividades} vinculoInicial={editor.id ? vinculoAtual(editor.id) : ''} />}
+      {editor && tipoDe(editor) === 'forca' && <EditorTreino inicial={editor} config={config} onClose={() => setEditor(null)} onSalvar={salvar} exCustom={exCustom} midias={midias} atividades={atividades} vinculoInicial={editor.id ? vinculoAtual(editor.id) : ''} />}
       {editor && tipoDe(editor) !== 'forca' && <EditorTreinoSimples tipo={tipoDe(editor)} inicial={editor} atividades={atividades} vinculoInicial={editor.id ? vinculoAtual(editor.id) : ''} onClose={() => setEditor(null)} onSalvar={salvar} />}
       <ConfirmModal aberto={!!excluirSessao} titulo="Excluir sessão" mensagem={excluirSessao ? `Excluir a sessão de ${excluirSessao.data.split('-').reverse().join('/')}?` : ''}
         onCancelar={() => setExcluirSessao(null)} onConfirmar={() => { const x = excluirSessao; setExcluirSessao(null); apagarSessao(x); }} />
