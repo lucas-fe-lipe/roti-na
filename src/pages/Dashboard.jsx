@@ -6,6 +6,7 @@ import TreinosLista from '../components/TreinosLista';
 import { treinoDaAtividade, modeloAtividadeDoTreino } from '../utils/treinoAtividade';
 import { resumoTreino } from '../utils/treinoModelo';
 import MetasMenu from '../components/MetasMenu';
+import MetaPopup from '../components/MetaPopup';
 import useVoltar from '../hooks/useVoltar';
 import { linhasDe, distribuirMetas, moverMeta, posicaoNovaMeta } from '../utils/metasLayout';
 import useBiblioteca from '../hooks/useBiblioteca';
@@ -64,6 +65,7 @@ export default function Dashboard() {
   const [modeloAtividade, setModeloAtividade] = useState(null); // pré-preenchimento de "Agendar na grade"
   const [treinoAbrir, setTreinoAbrir] = useState(null); // { id, registrar } pedido para abrir um treino na página Treinos
   const [metaEditando, setMetaEditando] = useState(null);
+  const [metaPopup, setMetaPopup] = useState(null); // { id, rect }
   const [modoVisualizacao, setModoVisualizacao] = useState(true);
 
   const [categorias, setCategorias] = useState(['Estudos', 'Trabalho', 'Treinos', 'Outros']);
@@ -241,6 +243,15 @@ export default function Dashboard() {
       progresso: novoProgresso > metaAtual.meta ? metaAtual.meta : novoProgresso,
       diaReferencia: diaDaMeta(agora, metaAtual.horarioReset),
     });
+  };
+
+  const handleDecrementarMeta = async (metaId) => {
+    const metaAtual = metas.find(m => m.id === metaId);
+    if (!metaAtual) return;
+    const agora = new Date();
+    const base = progressoAtual(metaAtual, agora);
+    const novo = Number((base - metaAtual.incremento).toFixed(2));
+    await persistirMeta({ ...metaAtual, progresso: novo < 0 ? 0 : novo, diaReferencia: diaDaMeta(agora, metaAtual.horarioReset) });
   };
 
   const handleZerarMeta = async (metaId) => {
@@ -443,14 +454,17 @@ export default function Dashboard() {
         const progressoExibido = progressoAtual(m, currentTime);
         const percentual = Math.min(100, (progressoExibido / m.meta) * 100);
         return (
-          <div key={m.id} className="relative inline-flex items-center justify-between w-auto max-w-[280px] bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden shrink-0 h-12 shadow-md">
+          <div key={m.id} role="button" tabIndex={0} aria-label={`Opções da meta ${m.titulo}`}
+            onClick={(e) => setMetaPopup({ id: m.id, rect: e.currentTarget.getBoundingClientRect().toJSON() })}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setMetaPopup({ id: m.id, rect: e.currentTarget.getBoundingClientRect().toJSON() }); } }}
+            className="relative inline-flex items-center justify-between w-auto max-w-[280px] bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden shrink-0 h-12 shadow-md cursor-pointer">
             <div className="absolute top-0 left-0 bottom-0 transition-all duration-300 opacity-80 z-0" style={{ width: `${percentual}%`, backgroundColor: m.cor }}></div>
             <div className="relative z-10 pl-1.5 pr-0.5 flex flex-col justify-center overflow-hidden">
               <span className="text-xs font-bold text-white truncate">{m.titulo}</span>
               <span className="text-[10px] text-zinc-300 font-mono">{progressoExibido} / {m.meta} {m.unidade}</span>
             </div>
             <div className="relative z-10 flex items-center gap-0.5 pr-1.5 pl-0.5">
-              <button aria-label={`Adicionar a ${m.titulo}`} onClick={() => handleIncrementarMeta(m.id)} className="w-7 h-7 bg-zinc-800/80 hover:bg-zinc-700 text-white rounded flex items-center justify-center text-sm transition-colors">+</button>
+              <button aria-label={`Adicionar a ${m.titulo}`} onClick={(e) => { e.stopPropagation(); handleIncrementarMeta(m.id); }} className="w-7 h-7 bg-zinc-800/80 hover:bg-zinc-700 text-white rounded flex items-center justify-center text-sm transition-colors">+</button>
             </div>
           </div>
         );
@@ -578,6 +592,21 @@ export default function Dashboard() {
           return v ? { nome: v.disc.nome, ...resumoDisciplina(v.disc, v.periodo) } : null;
         })()}
       />
+      {metaPopup && (() => {
+        const m = metas.find((x) => x.id === metaPopup.id);
+        if (!m) return null;
+        return (
+          <MetaPopup
+            meta={m}
+            rect={metaPopup.rect}
+            progresso={progressoAtual(m, currentTime)}
+            onMais={() => handleIncrementarMeta(m.id)}
+            onMenos={() => handleDecrementarMeta(m.id)}
+            onEditar={() => { setMetaPopup(null); setMetaEditando(m); setIsGoalModalOpen(true); }}
+            onClose={() => setMetaPopup(null)}
+          />
+        );
+      })()}
       <MetasMenu
         isOpen={isMetasMenuOpen}
         onClose={() => setIsMetasMenuOpen(false)}

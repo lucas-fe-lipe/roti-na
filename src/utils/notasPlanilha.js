@@ -1,4 +1,5 @@
 import { calcAvaliacoes } from './notas.js';
+import { aprovacaoDe } from './notasStatus.js';
 
 // ---------- conteúdo da planilha ----------
 // Uma aba por período. Cada aba: { nome, larguras: [...], mesclar: ['A1:E1'], linhas: [{ alt?, c: [{ v, e }] }] }
@@ -32,12 +33,16 @@ function nomeDeAba(texto, usados) {
   return nome;
 }
 
+// Mesmo critério do app: disciplina vermelha = % obtido abaixo do % de aprovação dela;
+// avaliação vermelha = % da avaliação abaixo do % de aprovação da disciplina.
 export function abaDoPeriodo(curso, periodo, nome) {
   const linhas = [{ alt: 24, c: [L(`${curso.nome || 'Curso'} — ${periodo.nome || 'Período'}`, 'titulo')] }];
   (periodo.disciplinas || []).forEach((d) => {
     linhas.push({ c: [L('Disciplina', 'cabEsq'), L('Distribuídos', 'cab'), L('Obtido', 'cab'), L('%', 'cab'), L('', 'cab')] });
 
     const { maxTotal, obtidaTotal, percentual } = calcAvaliacoes(d.avaliacoes, d.usarMedia);
+    const aprovacao = aprovacaoDe(d, periodo);
+    const discVermelha = maxTotal > 0 && percentual < aprovacao;
     const carga = Number(d.cargaHoraria) > 0 ? ` (${d.cargaHoraria}h)` : '';
     const titulo = `${d.nome || 'Sem nome'}${carga}`;
     const professor = (d.professor || '').trim();
@@ -46,8 +51,8 @@ export function abaDoPeriodo(curso, periodo, nome) {
       c: [
         L(professor ? `${titulo}\n${professor}` : titulo, 'pretoTexto'),
         L(arred(maxTotal), 'pretoNum'),
-        L(arred(obtidaTotal), 'pretoNum'),
-        L(maxTotal > 0 ? arred(percentual) : null, 'pretoPct'),
+        L(arred(obtidaTotal), discVermelha ? 'pretoNumVerm' : 'pretoNum'),
+        L(maxTotal > 0 ? arred(percentual) : null, discVermelha ? 'pretoPctVerm' : 'pretoPct'),
         L('', 'pretoNum'),
       ],
     });
@@ -55,12 +60,14 @@ export function abaDoPeriodo(curso, periodo, nome) {
     (d.avaliacoes || []).forEach((a) => {
       const tem = temNota(a.obtida);
       const valor = temNota(a.max) ? Number(a.max) : null;
+      const pctAv = tem && valor > 0 ? (Number(a.obtida) / valor) * 100 : null;
+      const avVermelha = pctAv !== null && pctAv < aprovacao;
       linhas.push({
         c: [
           L(a.nome || '', 'texto'),
           L(valor, 'num'),
-          L(tem ? Number(a.obtida) : null, 'num'),
-          L(tem && valor > 0 ? arred((Number(a.obtida) / valor) * 100) : null, 'pct'),
+          L(tem ? Number(a.obtida) : null, avVermelha ? 'numVerm' : 'num'),
+          L(pctAv !== null ? arred(pctAv) : null, avVermelha ? 'pctVerm' : 'pct'),
           L(dataBr(a.data, a.hora), 'data'),
         ],
       });
@@ -135,7 +142,7 @@ function zip(arquivos) {
 }
 
 // Estilos (índice em cellXfs, na ordem de styles.xml abaixo)
-const ESTILOS = { texto: 0, titulo: 1, cabEsq: 2, cab: 3, pretoTexto: 4, pretoNum: 5, pretoPct: 6, num: 7, pct: 8, data: 9 };
+const ESTILOS = { texto: 0, titulo: 1, cabEsq: 2, cab: 3, pretoTexto: 4, pretoNum: 5, pretoPct: 6, num: 7, pct: 8, data: 9, pretoNumVerm: 10, pretoPctVerm: 11, numVerm: 12, pctVerm: 13 };
 
 const xmlAba = (aba) => {
   const cols = aba.larguras.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`).join('');
@@ -156,11 +163,11 @@ const xmlAba = (aba) => {
 
 const STYLES_XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
   + '<numFmts count="2"><numFmt numFmtId="164" formatCode="0.00"/><numFmt numFmtId="165" formatCode="0.00&quot;%&quot;"/></numFmts>'
-  + '<fonts count="4"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="14"/><name val="Calibri"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font></fonts>'
+  + '<fonts count="6"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="14"/><name val="Calibri"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font><font><b/><sz val="11"/><color rgb="FFFF4444"/><name val="Calibri"/></font><font><b/><sz val="11"/><color rgb="FFDC2626"/><name val="Calibri"/></font></fonts>'
   + '<fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF000000"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFD9D9D9"/><bgColor indexed="64"/></patternFill></fill></fills>'
   + '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left/><right/><top/><bottom style="thin"><color rgb="FF000000"/></bottom><diagonal/></border></borders>'
   + '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
-  + '<cellXfs count="10">'
+  + '<cellXfs count="14">'
   + '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment vertical="center"/></xf>' // 0 texto
   + '<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment vertical="center"/></xf>' // 1 titulo
   + '<xf numFmtId="0" fontId="1" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment vertical="center"/></xf>' // 2 cabEsq
@@ -171,6 +178,10 @@ const STYLES_XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styl
   + '<xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>' // 7 num
   + '<xf numFmtId="165" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>' // 8 pct
   + '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>' // 9 data
+  + '<xf numFmtId="164" fontId="4" fillId="2" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>' // 10 pretoNumVerm
+  + '<xf numFmtId="165" fontId="4" fillId="2" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>' // 11 pretoPctVerm
+  + '<xf numFmtId="164" fontId="5" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>' // 12 numVerm
+  + '<xf numFmtId="165" fontId="5" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>' // 13 pctVerm
   + '</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
 
 export function gerarXlsx(abas) {

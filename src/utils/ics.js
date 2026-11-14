@@ -46,7 +46,27 @@ function alarmes(lembretes, diaInteiro) {
   return gatilhos.flatMap((g) => ['BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:Lembrete', `TRIGGER:${g}`, 'END:VALARM']);
 }
 
+const NOMES_ICS = { atividades: 'roti-na', avaliacoes: 'roti-na avaliações' };
+
+// Bloco VTIMEZONE: o Google Agenda do celular e outros leitores exigem a definição do fuso citado em TZID.
+// O Brasil não tem horário de verão desde 2019; para outros fusos usamos o deslocamento atual (aproximação).
+function deslocamento(fuso, agora) {
+  if (fuso === 'America/Sao_Paulo') return -180;
+  try {
+    const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: fuso, hourCycle: 'h23', year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric' })
+      .formatToParts(agora).map((x) => [x.type, Number(x.value)]));
+    return Math.round((Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second) - Math.floor(agora.getTime() / 1000) * 1000) / 60000);
+  } catch { return 0; }
+}
+const fmtOffset = (min) => `${min < 0 ? '-' : '+'}${doisDigitos(Math.floor(Math.abs(min) / 60))}${doisDigitos(Math.abs(min) % 60)}`;
+export function blocoFuso(fuso, agora = new Date()) {
+  const o = fmtOffset(deslocamento(fuso, agora));
+  return ['BEGIN:VTIMEZONE', `TZID:${fuso}`, 'BEGIN:STANDARD', 'DTSTART:19700101T000000', `TZOFFSETFROM:${o}`, `TZOFFSETTO:${o}`, `TZNAME:${o.slice(0, 3)}`, 'END:STANDARD', 'END:VTIMEZONE'];
+}
+
+// soAgenda: 'atividades' | 'avaliacoes' gera um arquivo só daquela agenda (cada .ics vira uma agenda no Google).
 export function montarICS({
+  soAgenda = null,
   exportados = {},
   soNovos = false,
   agora = new Date(),
@@ -60,6 +80,7 @@ export function montarICS({
   const carimbo = fmtUTC(agora);
 
   itens.forEach((it) => {
+    if (soAgenda && it.agenda !== soAgenda) return;
     if (soNovos && exportados[it.chave] === it.assinatura) {
       contagem.jaExportados += 1;
       return;
@@ -88,9 +109,10 @@ export function montarICS({
     'PRODID:-//roti-na//PT-BR',
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
-    'X-WR-CALNAME:roti-na',
+    `X-WR-CALNAME:${soAgenda ? NOMES_ICS[soAgenda] : 'roti-na'}`,
     `X-WR-TIMEZONE:${fusoHorario}`,
   ];
-  const texto = [...cabecalho, ...linhas, 'END:VCALENDAR'].map(dobrar).join('\r\n') + '\r\n';
+  const temHorario = linhas.some((l) => l.startsWith('DTSTART;TZID='));
+  const texto = [...cabecalho, ...(temHorario ? blocoFuso(fusoHorario, agora) : []), ...linhas, 'END:VCALENDAR'].map(dobrar).join('\r\n') + '\r\n';
   return { texto, contagem, registros, total: contagem.atividades + contagem.avaliacoes };
 }

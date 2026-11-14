@@ -646,26 +646,30 @@ function janelaFalsa() {
   const h = [{ state: null }];
   let i = 0;
   const ouvintes = [];
+  const emitir = () => ouvintes.forEach((f) => f({ state: h[i].state }));
   const win = {
     saiu: false,
     get tamanho() { return h.length; },
+    get posicao() { return i; },
     history: {
       get state() { return h[i].state; },
       pushState(s) { h.splice(i + 1); h.push({ state: s }); i += 1; },
-      back() { if (i > 0) { i -= 1; ouvintes.forEach((f) => f({ state: h[i].state })); } else win.saiu = true; },
+      back() { if (i > 0) { i -= 1; emitir(); } else win.saiu = true; },
+      go(n) { i = Math.max(0, i + n); emitir(); },
     },
     addEventListener: (_t, f) => ouvintes.push(f),
   };
   return win;
 }
+const sync = (f) => f();
 
 test('voltar: fecha a camada do topo, uma por vez, e não sai do app', () => {
   const win = janelaFalsa();
-  const v = criarVoltar(win);
+  const v = criarVoltar(win, sync);
   const fechadas = [];
   v.registrar(() => fechadas.push('pagina'));
   v.registrar(() => fechadas.push('popup'));
-  assert.equal(win.tamanho, 2); // uma entrada extra, não uma por camada
+  assert.equal(win.tamanho, 3); // uma entrada por camada, criada ao abrir (com o toque do usuário)
   win.history.back();
   assert.deepEqual(fechadas, ['popup']);
   assert.equal(win.saiu, false);
@@ -673,20 +677,40 @@ test('voltar: fecha a camada do topo, uma por vez, e não sai do app', () => {
   assert.deepEqual(fechadas, ['popup', 'pagina']);
   assert.equal(win.saiu, false);
   assert.equal(v.abertas(), 0);
+  assert.equal(win.posicao, 0);
+  win.history.back(); // agora sim: sai do app
+  assert.equal(win.saiu, true);
 });
 
-test('voltar: sem camadas abertas (ou fechadas pelo botão do app), voltar sai do app', () => {
+test('voltar: camada fechada pelo botão do app não deixa entrada sobrando', () => {
   const win = janelaFalsa();
-  const v = criarVoltar(win);
+  const v = criarVoltar(win, sync);
   const remover = v.registrar(() => { throw new Error('não deveria fechar'); });
   remover(); // o pop-up foi fechado pelo próprio botão
+  assert.equal(win.posicao, 0);
+  win.history.back();
+  assert.equal(win.saiu, true);
+});
+
+test('voltar: menu esquerdo → Dados → Exportar: cada voltar fecha uma camada e o último sai', () => {
+  const win = janelaFalsa();
+  const v = criarVoltar(win, sync);
+  const fechadas = [];
+  v.registrar(() => fechadas.push('menu'));
+  const removerDados = v.registrar(() => fechadas.push('dados'));
+  removerDados(); // Exportar fecha "Dados" pelo botão e abre o próprio modal
+  v.registrar(() => fechadas.push('exportar'));
+  win.history.back();
+  win.history.back();
+  assert.deepEqual(fechadas, ['exportar', 'menu']);
+  assert.equal(win.saiu, false);
   win.history.back();
   assert.equal(win.saiu, true);
 });
 
 test('voltar: depois de fechar uma camada, a próxima também é capturada', () => {
   const win = janelaFalsa();
-  const v = criarVoltar(win);
+  const v = criarVoltar(win, sync);
   let n = 0;
   v.registrar(() => { n += 1; });
   win.history.back();
@@ -904,4 +928,35 @@ test('exercício próprio: ciclo de níveis, registro nos lookups e uso', () => 
   registrarCustom([]);
   assert.equal(acharEx('c1'), null);
   assert.deepEqual(usoDoExercicio('c1', [{ itens: [{ exercicioId: 'c1' }] }, { itens: [] }], [{ itens: [{ exercicioId: 'c1' }] }, { itens: [{ exercicioId: 'c1' }] }]), { treinos: 1, sessoes: 2 });
+});
+
+test('ICS: inclui VTIMEZONE quando há horário e separa por agenda', () => {
+  const base = {
+    atividades: [{ id: 'a1', nome: 'Capoeira', horarios: [{ dia: 'SEG', inicio: '19:00', fim: '20:30' }] }],
+    tarefas: [{ id: 't1', nome: 'Prova', tipo: 'avaliacao', data: '2026-11-20', hora: '19:00' }],
+    incluirAtividades: true, incluirAvaliacoes: true, inicio: '2026-11-09', fim: '2026-12-14', agora: agoraFixo,
+  };
+  const todos = montarICS(base);
+  assert.match(todos.texto, /BEGIN:VTIMEZONE\r\nTZID:America\/Sao_Paulo\r\nBEGIN:STANDARD\r\nDTSTART:19700101T000000\r\nTZOFFSETFROM:-0300\r\nTZOFFSETTO:-0300/);
+  const at = montarICS({ ...base, soAgenda: 'atividades' });
+  assert.equal(at.contagem.atividades, 1);
+  assert.equal(at.contagem.avaliacoes, 0);
+  assert.match(at.texto, /X-WR-CALNAME:roti-na\r\n/);
+  const av = montarICS({ ...base, soAgenda: 'avaliacoes' });
+  assert.equal(av.contagem.atividades, 0);
+  assert.match(av.texto, /X-WR-CALNAME:roti-na avaliações/);
+});
+
+test('planilha de notas: notas abaixo da aprovação ficam vermelhas, como no app', () => {
+  const abas = montarAbasNotas([{ nome: 'C', periodos: [{ nome: 'P', disciplinas: [
+    { nome: 'D', percentualAprovacao: 60, avaliacoes: [{ nome: 'A', max: '10', obtida: '3' }, { nome: 'B', max: '10', obtida: '9' }] },
+    { nome: 'E', percentualAprovacao: 60, avaliacoes: [{ nome: 'A', max: '10', obtida: '8' }] },
+  ] }] }]);
+  const est = (i) => abas[0].linhas[i].c.map((c) => c.e);
+  assert.deepEqual(est(2).slice(1, 4), ['pretoNum', 'pretoNum', 'pretoPct']); // D: 60% = aprovada
+  assert.deepEqual(est(3).slice(2, 4), ['numVerm', 'pctVerm']); // 30% < 60%
+  assert.deepEqual(est(4).slice(2, 4), ['num', 'pct']);
+  assert.deepEqual(est(6).slice(1, 4), ['pretoNum', 'pretoNum', 'pretoPct']);
+  const verm = montarAbasNotas([{ nome: 'C', periodos: [{ nome: 'P', disciplinas: [{ nome: 'D', percentualAprovacao: 70, avaliacoes: [{ nome: 'A', max: '10', obtida: '5' }] }] }] }]);
+  assert.deepEqual(verm[0].linhas[2].c.slice(2, 4).map((c) => c.e), ['pretoNumVerm', 'pretoPctVerm']);
 });

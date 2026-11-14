@@ -130,7 +130,9 @@ export default function MetasMenu({ isOpen, onClose, metas, linhas, onLinhas, on
           </div>
         </div>
 
-        <button onClick={onClose} className={`${opcao} text-center text-zinc-300`}>Fechar</button>
+        <div className="flex justify-end">
+          <button onClick={onClose} className="text-sm text-zinc-400 hover:text-white px-1 py-1">Fechar</button>
+        </div>
       </div>
     </div>
   );

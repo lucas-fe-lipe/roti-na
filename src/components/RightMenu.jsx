@@ -1,4 +1,7 @@
+import useVoltar from '../hooks/useVoltar';
+
 export default function RightMenu({ isOpen, onClose, onSelectPage, activePage, paginas = [] }) {
+  useVoltar(isOpen, onClose);
   if (!isOpen) return null;
 
   const principais = paginas;

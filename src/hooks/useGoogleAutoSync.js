@@ -4,7 +4,7 @@ import { calcularPlano } from '../utils/agendaPlano';
 import { notificar } from '../utils/toast';
 import {
   integracaoConfigurada, carregarMapa, salvarMapa, garantirAgendas, executarPlano, EVENTO_MAPA,
-  tokenValido, pedirToken, pedirTokenSilencioso, iniciarSincronizacao, terminarSincronizacao, mensagemDeErro,
+  tokenValido, pedirToken, iniciarSincronizacao, terminarSincronizacao, mensagemDeErro,
 } from '../services/googleAgenda';
 
 const ESPERA_MS = 8000; // espera o usuário terminar de mexer antes de sincronizar
@@ -84,12 +84,13 @@ export default function useGoogleAutoSync({ user, atividades, tarefas, ativo }) 
         if (!window.confirm(`Isto vai remover ${previa.remover.length} eventos da sua agenda do Google. Continuar?`)) return;
       }
 
-      // manual: abre o pop-up de login logo após o clique; automático: só tenta renovar em silêncio
-      const token = manual ? await pedirToken() : (tokenValido() || await pedirTokenSilencioso());
+      // manual: abre o pop-up de login logo após o clique. Automático: só usa o token que já existe — renovar
+      // "em silêncio" no Google abre e fecha uma janelinha na frente do app, então não tentamos.
+      const token = manual ? await pedirToken() : tokenValido();
       if (!token) {
         if (Date.now() - ultimoAviso.current > AVISO_A_CADA_MS) {
           ultimoAviso.current = Date.now();
-          notificar('Google Agenda: reconecte para continuar sincronizando.', 'info', {
+          notificar('Google Agenda: toque em Reconectar para enviar as mudanças.', 'info', {
             rotulo: 'Reconectar',
             fn: () => executarRef.current({ manual: true }),
           });

@@ -149,26 +149,40 @@ export default function ExportModal({ aberto, onFechar, user, atividades, tarefa
 
   const periodoInvalido = incluirAtividades && (!inicio || !fim || fim < inicio);
 
+  // Um arquivo por agenda: atividades e avaliações ficam separadas (cada .ics é importado numa agenda diferente)
   const handleBaixar = () => {
     if (periodoInvalido) return;
-    const r = montarICS({ ...opcoesItens, soNovos: soNovosICS, exportados: soNovosICS ? lerRegistro(user) : {}, fusoHorario });
-    if (r.total === 0) {
+    const exportados = soNovosICS ? lerRegistro(user) : {};
+    const hoje = hojeLocalStr(new Date());
+    const arquivos = [];
+    if (incluirAtividades) arquivos.push({ agenda: 'atividades', nome: `roti-na-atividades-${hoje}.ics` });
+    if (incluirAvaliacoes) arquivos.push({ agenda: 'avaliacoes', nome: `roti-na-avaliacoes-${hoje}.ics` });
+    const gerados = arquivos
+      .map((f) => ({ ...f, r: montarICS({ ...opcoesItens, soAgenda: f.agenda, soNovos: soNovosICS, exportados, fusoHorario }) }))
+      .filter((f) => f.r.total > 0);
+    if (gerados.length === 0) {
       notificar('Não há nada novo para exportar com essas opções.', 'info');
       return;
     }
-    const blob = new Blob([r.texto], { type: 'text/calendar;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `roti-na-${hojeLocalStr(new Date())}.ics`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+    gerados.forEach((f, i) => {
+      setTimeout(() => {
+        const blob = new Blob([f.r.texto], { type: 'text/calendar;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = f.nome;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 2000);
+      }, i * 600);
+    });
+    const registros = Object.assign({}, ...gerados.map((f) => f.r.registros));
     try {
-      localStorage.setItem(chaveRegistro(user), JSON.stringify({ ...lerRegistro(user), ...r.registros }));
+      localStorage.setItem(chaveRegistro(user), JSON.stringify({ ...lerRegistro(user), ...registros }));
     } catch { /* sem armazenamento */ }
-    notificar(`Arquivo gerado com ${r.total} ${r.total === 1 ? 'evento' : 'eventos'}.`, 'sucesso');
+    const total = gerados.reduce((n, f) => n + f.r.total, 0);
+    notificar(`${gerados.length === 1 ? 'Arquivo gerado' : `${gerados.length} arquivos gerados`} com ${total} ${total === 1 ? 'evento' : 'eventos'}.`, 'sucesso');
     onFechar();
   };
 
@@ -376,8 +390,8 @@ export default function ExportModal({ aberto, onFechar, user, atividades, tarefa
               <summary className="cursor-pointer text-zinc-300">Como importar no Google Agenda</summary>
               <ol className="list-decimal list-inside space-y-1 mt-2">
                 <li>No computador, abra calendar.google.com.</li>
-                <li>Crie uma agenda chamada <strong>roti-na</strong> (Outras agendas → + → Criar nova agenda).</li>
-                <li>Engrenagem → Configurações → <strong>Importar e exportar</strong> → escolha o arquivo e a agenda <strong>roti-na</strong> → Importar.</li>
+                <li>Crie uma agenda chamada <strong>roti-na</strong> e outra chamada <strong>roti-na avaliações</strong> (Outras agendas → + → Criar nova agenda).</li>
+                <li>Engrenagem → Configurações → <strong>Importar e exportar</strong> → importe <strong>roti-na-atividades</strong> na agenda <strong>roti-na</strong> e <strong>roti-na-avaliacoes</strong> em <strong>roti-na avaliações</strong>. São dois arquivos, um para cada agenda.</li>
               </ol>
               <p className="mt-2">O arquivo é uma cópia do momento: apagar algo aqui depois não apaga na agenda. Para isso, use a sincronização.</p>
             </details>
@@ -396,7 +410,7 @@ export default function ExportModal({ aberto, onFechar, user, atividades, tarefa
             </button>
           ) : (
             <button onClick={handleBaixar} disabled={periodoInvalido || !previaICS || previaICS.total === 0} className="px-5 py-2 bg-zinc-100 text-zinc-950 rounded hover:bg-zinc-300 font-medium text-sm disabled:opacity-40 disabled:cursor-not-allowed">
-              Baixar arquivo .ics
+              Baixar arquivos .ics
             </button>
           )}
         </div>
