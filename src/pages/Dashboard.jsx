@@ -296,6 +296,21 @@ export default function Dashboard() {
     setIsModalOpen(true);
   };
 
+  // liga (ou desliga, com treinoId null) uma atividade da grade a um treino
+  const vincularAtividade = (atividadeId, treinoId) => {
+    const a = atividades.find((x) => x.id === atividadeId);
+    if (!a) return;
+    const nova = { ...a };
+    if (treinoId) nova.treinoId = treinoId; else delete nova.treinoId;
+    handleSalvarAtividade(nova);
+  };
+
+  // peso mais recente registrado nas medidas (para estimar calorias)
+  const pesoKg = (() => {
+    const c = [...medidas].filter((m) => Number(m.peso) > 0).sort((a, b) => String(b.data).localeCompare(String(a.data)))[0];
+    return c ? Number(c.peso) : null;
+  })();
+
   // "Agendar na grade": abre o formulário de atividade já com o treino escolhido
   const agendarTreino = (treino) => {
     setModeloAtividade(modeloAtividadeDoTreino(treino));
@@ -496,7 +511,7 @@ export default function Dashboard() {
     ),
     cursos: secaoCursos,
     medidas: <MedidasCorporais user={user} medidas={medidas} setMedidas={setMedidas} sexo={config.treino.sexo} onSexo={(v) => atualizarConfig({ treino: { sexo: v } })} />,
-    treinos: <TreinosLista user={user} treinos={treinos} setTreinos={setTreinos} sessoes={sessoes} setSessoes={setSessoes} atividades={atividades} onAgendar={agendarTreino} abrir={treinoAbrir} onAbriu={() => setTreinoAbrir(null)} config={config} atualizarConfig={atualizarConfig} exCustom={exCustom} />,
+    treinos: <TreinosLista user={user} treinos={treinos} setTreinos={setTreinos} sessoes={sessoes} setSessoes={setSessoes} atividades={atividades} onAgendar={agendarTreino} onVincular={vincularAtividade} pesoKg={pesoKg} abrir={treinoAbrir} onAbriu={() => setTreinoAbrir(null)} config={config} atualizarConfig={atualizarConfig} exCustom={exCustom} />,
     exercicios: (
       <div className="mt-2 w-full px-2 sm:px-0">
         <h2 className="text-base font-bold text-zinc-100 mb-2">Biblioteca de exercícios</h2>

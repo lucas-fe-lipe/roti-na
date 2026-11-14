@@ -960,3 +960,54 @@ test('planilha de notas: notas abaixo da aprovação ficam vermelhas, como no ap
   const verm = montarAbasNotas([{ nome: 'C', periodos: [{ nome: 'P', disciplinas: [{ nome: 'D', percentualAprovacao: 70, avaliacoes: [{ nome: 'A', max: '10', obtida: '5' }] }] }] }]);
   assert.deepEqual(verm[0].linhas[2].c.slice(2, 4).map((c) => c.e), ['pretoNumVerm', 'pretoPctVerm']);
 });
+
+import { lerFaixa, textoDuracao, caloriasDoTreino, validarTreinoGeral, resumoDoTreino, volumeKg, distanciaEmKm, tipoDe } from '../src/utils/treinoTipos.js';
+
+test('treinos: faixas exatas ou mín-máx e duração em texto', () => {
+  assert.deepEqual(lerFaixa('45'), { min: 45, max: 45 });
+  assert.deepEqual(lerFaixa('1,5-2'), { min: 1.5, max: 2 });
+  assert.deepEqual(lerFaixa('5 a 7'), { min: 5, max: 7 });
+  assert.equal(lerFaixa(''), null);
+  assert.equal(lerFaixa('7-5'), undefined);
+  assert.equal(lerFaixa('abc'), undefined);
+  assert.equal(lerFaixa('1-2-3'), undefined);
+  assert.equal(textoDuracao({ min: 60, max: 120 }), '1h a 2h');
+  assert.equal(textoDuracao({ min: 90, max: 90 }), '1h30');
+  assert.equal(textoDuracao({ min: 45, max: 45 }), '45 min');
+});
+
+test('treinos: validação por tipo (força, cardio, outro)', () => {
+  assert.equal(tipoDe({}), 'forca'); // treinos antigos
+  const item = { id: 'i', exercicioId: 'supino-reto', series: '3', reps: '10', carga: '' };
+  const f = validarTreinoGeral({ tipo: 'forca', nome: 'A', itens: [item], duracaoTexto: '60-90' });
+  assert.equal(f.ok, true);
+  assert.deepEqual(f.treino.duracao, { min: 60, max: 90 });
+  assert.equal(validarTreinoGeral({ tipo: 'forca', nome: 'A', itens: [item], duracaoTexto: 'x' }).ok, false);
+  assert.equal(validarTreinoGeral({ tipo: 'forca', nome: 'A', itens: [item] }).treino.duracao, undefined);
+
+  const c = validarTreinoGeral({ tipo: 'cardio', nome: 'Corrida', modalidade: 'corrida', duracaoTexto: '30-40', distanciaTexto: '5', distanciaUnidade: 'km' });
+  assert.equal(c.ok, true);
+  assert.deepEqual(c.treino.distancia, { faixa: { min: 5, max: 5 }, unidade: 'km' });
+  assert.equal(validarTreinoGeral({ tipo: 'cardio', nome: 'x', modalidade: 'corrida', duracaoTexto: '' }).ok, false); // duração obrigatória
+  assert.equal(validarTreinoGeral({ tipo: 'cardio', nome: 'x', modalidade: 'outra', modalidadeNome: '', duracaoTexto: '20' }).ok, false);
+  assert.equal(validarTreinoGeral({ tipo: 'cardio', nome: 'x', modalidade: 'corrida', duracaoTexto: '20', distanciaTexto: '7-5' }).ok, false);
+  const o = validarTreinoGeral({ tipo: 'outro', nome: 'Pilates', intensidade: 'leve', duracaoTexto: '50' });
+  assert.equal(o.ok, true);
+  assert.equal(o.treino.intensidade, 'leve');
+  assert.equal(validarTreinoGeral({ tipo: 'outro', nome: '', duracaoTexto: '50' }).ok, false);
+});
+
+test('treinos: calorias estimadas, volume e distância', () => {
+  // corrida (MET 9,8) 30 min, 70 kg: 9,8 × 70 × 0,5 = 343
+  assert.deepEqual(caloriasDoTreino({ tipo: 'cardio', modalidade: 'corrida', duracao: { min: 30, max: 30 } }, 70), { min: 343, max: 343 });
+  assert.deepEqual(caloriasDoTreino({ tipo: 'outro', intensidade: 'intensa', duracao: { min: 60, max: 60 } }, 80), { min: 640, max: 640 });
+  // sem peso nas medidas: usa 70 kg; força sem duração: 2,5 min por série
+  assert.equal(caloriasDoTreino({ tipo: 'forca', itens: [{ series: 4 }] }, null).min, Math.round((5 * 70 * 10) / 60));
+  assert.equal(caloriasDoTreino({ tipo: 'outro' }, 70), null);
+  // cardio sem duração, só com distância (5 km a 9 km/h)
+  assert.equal(caloriasDoTreino({ tipo: 'cardio', modalidade: 'corrida', distancia: { faixa: { min: 5, max: 5 }, unidade: 'km' } }, 70).min, Math.round((9.8 * 70 * ((5 / 9) * 60)) / 60));
+  assert.equal(volumeKg({ itens: [{ series: 3, reps: '10', carga: 20 }, { series: 2, reps: '8-12', carga: 10 }] }), 3 * 10 * 20 + 2 * 10 * 10);
+  assert.deepEqual(distanciaEmKm({ faixa: { min: 5, max: 5 }, unidade: 'mi' }), { min: 5 * 1.609344, max: 5 * 1.609344 });
+  const linhas = resumoDoTreino({ tipo: 'forca', duracao: { min: 60, max: 60 }, itens: [{ series: 3, reps: '10', carga: 20 }] }, 70).map((l) => l.rotulo);
+  assert.deepEqual(linhas, ['Exercícios', 'Repetições', 'Peso levantado', 'Duração', 'Calorias']);
+});
