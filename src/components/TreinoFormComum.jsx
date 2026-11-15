@@ -49,7 +49,7 @@ const rotuloCampo = 'flex flex-col text-[11px] text-zinc-400';
 const entrada = 'mt-0.5 bg-zinc-950 border border-zinc-700 rounded p-2 text-sm text-white';
 
 // Formulário dos treinos de cardio e "outro"
-export function EditorTreinoSimples({ tipo, inicial, atividades, vinculoInicial = '', onClose, onSalvar }) {
+export function EditorTreinoSimples({ tipo, inicial, atividades, vinculoInicial = '', onClose, onSalvar, onExcluir }) {
   useVoltar(true, onClose);
   const [nome, setNome] = useState(inicial.nome || '');
   const [modalidade, setModalidade] = useState(inicial.modalidade || 'corrida');
@@ -125,6 +125,7 @@ export function EditorTreinoSimples({ tipo, inicial, atividades, vinculoInicial 
 
         {erro && <p role="alert" className="text-xs text-red-400">{erro}</p>}
         <div className="flex justify-end gap-2 pt-2 border-t border-zinc-800">
+          {inicial.id && onExcluir && <button onClick={onExcluir} className="mr-auto px-3 py-1.5 text-red-500 hover:text-red-400 text-sm">Excluir treino</button>}
           <button onClick={onClose} className="px-3 py-1.5 bg-zinc-800 rounded text-zinc-300 hover:bg-zinc-700 text-sm font-bold">Cancelar</button>
           <button onClick={salvar} disabled={salvando} className="px-3 py-1.5 bg-zinc-100 text-zinc-950 rounded hover:bg-zinc-300 text-sm font-bold disabled:opacity-60">Salvar</button>
         </div>

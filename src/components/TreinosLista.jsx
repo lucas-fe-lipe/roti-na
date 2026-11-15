@@ -6,8 +6,8 @@ import { notificar } from '../utils/toast';
 import useVoltar from '../hooks/useVoltar';
 import useArrastarOrdem from '../hooks/useArrastarOrdem';
 import ConfirmModal from './ConfirmModal';
-import PickerExercicios from './PickerExercicios';
-import SeriesPopup from './SeriesPopup';
+import ListaExerciciosTreino from './ListaExerciciosTreino';
+import TreinarModal from './TreinarModal';
 import AvatarMuscular from './AvatarMuscular';
 import IconeTreino, { chaveIcone } from './IconeTreino';
 import CampoFaixa from './CampoFaixa';
@@ -16,13 +16,13 @@ import { EditorSessao, HistoricoTreino } from './SessoesTreino';
 import { hojeLocalStr } from '../utils/date';
 import { horariosDoTreino, proximoHorarioDoTreino, rotuloProximo } from '../utils/treinoAtividade';
 import { sessaoInicial, sessaoParaForm, historicoDoTreino } from '../utils/sessoes';
-import { achar, MUSCULOS, rotuloVariacao } from '../data/exercicios';
+import { achar, MUSCULOS } from '../data/exercicios';
 import { tipoDe, TIPOS, resumoDoTreino, validarTreinoGeral, faixaParaTexto } from '../utils/treinoTipos';
-import { novoItemComSets, textoSeries, intensidadesDoTreino, musculosMaisTrabalhados, moverItem, ordenarTreinos, proximaOrdem, reordenarIds } from '../utils/treinoModelo';
+import { intensidadesDoTreino, musculosMaisTrabalhados, ordenarTreinos, proximaOrdem, reordenarIds } from '../utils/treinoModelo';
 
 
 // ---------- editor do treino de força: nome, duração, vínculo, exercícios (séries/reps/peso) e avatar ao vivo ----------
-function EditorTreino({ inicial, config, onClose, onSalvar, exCustom, midias, atividades = [], vinculoInicial = '' }) {
+function EditorTreino({ inicial, config, onClose, onSalvar, onExcluir, exCustom, midias, atividades = [], vinculoInicial = '' }) {
   useVoltar(true, onClose);
   const [nome, setNome] = useState(inicial.nome || '');
   const [itens, setItens] = useState(inicial.itens || []);
@@ -30,9 +30,6 @@ function EditorTreino({ inicial, config, onClose, onSalvar, exCustom, midias, at
   const [vinculo, setVinculo] = useState(vinculoInicial);
   const [erro, setErro] = useState('');
   const [salvando, setSalvando] = useState(false);
-  const [picker, setPicker] = useState(false);
-  const [seriesPara, setSeriesPara] = useState(null); // { exercicio, item? }
-  const [remover, setRemover] = useState(null);
   const salvar = async () => {
     const r = validarTreinoGeral({ tipo: 'forca', nome, itens, duracaoTexto }, (id) => !!achar(id));
     if (!r.ok) return setErro(r.erro);
@@ -40,21 +37,6 @@ function EditorTreino({ inicial, config, onClose, onSalvar, exCustom, midias, at
     setSalvando(true);
     await onSalvar({ ...r.treino, id: inicial.id, criadoEm: inicial.criadoEm }, vinculo);
     setSalvando(false);
-  };
-
-  const confirmarSeries = ({ sets, variacao, unilateral }) => {
-    const extras = { ...(variacao ? { variacao } : {}), ...(unilateral ? { unilateral: true } : {}) };
-    if (seriesPara.item) {
-      setItens((l) => l.map((i) => {
-        if (i.id !== seriesPara.item.id) return i;
-        const { variacao: _v, unilateral: _u, ...resto } = i;
-        return { ...resto, ...novoItemComSets(i.exercicioId, sets, extras), id: i.id };
-      }));
-    } else {
-      setItens((l) => [...l, novoItemComSets(seriesPara.exercicio.id, sets, extras)]);
-      setPicker(false);
-    }
-    setSeriesPara(null);
   };
 
   return (
@@ -73,37 +55,15 @@ function EditorTreino({ inicial, config, onClose, onSalvar, exCustom, midias, at
 
         {itens.length > 0 && <div className="flex justify-center"><MiniaturaAvatar treino={{ nome: nome || 'Treino', itens }} config={config} /></div>}
 
-        <ol className="flex flex-col gap-1.5">
-          {itens.map((it, i) => {
-            const ex = achar(it.exercicioId);
-            return (
-              <li key={it.id} className="flex items-center gap-1 bg-zinc-950/50 border border-zinc-800 rounded-lg p-1.5">
-                <div className="flex flex-col shrink-0">
-                  <button type="button" aria-label="Subir" disabled={i === 0} onClick={() => setItens((l) => moverItem(l, it.id, -1))} className="w-6 h-5 text-zinc-400 hover:text-white disabled:opacity-25 text-xs">▲</button>
-                  <button type="button" aria-label="Descer" disabled={i === itens.length - 1} onClick={() => setItens((l) => moverItem(l, it.id, 1))} className="w-6 h-5 text-zinc-400 hover:text-white disabled:opacity-25 text-xs">▼</button>
-                </div>
-                <button type="button" onClick={() => ex && setSeriesPara({ exercicio: ex, item: it })} className="flex-1 min-w-0 text-left" aria-label={`Editar séries de ${ex?.nome || 'exercício'}`}>
-                  <span className="block text-xs text-zinc-100 truncate">{ex ? ex.nome : 'Exercício removido'}{(it.variacao || it.unilateral) && <span className="text-zinc-500"> ({rotuloVariacao(it.variacao, it.unilateral)})</span>}</span>
-                  <span className="block text-[11px] text-zinc-400 truncate">{textoSeries(it)}</span>
-                </button>
-                <button type="button" aria-label={`Remover ${ex?.nome || 'exercício'}`} onClick={() => setRemover(it)} className="w-7 h-7 shrink-0 text-red-500 hover:text-red-400 font-bold">×</button>
-              </li>
-            );
-          })}
-        </ol>
-
-        <button type="button" onClick={() => setPicker(true)} className="w-full py-2 border border-dashed border-zinc-600 rounded-lg text-sm font-bold text-zinc-200 hover:bg-zinc-800">+ Adicionar exercício</button>
+        <ListaExerciciosTreino itens={itens} onChange={setItens} config={config} midias={midias} exCustom={exCustom} />
 
         {erro && <p role="alert" className="text-xs text-red-400">{erro}</p>}
         <div className="flex justify-end gap-2 pt-2 border-t border-zinc-800">
+          {inicial.id && onExcluir && <button onClick={onExcluir} className="mr-auto px-3 py-1.5 text-red-500 hover:text-red-400 text-sm">Excluir treino</button>}
           <button onClick={onClose} className="px-3 py-1.5 bg-zinc-800 rounded text-zinc-300 hover:bg-zinc-700 text-sm font-bold">Cancelar</button>
           <button onClick={salvar} disabled={salvando} className="px-3 py-1.5 bg-zinc-100 text-zinc-950 rounded hover:bg-zinc-300 text-sm font-bold disabled:opacity-60">Salvar</button>
         </div>
       </div>
-      {picker && <PickerExercicios config={config} midias={midias} exCustom={exCustom} onClose={() => setPicker(false)} onEscolher={(e) => setSeriesPara({ exercicio: e })} />}
-      {seriesPara && <SeriesPopup exercicio={seriesPara.exercicio} item={seriesPara.item} rotuloBotao={seriesPara.item ? 'Salvar' : 'Adicionar'} onClose={() => setSeriesPara(null)} onSalvar={confirmarSeries} />}
-      <ConfirmModal aberto={!!remover} titulo="Remover exercício" mensagem={remover ? `Remover "${achar(remover.exercicioId)?.nome || 'este exercício'}" do treino?` : ''}
-        onCancelar={() => setRemover(null)} onConfirmar={() => { const r = remover; setRemover(null); setItens((l) => l.filter((x) => x.id !== r.id)); }} />
     </div>
   );
 }
@@ -150,7 +110,7 @@ function ImagemAmpliada({ treino, config, onClose }) {
 }
 
 // ---------- detalhe: avatar grande, músculos mais trabalhados e exercícios ----------
-function DetalheTreino({ treino, pesoKg, sessoes, atividades, onAgendar, config, atualizarConfig, onClose, onEditar, onExcluir, onRegistrar, onEditarSessao, onExcluirSessao }) {
+function DetalheTreino({ treino, pesoKg, sessoes, atividades, onAgendar, config, atualizarConfig, onClose, onEditar, onTreinar, onAtualizarItens, exCustom, midias, onRegistrar, onEditarSessao, onExcluirSessao }) {
   useVoltar(true, onClose);
   const { modo } = config.treino;
   const intensidades = intensidadesDoTreino(treino, achar, modo);
@@ -173,6 +133,11 @@ function DetalheTreino({ treino, pesoKg, sessoes, atividades, onAgendar, config,
         {forca ? <div className="flex justify-center"><MiniaturaAvatar treino={treino} config={config} /></div> : <IconeTreino chave={chaveIcone(treino)} className="w-28 h-28 mx-auto text-zinc-300" />}
         <ResumoTreino linhas={resumoDoTreino(treino, pesoKg)} />
 
+        <div className="flex gap-2">
+          {forca && <button onClick={onTreinar} disabled={treino.itens.length === 0} className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-bold disabled:opacity-40">Treinar</button>}
+          <button onClick={onEditar} className="flex-1 py-2.5 bg-zinc-100 text-zinc-950 rounded-lg hover:bg-zinc-300 text-sm font-bold">Editar</button>
+        </div>
+
         {forca && (
           <>
         <div className="flex flex-col gap-1">
@@ -192,17 +157,7 @@ function DetalheTreino({ treino, pesoKg, sessoes, atividades, onAgendar, config,
           </div>
         )}
 
-        <ol className="flex flex-col gap-1">
-          {treino.itens.map((it, i) => {
-            const ex = achar(it.exercicioId);
-            return (
-              <li key={it.id} className="flex items-center justify-between gap-2 bg-zinc-950/50 border border-zinc-800 rounded-lg px-2.5 py-1.5">
-                <span className="text-xs text-zinc-100 truncate"><span className="text-zinc-500 mr-1.5">{i + 1}.</span>{ex ? ex.nome : 'Exercício removido'}{(it.variacao || it.unilateral) && <span className="text-zinc-500"> ({rotuloVariacao(it.variacao, it.unilateral)})</span>}</span>
-                <span className="text-xs text-zinc-300 shrink-0 text-right">{textoSeries(it)}</span>
-              </li>
-            );
-          })}
-        </ol>
+        <ListaExerciciosTreino itens={treino.itens} onChange={onAtualizarItens} config={config} midias={midias} exCustom={exCustom} />
 
           </>
         )}
@@ -232,12 +187,8 @@ function DetalheTreino({ treino, pesoKg, sessoes, atividades, onAgendar, config,
           </>
         )}
 
-        <div className="flex justify-between gap-2 pt-2 border-t border-zinc-800">
-          <button onClick={onExcluir} className="px-3 py-1.5 text-red-500 hover:text-red-400 text-sm">Excluir</button>
-          <div className="flex gap-2">
-            <button onClick={onClose} className="px-3 py-1.5 bg-zinc-800 rounded text-zinc-300 hover:bg-zinc-700 text-sm font-bold">Fechar</button>
-            <button onClick={onEditar} className="px-3 py-1.5 bg-zinc-100 text-zinc-950 rounded hover:bg-zinc-300 text-sm font-bold">Editar</button>
-          </div>
+        <div className="flex justify-end pt-2 border-t border-zinc-800">
+          <button onClick={onClose} className="px-3 py-1.5 bg-zinc-800 rounded text-zinc-300 hover:bg-zinc-700 text-sm font-bold">Fechar</button>
         </div>
       </div>
     </div>
@@ -253,6 +204,7 @@ export default function TreinosLista({ user, treinos, setTreinos, sessoes = [], 
   const [excluir, setExcluir] = useState(null);
   const [editorSessao, setEditorSessao] = useState(null);
   const [excluirSessao, setExcluirSessao] = useState(null);
+  const [treinando, setTreinando] = useState(null); // formulário de sessão em andamento
   const ordenados = useMemo(() => ordenarTreinos(treinos), [treinos]);
   const detalhe = treinos.find((t) => t.id === detalheId) || null;
   const { sexo, cor, modo } = config.treino;
@@ -331,11 +283,17 @@ export default function TreinosLista({ user, treinos, setTreinos, sessoes = [], 
   };
   const arrastar = useArrastarOrdem(mover);
 
+  const atualizarItens = async (t, itens) => {
+    const completo = { ...t, itens, atualizadoEm: new Date().toISOString() };
+    if (user) await salvarDoc(doc(db, 'users', user.uid, 'treinos', t.id), completo);
+    else persistirLocal(treinos.map((x) => (x.id === t.id ? completo : x)));
+  };
+
   const apagar = async (t) => {
     let ok = true;
     if (user) ok = await apagarDoc(doc(db, 'users', user.uid, 'treinos', t.id));
     else persistirLocal(treinos.filter((x) => x.id !== t.id));
-    if (ok) { setDetalheId(null); notificar('Treino excluído.', 'info', { rotulo: 'Desfazer', fn: () => salvar(t) }); }
+    if (ok) { setEditor(null); setDetalheId(null); notificar('Treino excluído.', 'info', { rotulo: 'Desfazer', fn: () => salvar(t) }); }
   };
 
   return (
@@ -368,14 +326,16 @@ export default function TreinosLista({ user, treinos, setTreinos, sessoes = [], 
 
       {detalhe && !editor && (
         <DetalheTreino treino={detalhe} pesoKg={pesoKg} sessoes={historicoDoTreino(sessoes, detalhe.id)} atividades={atividades} onAgendar={() => onAgendar(detalhe)} config={config} atualizarConfig={atualizarConfig} onClose={() => setDetalheId(null)}
-          onEditar={() => setEditor(detalhe)} onExcluir={() => setExcluir(detalhe)}
+          onEditar={() => setEditor(detalhe)} onTreinar={() => setTreinando(sessaoInicial(detalhe, historicoDoTreino(sessoes, detalhe.id)[0], hojeLocalStr()))}
+          onAtualizarItens={(itens) => atualizarItens(detalhe, itens)} exCustom={exCustom} midias={midias}
           onRegistrar={() => registrar(detalhe)} onEditarSessao={(x) => setEditorSessao(sessaoParaForm(x))} onExcluirSessao={(x) => setExcluirSessao(x)} />
       )}
+      {treinando && detalhe && <TreinarModal treino={detalhe} inicial={treinando} midias={midias} onClose={() => setTreinando(null)} onFinalizar={(f) => { setTreinando(null); setEditorSessao(f); }} />}
       {editorSessao && <EditorSessao inicial={editorSessao} config={config} onClose={() => setEditorSessao(null)} onSalvar={salvarSessao} />}
       {escolhendoTipo && <EscolherTipo onEscolher={novo} onClose={() => setEscolhendoTipo(false)} />}
       {ampliar && <ImagemAmpliada treino={ampliar} config={config} onClose={() => setAmpliar(null)} />}
-      {editor && tipoDe(editor) === 'forca' && <EditorTreino inicial={editor} config={config} onClose={() => setEditor(null)} onSalvar={salvar} exCustom={exCustom} midias={midias} atividades={atividades} vinculoInicial={editor.id ? vinculoAtual(editor.id) : ''} />}
-      {editor && tipoDe(editor) !== 'forca' && <EditorTreinoSimples tipo={tipoDe(editor)} inicial={editor} atividades={atividades} vinculoInicial={editor.id ? vinculoAtual(editor.id) : ''} onClose={() => setEditor(null)} onSalvar={salvar} />}
+      {editor && tipoDe(editor) === 'forca' && <EditorTreino inicial={editor} config={config} onClose={() => setEditor(null)} onSalvar={salvar} exCustom={exCustom} midias={midias} atividades={atividades} vinculoInicial={editor.id ? vinculoAtual(editor.id) : ''} onExcluir={() => { setExcluir(editor); }} />}
+      {editor && tipoDe(editor) !== 'forca' && <EditorTreinoSimples tipo={tipoDe(editor)} inicial={editor} atividades={atividades} vinculoInicial={editor.id ? vinculoAtual(editor.id) : ''} onClose={() => setEditor(null)} onSalvar={salvar} onExcluir={() => setExcluir(editor)} />}
       <ConfirmModal aberto={!!excluirSessao} titulo="Excluir sessão" mensagem={excluirSessao ? `Excluir a sessão de ${excluirSessao.data.split('-').reverse().join('/')}?` : ''}
         onCancelar={() => setExcluirSessao(null)} onConfirmar={() => { const x = excluirSessao; setExcluirSessao(null); apagarSessao(x); }} />
       <ConfirmModal aberto={!!excluir} titulo="Excluir treino" mensagem={excluir ? `Excluir o treino "${excluir.nome}"?` : ''}
