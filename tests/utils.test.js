@@ -1079,3 +1079,30 @@ test('indiceAlvoY: posição de destino pelo ponteiro', async () => {
   assert.equal(indiceAlvoY([10, 50, 90], 200), 3);
   assert.equal(indiceAlvoY([], 20), 0);
 });
+
+import { faixaDoIMC, nivelIMC, serieDaMedida, ultimoValor, prefsMedidas, MEDIDAS, GRAFICO2_IDS, enriquecer as enriquecerM } from '../src/utils/medidas.js';
+test('faixas do IMC: vermelho nas pontas, amarelo nas demais, normal no meio', () => {
+  assert.equal(nivelIMC(15), 'vermelho');
+  assert.equal(nivelIMC(17.5), 'amarelo');
+  assert.equal(nivelIMC(22), 'normal');
+  assert.equal(nivelIMC(27), 'amarelo');
+  assert.equal(nivelIMC(36), 'amarelo');
+  assert.equal(nivelIMC(41), 'vermelho');
+  assert.equal(faixaDoIMC(null), null);
+});
+test('catálogo de medidas: série, último valor e preferências', () => {
+  const enr = enriquecerM([
+    { id: 'a', data: '2026-01-01', peso: 80, altura: 180, abdomen: 90, extras: { peito: '100' } },
+    { id: 'b', data: '2026-02-01', peso: 78, abdomen: 88 },
+  ], 'm');
+  assert.equal(serieDaMedida(enr, 'peso').pontos.length, 2);
+  assert.equal(serieDaMedida(enr, 'peito').pontos.length, 1);
+  assert.equal(ultimoValor(enr, 'altura').valor, 180);
+  assert.equal(ultimoValor(enr, 'peso').valor, 78);
+  assert.equal(ultimoValor(enr, 'gordura').estimada, true);
+  assert.equal(ultimoValor(enr, 'pescoco'), null);
+  assert.deepEqual(prefsMedidas({}).bloco, ['altura', 'peso', 'imc']);
+  assert.deepEqual(prefsMedidas({ grafico2: ['abdomen', 'xx'] }).grafico2, ['abdomen']);
+  assert.ok(GRAFICO2_IDS.includes('cintura') && !GRAFICO2_IDS.includes('peso'));
+  assert.ok(MEDIDAS.length >= 17);
+});

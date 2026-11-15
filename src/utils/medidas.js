@@ -150,3 +150,57 @@ export function variacao(pontos) {
   if (!pontos || pontos.length < 2) return null;
   return pontos[pontos.length - 1].valor - pontos[pontos.length - 2].valor;
 }
+
+// ---------- faixas do IMC (cor: 'normal' | 'amarelo' | 'vermelho') ----------
+export const IMC_FAIXAS = [
+  { ate: 16, rotulo: 'Magreza grave', nivel: 'vermelho', texto: 'Muito abaixo do peso. Vale procurar um profissional de saúde.' },
+  { ate: 17, rotulo: 'Magreza moderada', nivel: 'amarelo', texto: 'Abaixo do peso. Atenção à alimentação e ao acompanhamento.' },
+  { ate: 18.5, rotulo: 'Magreza leve', nivel: 'amarelo', texto: 'Um pouco abaixo do peso ideal.' },
+  { ate: 25, rotulo: 'Peso normal', nivel: 'normal', texto: 'Faixa considerada saudável para a maioria dos adultos.' },
+  { ate: 30, rotulo: 'Sobrepeso', nivel: 'amarelo', texto: 'Acima do ideal; o risco para a saúde começa a aumentar.' },
+  { ate: 35, rotulo: 'Obesidade grau I', nivel: 'amarelo', texto: 'Risco aumentado de problemas de saúde.' },
+  { ate: 40, rotulo: 'Obesidade grau II', nivel: 'amarelo', texto: 'Risco alto de problemas de saúde.' },
+  { ate: Infinity, rotulo: 'Obesidade grau III', nivel: 'vermelho', texto: 'Risco muito alto; procure acompanhamento profissional.' },
+];
+export const faixaDoIMC = (imc) => (Number.isFinite(imc) ? IMC_FAIXAS.find((f) => imc < f.ate) : null);
+export const nivelIMC = (imc) => faixaDoIMC(imc)?.nivel || null;
+
+// ---------- catálogo de medidas (para o bloco, os gráficos e os pop-ups) ----------
+const extra = (id) => (r) => (numero(r.extras?.[id]) > 0 ? numero(r.extras[id]) : null);
+export const MEDIDAS = [
+  { id: 'altura', rotulo: 'Altura', unidade: 'cm', casas: 0, grupo: 'cm', pegar: (r) => (numero(r.alturaUsada) > 0 ? r.alturaUsada : null) },
+  { id: 'peso', rotulo: 'Peso', unidade: 'kg', casas: 1, grupo: 'base', pegar: (r) => (numero(r.peso) > 0 ? numero(r.peso) : null) },
+  { id: 'imc', rotulo: 'IMC', unidade: '', casas: 1, grupo: 'base', pegar: (r) => r.imc },
+  { id: 'gordura', rotulo: '% de gordura', unidade: '%', casas: 1, grupo: 'base', pegar: (r) => r.gorduraUsada, estimada: (r) => r.gorduraEstimada },
+  { id: 'musculo', rotulo: 'Massa muscular', unidade: '%', casas: 1, grupo: 'base', pegar: (r) => r.musculoPct, estimada: (r) => r.musculoEstimado },
+  { id: 'musculoKg', rotulo: 'Massa muscular (kg)', unidade: 'kg', casas: 1, grupo: 'base', pegar: (r) => r.musculoUsado, estimada: (r) => r.musculoEstimado },
+  { id: 'abdomen', rotulo: 'Barriga', unidade: 'cm', casas: 1, grupo: 'cm', pegar: (r) => r.abdomen },
+  ...EXTRAS.map((e) => ({ id: e.id, rotulo: e.rotulo, unidade: 'cm', casas: 1, grupo: 'cm', pegar: extra(e.id) })),
+];
+export const medidaPorId = (id) => MEDIDAS.find((m) => m.id === id) || null;
+export const GRAFICO1_IDS = ['peso', 'gordura', 'musculo', 'imc'];
+export const GRAFICO2_IDS = MEDIDAS.filter((m) => m.grupo === 'cm').map((m) => m.id);
+export const PADRAO_MEDIDAS = { grafico1: ['peso', 'gordura', 'musculo', 'imc'], grafico2: ['altura', 'abdomen'], bloco: ['altura', 'peso', 'imc'], metaPeso: '' };
+const CORES_SERIES = ['#60a5fa', '#fbbf24', '#34d399', '#f472b6', '#a78bfa', '#fb923c', '#22d3ee', '#f87171', '#a3e635', '#e879f9', '#94a3b8', '#facc15'];
+
+// Série de uma medida: pontos { data, valor } ignorando datas sem o valor
+export const serieDaMedida = (enr, id, indiceCor = 0) => {
+  const m = medidaPorId(id);
+  if (!m) return null;
+  return { id, rotulo: m.rotulo, unidade: m.unidade, casas: m.casas, cor: CORES_SERIES[indiceCor % CORES_SERIES.length], pontos: enr.map((r) => ({ data: r.data, valor: m.pegar(r) })).filter((p) => p.valor !== null && p.valor !== undefined && Number.isFinite(p.valor)) };
+};
+// Último registro com valor para a medida: { valor, estimada } ou null
+export const ultimoValor = (enr, id) => {
+  const m = medidaPorId(id);
+  if (!m) return null;
+  for (let i = enr.length - 1; i >= 0; i -= 1) {
+    const v = m.pegar(enr[i]);
+    if (v !== null && v !== undefined && Number.isFinite(v)) return { valor: v, estimada: !!m.estimada?.(enr[i]) };
+  }
+  return null;
+};
+// Preferências salvas (com padrão e só ids válidos)
+export const prefsMedidas = (salvas) => {
+  const lim = (v, padrao) => (Array.isArray(v) ? v.filter((id) => medidaPorId(id)) : padrao);
+  return { grafico1: lim(salvas?.grafico1, PADRAO_MEDIDAS.grafico1), grafico2: lim(salvas?.grafico2, PADRAO_MEDIDAS.grafico2), bloco: lim(salvas?.bloco, PADRAO_MEDIDAS.bloco), metaPeso: salvas?.metaPeso ?? '' };
+};

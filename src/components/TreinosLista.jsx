@@ -20,7 +20,6 @@ import { achar, MUSCULOS, rotuloVariacao } from '../data/exercicios';
 import { tipoDe, TIPOS, resumoDoTreino, validarTreinoGeral, faixaParaTexto } from '../utils/treinoTipos';
 import { novoItemComSets, textoSeries, intensidadesDoTreino, musculosMaisTrabalhados, moverItem, ordenarTreinos, proximaOrdem, reordenarIds } from '../utils/treinoModelo';
 
-const campo = 'bg-zinc-950 border border-zinc-700 rounded px-1.5 py-1.5 text-xs text-white text-center';
 
 // ---------- editor do treino de força: nome, duração, vínculo, exercícios (séries/reps/peso) e avatar ao vivo ----------
 function EditorTreino({ inicial, config, onClose, onSalvar, exCustom, midias, atividades = [], vinculoInicial = '' }) {
@@ -34,10 +33,6 @@ function EditorTreino({ inicial, config, onClose, onSalvar, exCustom, midias, at
   const [picker, setPicker] = useState(false);
   const [seriesPara, setSeriesPara] = useState(null); // { exercicio, item? }
   const [remover, setRemover] = useState(null);
-  const { sexo, cor, modo } = config.treino;
-
-  const intensidades = useMemo(() => intensidadesDoTreino({ itens }, achar, modo), [itens, modo]);
-
   const salvar = async () => {
     const r = validarTreinoGeral({ tipo: 'forca', nome, itens, duracaoTexto }, (id) => !!achar(id));
     if (!r.ok) return setErro(r.erro);
@@ -76,7 +71,7 @@ function EditorTreino({ inicial, config, onClose, onSalvar, exCustom, midias, at
         <CampoFaixa rotulo="Duração" sufixo={<span className="text-xs text-zinc-400 shrink-0">min</span>} valor={duracaoTexto} onChange={setDuracaoTexto} placeholder="60" />
         <VinculoAtividade valor={vinculo} onChange={setVinculo} atividades={atividades} treinoId={inicial.id} />
 
-        {itens.length > 0 && <AvatarMuscular sexo={sexo} cor={cor} intensidades={intensidades} className="max-w-xs mx-auto" />}
+        {itens.length > 0 && <div className="flex justify-center"><MiniaturaAvatar treino={{ nome: nome || 'Treino', itens }} config={config} /></div>}
 
         <ol className="flex flex-col gap-1.5">
           {itens.map((it, i) => {
@@ -126,6 +121,20 @@ function ResumoTreino({ linhas }) {
   );
 }
 
+// Miniatura do avatar (mesmo tamanho do cartão); ao tocar, abre ampliada
+function MiniaturaAvatar({ treino, config }) {
+  const [grande, setGrande] = useState(false);
+  const { sexo, cor, modo } = config.treino;
+  return (
+    <>
+      <button type="button" onClick={() => setGrande(true)} aria-label="Ampliar imagem dos músculos" className="w-20 shrink-0 text-zinc-300">
+        <AvatarMuscular sexo={sexo} cor={cor} intensidades={intensidadesDoTreino(treino, achar, modo)} />
+      </button>
+      {grande && <ImagemAmpliada treino={treino} config={config} onClose={() => setGrande(false)} />}
+    </>
+  );
+}
+
 // Imagem do cartão ampliada
 function ImagemAmpliada({ treino, config, onClose }) {
   useVoltar(true, onClose);
@@ -143,7 +152,7 @@ function ImagemAmpliada({ treino, config, onClose }) {
 // ---------- detalhe: avatar grande, músculos mais trabalhados e exercícios ----------
 function DetalheTreino({ treino, pesoKg, sessoes, atividades, onAgendar, config, atualizarConfig, onClose, onEditar, onExcluir, onRegistrar, onEditarSessao, onExcluirSessao }) {
   useVoltar(true, onClose);
-  const { sexo, cor, modo } = config.treino;
+  const { modo } = config.treino;
   const intensidades = intensidadesDoTreino(treino, achar, modo);
   const top = musculosMaisTrabalhados(intensidades, 5);
   const tipo = tipoDe(treino);
@@ -161,7 +170,7 @@ function DetalheTreino({ treino, pesoKg, sessoes, atividades, onAgendar, config,
           <button aria-label="Fechar" onClick={onClose} className="text-zinc-400 hover:text-white text-xl leading-none">×</button>
         </div>
 
-        {forca ? <AvatarMuscular sexo={sexo} cor={cor} intensidades={intensidades} /> : <IconeTreino chave={chaveIcone(treino)} className="w-28 h-28 mx-auto text-zinc-300" />}
+        {forca ? <div className="flex justify-center"><MiniaturaAvatar treino={treino} config={config} /></div> : <IconeTreino chave={chaveIcone(treino)} className="w-28 h-28 mx-auto text-zinc-300" />}
         <ResumoTreino linhas={resumoDoTreino(treino, pesoKg)} />
 
         {forca && (

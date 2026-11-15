@@ -3,15 +3,14 @@ import { doc, deleteDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { salvarDoc } from '../services/db';
 import { notificar } from '../utils/toast';
-import AvatarMuscular from './AvatarMuscular';
+import Previa from './PreviaExercicio';
 import ExercicioEditor from './ExercicioEditor';
 import ConfirmModal from './ConfirmModal';
 import FiltrosExercicios from './FiltrosExercicios';
 import useFiltrosExercicios from '../hooks/useFiltrosExercicios';
 import { todosExercicios, filtrarExercicios, EQP, equipamentosDe, MUSCULOS, P, S } from '../data/exercicios';
 import { usoDoExercicio } from '../utils/exercicioCustom';
-import { intensidadeDoExercicio, linkValido } from '../utils/treino';
-import Midia from './MidiaExercicio';
+import { linkValido } from '../utils/treino';
 
 const rotuloPeso = (w) => (w >= P ? 'principal' : w >= S ? 'auxiliar' : 'leve');
 
@@ -44,8 +43,7 @@ function Detalhe({ ex, sexo, cor, midia, admin, aoEscolher, onEditar, onExcluir 
   const alternativas = todosExercicios().filter((o) => o.id !== ex.id && o.m[topo] >= P).slice(0, 8);
   return (
     <div className="flex flex-col gap-3 pt-2">
-      {midia && <Midia link={midia} />}
-      <AvatarMuscular sexo={sexo} cor={cor} intensidades={intensidadeDoExercicio(ex)} />
+      <Previa ex={ex} midia={midia} sexo={sexo} cor={cor} />
       {(ex.eq || ex.uni) && (
         <div className="text-[11px] text-zinc-400">
           <span className="text-zinc-500">Variações (não mudam os músculos): </span>{[...(ex.eq || []), ...(ex.uni ? ['unilateral ou bilateral'] : [])].join(' · ')}
@@ -75,7 +73,7 @@ function Detalhe({ ex, sexo, cor, midia, admin, aoEscolher, onEditar, onExcluir 
   );
 }
 
-export default function ExerciciosBiblioteca({ config, atualizarConfig, midias, admin, exCustom, treinos = [], sessoes = [] }) {
+export default function ExerciciosBiblioteca({ config, midias, admin, exCustom, treinos = [], sessoes = [] }) {
   const filtros = useFiltrosExercicios();
   const { busca, cats, eqps } = filtros;
   const [aberto, setAberto] = useState(null);

@@ -512,7 +512,7 @@ export default function Dashboard() {
       </>
     ),
     cursos: secaoCursos,
-    medidas: <MedidasCorporais user={user} medidas={medidas} setMedidas={setMedidas} sexo={config.treino.sexo} comando={cmdMedida} />,
+    medidas: <MedidasCorporais user={user} medidas={medidas} setMedidas={setMedidas} sexo={config.treino.sexo} comando={cmdMedida} config={config} atualizarConfig={atualizarConfig} />,
     treinos: <TreinosLista user={user} treinos={treinos} setTreinos={setTreinos} sessoes={sessoes} setSessoes={setSessoes} atividades={atividades} onAgendar={agendarTreino} onVincular={vincularAtividade} pesoKg={pesoKg} abrir={treinoAbrir} onAbriu={() => setTreinoAbrir(null)} config={config} atualizarConfig={atualizarConfig} exCustom={exCustom} midias={midias} comando={cmdTreino} />,
     exercicios: <BibliotecaMinimizada config={config} atualizarConfig={atualizarConfig} midias={midias} admin={modoAdminAtivo(user, config)} exCustom={exCustom} treinos={treinos} sessoes={sessoes} />,
   };
@@ -570,12 +570,17 @@ export default function Dashboard() {
         
         {paginaAtual !== 'Configuracoes' && (
           <div className="w-full max-w-5xl flex flex-col pb-10">
-            {paginaAtual === 'Treinos' && (secoesDaPaginaAtual.includes('treinos') || secoesDaPaginaAtual.includes('medidas')) && (
-              <div className="flex gap-2 px-2 sm:px-0 mt-2">
-                {secoesDaPaginaAtual.includes('treinos') && <button onClick={() => setCmdTreino((n) => n + 1)} className="text-sm font-bold px-4 py-2 bg-zinc-100 text-zinc-950 rounded-lg hover:bg-zinc-300 transition-colors">+ Adicionar treino</button>}
-                {secoesDaPaginaAtual.includes('medidas') && <button onClick={() => setCmdMedida((n) => n + 1)} className="text-sm font-bold px-4 py-2 bg-zinc-800 text-zinc-100 rounded-lg hover:bg-zinc-700 transition-colors">+ Adicionar medida</button>}
-              </div>
-            )}
+            {paginaAtual === 'Treinos' && (() => {
+              const mostrarMedidas = secoesDaPaginaAtual.includes('medidas') && medidas.length === 0;
+              const mostrarTreino = secoesDaPaginaAtual.includes('treinos');
+              if (!mostrarMedidas && !mostrarTreino) return null;
+              return (
+                <div className="flex flex-col items-start gap-2 px-2 sm:px-0 mt-2">
+                  {mostrarMedidas && <button onClick={() => setCmdMedida((n) => n + 1)} className="text-sm font-bold px-4 py-2 bg-zinc-800 text-zinc-100 rounded-lg hover:bg-zinc-700 transition-colors">+ Adicionar medidas</button>}
+                  {mostrarTreino && <button onClick={() => setCmdTreino((n) => n + 1)} className="text-sm font-bold px-4 py-2 bg-zinc-100 text-zinc-950 rounded-lg hover:bg-zinc-300 transition-colors">+ Adicionar treino</button>}
+                </div>
+              );
+            })()}
             {secoesDaPaginaAtual.map((id) => (
               <Fragment key={id}>{secoes[id]}</Fragment>
             ))}
