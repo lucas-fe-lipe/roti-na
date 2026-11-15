@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, Fragment } from 'react';
 import AgendaGoogle from '../components/AgendaGoogle';
 import MedidasCorporais from '../components/MedidasCorporais';
-import ExerciciosBiblioteca from '../components/ExerciciosBiblioteca';
+import BibliotecaMinimizada from '../components/BibliotecaMinimizada';
 import TreinosLista from '../components/TreinosLista';
 import { treinoDaAtividade, modeloAtividadeDoTreino } from '../utils/treinoAtividade';
 import { resumoTreino } from '../utils/treinoModelo';
@@ -63,6 +63,8 @@ export default function Dashboard() {
   
   const [atividadeEditando, setAtividadeEditando] = useState(null);
   const [modeloAtividade, setModeloAtividade] = useState(null); // pré-preenchimento de "Agendar na grade"
+  const [cmdTreino, setCmdTreino] = useState(0); // contadores: cada clique nos botões do topo de Treinos pede para abrir o formulário
+  const [cmdMedida, setCmdMedida] = useState(0);
   const [treinoAbrir, setTreinoAbrir] = useState(null); // { id, registrar } pedido para abrir um treino na página Treinos
   const [metaEditando, setMetaEditando] = useState(null);
   const [metaPopup, setMetaPopup] = useState(null); // { id, rect }
@@ -510,14 +512,9 @@ export default function Dashboard() {
       </>
     ),
     cursos: secaoCursos,
-    medidas: <MedidasCorporais user={user} medidas={medidas} setMedidas={setMedidas} sexo={config.treino.sexo} onSexo={(v) => atualizarConfig({ treino: { sexo: v } })} />,
-    treinos: <TreinosLista user={user} treinos={treinos} setTreinos={setTreinos} sessoes={sessoes} setSessoes={setSessoes} atividades={atividades} onAgendar={agendarTreino} onVincular={vincularAtividade} pesoKg={pesoKg} abrir={treinoAbrir} onAbriu={() => setTreinoAbrir(null)} config={config} atualizarConfig={atualizarConfig} exCustom={exCustom} midias={midias} />,
-    exercicios: (
-      <div className="mt-2 w-full px-2 sm:px-0">
-        <h2 className="text-base font-bold text-zinc-100 mb-2">Biblioteca de exercícios</h2>
-        <ExerciciosBiblioteca config={config} atualizarConfig={atualizarConfig} midias={midias} admin={modoAdminAtivo(user, config)} exCustom={exCustom} treinos={treinos} sessoes={sessoes} />
-      </div>
-    ),
+    medidas: <MedidasCorporais user={user} medidas={medidas} setMedidas={setMedidas} sexo={config.treino.sexo} comando={cmdMedida} />,
+    treinos: <TreinosLista user={user} treinos={treinos} setTreinos={setTreinos} sessoes={sessoes} setSessoes={setSessoes} atividades={atividades} onAgendar={agendarTreino} onVincular={vincularAtividade} pesoKg={pesoKg} abrir={treinoAbrir} onAbriu={() => setTreinoAbrir(null)} config={config} atualizarConfig={atualizarConfig} exCustom={exCustom} midias={midias} comando={cmdTreino} />,
+    exercicios: <BibliotecaMinimizada config={config} atualizarConfig={atualizarConfig} midias={midias} admin={modoAdminAtivo(user, config)} exCustom={exCustom} treinos={treinos} sessoes={sessoes} />,
   };
 
   return (
@@ -573,6 +570,12 @@ export default function Dashboard() {
         
         {paginaAtual !== 'Configuracoes' && (
           <div className="w-full max-w-5xl flex flex-col pb-10">
+            {paginaAtual === 'Treinos' && (secoesDaPaginaAtual.includes('treinos') || secoesDaPaginaAtual.includes('medidas')) && (
+              <div className="flex gap-2 px-2 sm:px-0 mt-2">
+                {secoesDaPaginaAtual.includes('treinos') && <button onClick={() => setCmdTreino((n) => n + 1)} className="text-sm font-bold px-4 py-2 bg-zinc-100 text-zinc-950 rounded-lg hover:bg-zinc-300 transition-colors">+ Adicionar treino</button>}
+                {secoesDaPaginaAtual.includes('medidas') && <button onClick={() => setCmdMedida((n) => n + 1)} className="text-sm font-bold px-4 py-2 bg-zinc-800 text-zinc-100 rounded-lg hover:bg-zinc-700 transition-colors">+ Adicionar medida</button>}
+              </div>
+            )}
             {secoesDaPaginaAtual.map((id) => (
               <Fragment key={id}>{secoes[id]}</Fragment>
             ))}

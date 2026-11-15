@@ -19,7 +19,7 @@ export const SECOES = {
 
 export const LAYOUT_PADRAO = {
   paginas: ['Grade', 'Notas', 'Treinos'],
-  secoes: { Grade: ['grade', 'metas', 'agenda'], Notas: ['cursos'], Treinos: ['treinos', 'exercicios', 'medidas'] },
+  secoes: { Grade: ['grade', 'metas', 'agenda'], Notas: ['cursos'], Treinos: ['treinos', 'medidas', 'exercicios'] },
 };
 
 const unico = (lista) => Array.from(new Set(lista));
@@ -42,6 +42,8 @@ export function normalizarLayout(salvo) {
     });
   });
   idsSecoes.filter((s) => !usadas.has(s)).forEach((s) => secoes[SECOES[s].origem].push(s));
+  // a biblioteca de exercícios fica sempre por último na página em que estiver
+  Object.keys(secoes).forEach((p) => { if (secoes[p].includes('exercicios')) secoes[p] = [...secoes[p].filter((s) => s !== 'exercicios'), 'exercicios']; });
 
   return { paginas, secoes };
 }

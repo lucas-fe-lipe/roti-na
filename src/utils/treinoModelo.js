@@ -118,5 +118,22 @@ export function moverItem(itens = [], id, delta) {
   return nova;
 }
 
-// Ordem de exibição: mais recentes primeiro
-export const ordenarTreinos = (treinos = []) => [...treinos].sort((a, b) => String(b.criadoEm || '').localeCompare(String(a.criadoEm || '')) || String(a.nome).localeCompare(String(b.nome), 'pt-BR'));
+// Ordem de exibição: a que o usuário escolheu (campo "ordem"); sem ela, do mais antigo para o mais novo
+export const ordenarTreinos = (treinos = []) => [...treinos].sort((a, b) => {
+  const oa = Number.isFinite(a.ordem), ob = Number.isFinite(b.ordem);
+  if (oa && ob) return a.ordem - b.ordem;
+  if (oa !== ob) return oa ? -1 : 1;
+  return String(a.criadoEm || '').localeCompare(String(b.criadoEm || '')) || String(a.nome).localeCompare(String(b.nome), 'pt-BR');
+});
+// "ordem" de um treino novo: depois de todos que já têm ordem (undefined se ninguém tem: vale a data)
+export const proximaOrdem = (treinos = []) => {
+  const o = treinos.filter((t) => Number.isFinite(t.ordem)).map((t) => t.ordem);
+  return o.length ? Math.max(...o) + 1 : undefined;
+};
+// Move o id para a posição "indice" (contada sem ele na lista)
+export function reordenarIds(ids = [], id, indice) {
+  if (!ids.includes(id)) return ids;
+  const resto = ids.filter((x) => x !== id);
+  resto.splice(Math.max(0, Math.min(resto.length, indice)), 0, id);
+  return resto;
+}

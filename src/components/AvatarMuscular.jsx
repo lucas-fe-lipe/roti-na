@@ -10,7 +10,7 @@ export default function AvatarMuscular({ sexo = 'm', cor = COR_PADRAO, intensida
       {vistas.map((v) => {
         const d = corpo[v];
         return (
-          <svg key={v} viewBox={d.viewBox} className="h-auto flex-1 min-w-0 max-w-[200px]" role="img" aria-label={`${sexo === 'f' ? 'Feminino' : 'Masculino'} — ${v}`}>
+          <svg key={v} viewBox={d.viewBox} className="h-auto flex-1 min-w-0 max-w-[200px]" role="img" aria-label={`Modelo ${sexo === 'f' ? '2' : '1'} — ${v}`}>
             <path d={d.corpo} fill="#141414" stroke="#9A9A9A" strokeWidth="2.5" strokeLinejoin="round" />
             {d.musculos.map((m) => {
               const c = corDoMusculo(intensidades[m.g], cor);

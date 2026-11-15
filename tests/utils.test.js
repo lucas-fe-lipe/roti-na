@@ -599,7 +599,9 @@ test('biblioteca: todo músculo dos exercícios existe no desenho e tem nome; id
 
 test('layout: biblioteca de exercícios fica na página Treinos por padrão e liga/desliga', () => {
   const l = normalizarLayout(null);
-  assert.deepEqual(l.secoes.Treinos, ['treinos', 'exercicios', 'medidas']);
+  assert.deepEqual(l.secoes.Treinos, ['treinos', 'medidas', 'exercicios']);
+  // mesmo que o salvo tenha outra ordem, a biblioteca vai para o fim
+  assert.deepEqual(normalizarLayout({ secoes: { Treinos: ['exercicios', 'treinos', 'medidas'] } }).secoes.Treinos, ['treinos', 'medidas', 'exercicios']);
   assert.equal(secoesAtivasDaPagina({ blocos: { treinos: false } }, 'Treinos', false).includes('treinos'), false);
   assert.equal(secoesAtivasDaPagina({ blocos: { exercicios: false, medidas: true } }, 'Treinos', false).includes('exercicios'), false);
 });
@@ -721,7 +723,7 @@ test('voltar: depois de fechar uma camada, a próxima também é capturada', () 
 });
 
 // ---------- treinos montados (modelos) ----------
-import { novoItem, validarTreino, resumoTreino, intensidadesDoTreino, musculosMaisTrabalhados, moverItem, ordenarTreinos } from '../src/utils/treinoModelo.js';
+import { novoItem, validarTreino, resumoTreino, intensidadesDoTreino, musculosMaisTrabalhados, moverItem, ordenarTreinos, reordenarIds, proximaOrdem } from '../src/utils/treinoModelo.js';
 
 test('treino: validação de nome, exercícios, séries, repetições e carga', () => {
   const it = (o = {}) => ({ id: 'i1', exercicioId: 'supino-reto', series: '4', reps: '8-12', carga: '60,5', ...o });
@@ -763,7 +765,14 @@ test('treino: mover item e ordenar lista', () => {
   assert.deepEqual(moverItem(l, 'b', 1).map((x) => x.id), ['a', 'c', 'b']);
   assert.deepEqual(moverItem(l, 'a', -1), l); // já é o primeiro
   assert.deepEqual(moverItem(l, 'z', 1), l);
-  assert.deepEqual(ordenarTreinos([{ nome: 'A', criadoEm: '2026-01-01' }, { nome: 'B', criadoEm: '2026-02-01' }, { nome: 'C' }]).map((t) => t.nome), ['B', 'A', 'C']);
+  assert.deepEqual(ordenarTreinos([{ nome: 'A', criadoEm: '2026-01-01' }, { nome: 'B', criadoEm: '2026-02-01' }, { nome: 'C' }]).map((t) => t.nome), ['C', 'A', 'B']); // sem ordem: mais antigos primeiro
+  // com ordem escolhida pelo usuário, ela manda
+  assert.deepEqual(ordenarTreinos([{ nome: 'A', ordem: 1 }, { nome: 'B', ordem: 0 }, { nome: 'C', ordem: 2 }]).map((t) => t.nome), ['B', 'A', 'C']);
+  assert.deepEqual(reordenarIds(['a', 'b', 'c', 'd'], 'a', 2), ['b', 'c', 'a', 'd']);
+  assert.deepEqual(reordenarIds(['a', 'b', 'c'], 'c', 0), ['c', 'a', 'b']);
+  assert.deepEqual(reordenarIds(['a', 'b'], 'x', 1), ['a', 'b']);
+  assert.equal(proximaOrdem([{ ordem: 0 }, { ordem: 4 }, {}]), 5);
+  assert.equal(proximaOrdem([{}, {}]), undefined);
 });
 
 // ---------- sessões de treino (registro do que foi feito) ----------
@@ -1061,4 +1070,12 @@ test('séries próprias: faixas, agrupamento no texto e compatibilidade com o fo
   // a sessão começa com as séries planejadas (primeira repetição e peso mínimo da faixa)
   const f = sessaoInicial({ id: 't', nome: 'A', itens: [{ ...item, sets: [{ reps: '5-7', carga: '20-25' }, { reps: '10', carga: '' }] }] }, null, '2026-11-12');
   assert.deepEqual(f.itens[0].series.map((x) => [x.reps, x.carga]), [['5', '20'], ['10', '']]);
+});
+
+test('indiceAlvoY: posição de destino pelo ponteiro', async () => {
+  const { indiceAlvoY } = await import('../src/utils/ordem.js');
+  assert.equal(indiceAlvoY([10, 50, 90], 5), 0);
+  assert.equal(indiceAlvoY([10, 50, 90], 60), 2);
+  assert.equal(indiceAlvoY([10, 50, 90], 200), 3);
+  assert.equal(indiceAlvoY([], 20), 0);
 });

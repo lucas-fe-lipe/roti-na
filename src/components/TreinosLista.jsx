@@ -1,9 +1,10 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { doc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { salvarDoc, apagarDoc } from '../services/db';
 import { notificar } from '../utils/toast';
 import useVoltar from '../hooks/useVoltar';
+import useArrastarOrdem from '../hooks/useArrastarOrdem';
 import ConfirmModal from './ConfirmModal';
 import PickerExercicios from './PickerExercicios';
 import SeriesPopup from './SeriesPopup';
@@ -17,7 +18,7 @@ import { horariosDoTreino, proximoHorarioDoTreino, rotuloProximo } from '../util
 import { sessaoInicial, sessaoParaForm, historicoDoTreino } from '../utils/sessoes';
 import { achar, MUSCULOS, rotuloVariacao } from '../data/exercicios';
 import { tipoDe, TIPOS, resumoDoTreino, validarTreinoGeral, faixaParaTexto } from '../utils/treinoTipos';
-import { novoItemComSets, textoSeries, intensidadesDoTreino, musculosMaisTrabalhados, moverItem, ordenarTreinos } from '../utils/treinoModelo';
+import { novoItemComSets, textoSeries, intensidadesDoTreino, musculosMaisTrabalhados, moverItem, ordenarTreinos, proximaOrdem, reordenarIds } from '../utils/treinoModelo';
 
 const campo = 'bg-zinc-950 border border-zinc-700 rounded px-1.5 py-1.5 text-xs text-white text-center';
 
@@ -235,7 +236,7 @@ function DetalheTreino({ treino, pesoKg, sessoes, atividades, onAgendar, config,
 }
 
 // ---------- bloco principal ----------
-export default function TreinosLista({ user, treinos, setTreinos, sessoes = [], setSessoes = () => {}, atividades = [], onAgendar = () => {}, onVincular = () => {}, pesoKg = null, abrir = null, onAbriu = () => {}, config, atualizarConfig, exCustom, midias = {} }) {
+export default function TreinosLista({ user, treinos, setTreinos, sessoes = [], setSessoes = () => {}, atividades = [], onAgendar = () => {}, onVincular = () => {}, pesoKg = null, abrir = null, onAbriu = () => {}, config, atualizarConfig, exCustom, midias = {}, comando = null }) {
   const [editor, setEditor] = useState(null);
   const [escolhendoTipo, setEscolhendoTipo] = useState(false);
   const [ampliar, setAmpliar] = useState(null);
@@ -247,6 +248,9 @@ export default function TreinosLista({ user, treinos, setTreinos, sessoes = [], 
   const detalhe = treinos.find((t) => t.id === detalheId) || null;
   const { sexo, cor, modo } = config.treino;
 
+  const cmdVisto = useRef(comando);
+  useEffect(() => { if (comando !== cmdVisto.current) { cmdVisto.current = comando; setEscolhendoTipo(true); } }, [comando]);
+
   const persistirLocal = (lista) => { setTreinos(lista); try { localStorage.setItem('local_treinos', JSON.stringify(lista)); } catch { /* sem armazenamento */ } };
 
   const vinculoAtual = (id) => atividades.find((a) => a.treinoId === id)?.id || '';
@@ -254,7 +258,8 @@ export default function TreinosLista({ user, treinos, setTreinos, sessoes = [], 
   // vinculo: '' (nenhum), 'criar' (nova atividade com o mesmo nome) ou o id de uma atividade da grade
   const salvar = async (t, vinculo = '') => {
     const id = t.id || `${Date.now()}`;
-    const completo = { ...t, id, criadoEm: t.criadoEm || new Date().toISOString(), atualizadoEm: new Date().toISOString() };
+    const ordem = Number.isFinite(t.ordem) ? t.ordem : proximaOrdem(treinos);
+    const completo = { ...t, id, ...(ordem !== undefined ? { ordem } : {}), criadoEm: t.criadoEm || new Date().toISOString(), atualizadoEm: new Date().toISOString() };
     let ok = true;
     if (user) ok = await salvarDoc(doc(db, 'users', user.uid, 'treinos', id), completo);
     else persistirLocal([...treinos.filter((x) => x.id !== id), completo]);
@@ -307,6 +312,16 @@ export default function TreinosLista({ user, treinos, setTreinos, sessoes = [], 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [abrir, treinos]);
 
+  const mover = async (id, indice) => {
+    const ids = ordenados.map((t) => t.id);
+    const novos = reordenarIds(ids, id, indice);
+    if (novos.join() === ids.join()) return;
+    const mudados = novos.map((tid, i) => ({ ...treinos.find((t) => t.id === tid), ordem: i })).filter((t) => treinos.find((x) => x.id === t.id).ordem !== t.ordem);
+    if (user) { for (const t of mudados) await salvarDoc(doc(db, 'users', user.uid, 'treinos', t.id), t); }
+    else persistirLocal(treinos.map((t) => mudados.find((m) => m.id === t.id) || t));
+  };
+  const arrastar = useArrastarOrdem(mover);
+
   const apagar = async (t) => {
     let ok = true;
     if (user) ok = await apagarDoc(doc(db, 'users', user.uid, 'treinos', t.id));
@@ -316,23 +331,16 @@ export default function TreinosLista({ user, treinos, setTreinos, sessoes = [], 
 
   return (
     <div className="mt-2 w-full px-2 sm:px-0 flex flex-col gap-3">
-      <div className="flex items-center justify-between">
-        <h2 className="text-base font-bold text-zinc-100">Meus treinos</h2>
-        <button onClick={() => setEscolhendoTipo(true)} className="text-xs font-bold px-3 py-1.5 bg-zinc-100 text-zinc-950 rounded hover:bg-zinc-300 transition-colors">+ Adicionar treino</button>
-      </div>
-
-      {ordenados.length === 0 ? (
-        <div className="bg-zinc-900 border border-dashed border-zinc-700 rounded-xl p-6 text-center">
-          <p className="text-sm text-zinc-300 mb-1">Nenhum treino ainda.</p>
-          <p className="text-xs text-zinc-500 mb-3">Crie treinos de força, cardio ou outros tipos e acompanhe duração e calorias estimadas.</p>
-          <button onClick={() => setEscolhendoTipo(true)} className="text-sm font-bold px-4 py-2 bg-zinc-100 text-zinc-950 rounded hover:bg-zinc-300">Criar o primeiro treino</button>
-        </div>
-      ) : (
-        <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          {ordenados.map((t) => {
+      {ordenados.length > 0 && (
+        <ul ref={arrastar.raiz} className="flex flex-col gap-2">
+          {ordenados.map((t, idx) => {
             const tipo = tipoDe(t);
+            const outros = ordenados.filter((x) => x.id !== arrastar.arrasto);
+            const linhaAntes = arrastar.arrasto && arrastar.alvo !== null && t.id !== arrastar.arrasto && outros[arrastar.alvo]?.id === t.id;
+            const linhaFim = arrastar.arrasto && arrastar.alvo !== null && idx === ordenados.length - 1 && arrastar.alvo >= outros.length && t.id !== arrastar.arrasto;
             return (
-              <li key={t.id} className="flex items-stretch gap-1 bg-zinc-900 border border-zinc-800 hover:border-zinc-600 rounded-xl p-2 transition-colors">
+              <li key={t.id} data-ordem-id={t.id} className={`flex items-stretch gap-1 bg-zinc-900 border border-zinc-800 hover:border-zinc-600 rounded-xl p-2 transition-colors ${arrastar.arrasto === t.id ? 'opacity-40' : ''} ${linhaAntes ? 'border-t-blue-500 border-t-2' : ''} ${linhaFim ? 'border-b-blue-500 border-b-2' : ''}`}>
+                <button type="button" onPointerDown={(e) => arrastar.iniciar(e, t.id)} aria-label={`Arrastar para mudar a ordem: ${t.nome}`} title="Arraste para mudar a ordem" style={{ touchAction: 'none' }} className="px-1.5 text-zinc-500 hover:text-zinc-200 cursor-grab active:cursor-grabbing select-none text-sm font-bold tracking-tighter shrink-0">⋮⋮</button>
                 <button onClick={() => setAmpliar(t)} aria-label={`Ampliar imagem de ${t.nome}`} className="w-20 shrink-0 self-center text-zinc-300">
                   {tipo === 'forca' ? <AvatarMuscular sexo={sexo} cor={cor} intensidades={intensidadesDoTreino(t, achar, modo)} /> : <IconeTreino chave={chaveIcone(t)} className="w-full h-20" />}
                 </button>

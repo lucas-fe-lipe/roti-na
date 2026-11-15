@@ -3,11 +3,11 @@ import useVoltar from '../hooks/useVoltar';
 import AvatarMuscular from './AvatarMuscular';
 import ExercicioEditor from './ExercicioEditor';
 import Midia from './MidiaExercicio';
-import { todosExercicios, filtrarExercicios, CATEGORIAS, EQP, equipamentosDe } from '../data/exercicios';
+import FiltrosExercicios from './FiltrosExercicios';
+import useFiltrosExercicios from '../hooks/useFiltrosExercicios';
+import { todosExercicios, filtrarExercicios, EQP, equipamentosDe } from '../data/exercicios';
 import { intensidadeDoExercicio } from '../utils/treino';
 import { notificar } from '../utils/toast';
-
-const chip = (ativo) => `text-[11px] px-2.5 py-1 rounded-full border whitespace-nowrap ${ativo ? 'bg-zinc-100 text-zinc-900 border-zinc-100 font-bold' : 'border-zinc-700 text-zinc-400 hover:text-zinc-100'}`;
 
 // Corpo de um exercício expandido: GIF e músculos trabalhados (frente e costas), um de cada vez (arraste ou toque)
 function Previa({ ex, midia, sexo, cor }) {
@@ -37,14 +37,12 @@ function Previa({ ex, midia, sexo, cor }) {
 // Pop-up com a lista de exercícios: filtros de músculo (todos) e equipamento (qualquer um), prévia e "+"
 export default function PickerExercicios({ config, midias = {}, exCustom, onEscolher, onClose }) {
   useVoltar(true, onClose);
-  const [busca, setBusca] = useState('');
-  const [cats, setCats] = useState([]);
-  const [eqps, setEqps] = useState([]);
+  const filtros = useFiltrosExercicios();
+  const { busca, cats, eqps } = filtros;
   const [aberto, setAberto] = useState(null);
   const [novoEx, setNovoEx] = useState(false);
   const { sexo, cor } = config.treino;
   const nCustom = exCustom?.lista?.length || 0;
-  const alternar = (set, v) => set((l) => (l.includes(v) ? l.filter((x) => x !== v) : [...l, v]));
 
   const lista = useMemo(() => filtrarExercicios(todosExercicios(), { busca, cats, eqps }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -58,19 +56,7 @@ export default function PickerExercicios({ config, midias = {}, exCustom, onEsco
           <h2 className="text-lg font-bold">Adicionar exercício</h2>
           <button aria-label="Fechar" onClick={onClose} className="text-zinc-400 hover:text-white text-xl leading-none">×</button>
         </div>
-        <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar exercício…" aria-label="Buscar exercício" className="bg-zinc-950 border border-zinc-700 rounded px-2 py-1.5 text-sm text-white" />
-        <div>
-          <div className="text-[10px] uppercase tracking-wide text-zinc-500 mb-1">Músculos <span className="normal-case">(mostra o que atende a todos os marcados)</span></div>
-          <div className="flex flex-wrap gap-1" role="group" aria-label="Filtro de músculos">
-            {CATEGORIAS.map((c) => <button key={c} type="button" onClick={() => alternar(setCats, c)} aria-pressed={cats.includes(c)} className={chip(cats.includes(c))}>{c}</button>)}
-          </div>
-        </div>
-        <div>
-          <div className="text-[10px] uppercase tracking-wide text-zinc-500 mb-1">Equipamento <span className="normal-case">(mostra o que usa qualquer um dos marcados)</span></div>
-          <div className="flex flex-wrap gap-1" role="group" aria-label="Filtro de equipamento">
-            {Object.entries(EQP).map(([k, r]) => <button key={k} type="button" onClick={() => alternar(setEqps, k)} aria-pressed={eqps.includes(k)} className={chip(eqps.includes(k))}>{r}</button>)}
-          </div>
-        </div>
+        <FiltrosExercicios filtros={filtros} />
         {exCustom && <button type="button" onClick={() => setNovoEx(true)} className="text-left text-xs px-2 py-1.5 rounded border border-dashed border-zinc-600 text-zinc-200 hover:bg-zinc-800">+ Criar exercício que não está na lista</button>}
         <div className="text-[11px] text-zinc-500">{lista.length} exercício{lista.length === 1 ? '' : 's'}</div>
         <ul className="overflow-y-auto flex flex-col gap-1 min-h-0">

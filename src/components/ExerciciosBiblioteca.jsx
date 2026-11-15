@@ -6,12 +6,13 @@ import { notificar } from '../utils/toast';
 import AvatarMuscular from './AvatarMuscular';
 import ExercicioEditor from './ExercicioEditor';
 import ConfirmModal from './ConfirmModal';
-import { todosExercicios, CATEGORIAS, MUSCULOS, P, S } from '../data/exercicios';
+import FiltrosExercicios from './FiltrosExercicios';
+import useFiltrosExercicios from '../hooks/useFiltrosExercicios';
+import { todosExercicios, filtrarExercicios, EQP, equipamentosDe, MUSCULOS, P, S } from '../data/exercicios';
 import { usoDoExercicio } from '../utils/exercicioCustom';
 import { intensidadeDoExercicio, linkValido } from '../utils/treino';
 import Midia from './MidiaExercicio';
 
-const PRESETS = ['#f97316', '#ef4444', '#eab308', '#22c55e', '#06b6d4', '#3b82f6', '#a855f7', '#ec4899'];
 const rotuloPeso = (w) => (w >= P ? 'principal' : w >= S ? 'auxiliar' : 'leve');
 
 function EditorMidia({ exercicio, atual }) {
@@ -75,19 +76,17 @@ function Detalhe({ ex, sexo, cor, midia, admin, aoEscolher, onEditar, onExcluir 
 }
 
 export default function ExerciciosBiblioteca({ config, atualizarConfig, midias, admin, exCustom, treinos = [], sessoes = [] }) {
-  const [busca, setBusca] = useState('');
-  const [cat, setCat] = useState(null);
+  const filtros = useFiltrosExercicios();
+  const { busca, cats, eqps } = filtros;
   const [aberto, setAberto] = useState(null);
   const [editor, setEditor] = useState(null);
   const [excluir, setExcluir] = useState(null);
   const { sexo, cor } = config.treino;
   const nCustom = exCustom?.lista?.length || 0;
 
-  const lista = useMemo(() => {
-    const q = busca.trim().toLowerCase();
-    return todosExercicios().filter((e) => (!cat || e.cat === cat) && (!q || e.nome.toLowerCase().includes(q)));
+  const lista = useMemo(() => filtrarExercicios(todosExercicios(), { busca, cats, eqps }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [busca, cat, nCustom]);
+    [busca, cats, eqps, nCustom]);
 
   const uso = excluir ? usoDoExercicio(excluir.id, treinos, sessoes) : { treinos: 0, sessoes: 0 };
   const salvarEx = async (ex) => { const c = await exCustom.salvar(ex); if (c) { notificar('Exercício salvo.', 'sucesso'); setEditor(null); setAberto(c.id); } };
@@ -95,27 +94,9 @@ export default function ExerciciosBiblioteca({ config, atualizarConfig, midias, 
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex rounded border border-zinc-700 overflow-hidden" role="group" aria-label="Avatar">
-          {[['m', 'Homem'], ['f', 'Mulher']].map(([v, r]) => (
-            <button key={v} onClick={() => atualizarConfig({ treino: { sexo: v } })} aria-pressed={sexo === v} className={`text-xs px-3 py-1.5 ${sexo === v ? 'bg-zinc-100 text-zinc-900 font-bold' : 'text-zinc-400 hover:bg-zinc-800'}`}>{r}</button>
-          ))}
-        </div>
-        <div className="flex items-center gap-1.5" role="group" aria-label="Cor dos músculos">
-          {PRESETS.map((c) => (
-            <button key={c} onClick={() => atualizarConfig({ treino: { cor: c } })} aria-label={`Cor ${c}`} aria-pressed={cor === c} style={{ background: c }} className={`w-5 h-5 rounded-full border-2 ${cor === c ? 'border-white' : 'border-transparent'}`} />
-          ))}
-          <input type="color" value={cor} onChange={(e) => atualizarConfig({ treino: { cor: e.target.value } })} aria-label="Escolher outra cor" className="w-6 h-6 bg-transparent border-0 p-0 cursor-pointer" />
-        </div>
-      </div>
-
       {exCustom && <button onClick={() => setEditor({})} className="self-start text-xs font-bold px-3 py-1.5 bg-zinc-100 text-zinc-950 rounded hover:bg-zinc-300">+ Criar exercício</button>}
-      <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar exercício…" aria-label="Buscar exercício" className="bg-zinc-900 border border-zinc-800 rounded px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-zinc-500" />
-      <div className="flex flex-wrap gap-1.5">
-        {[null, ...CATEGORIAS].map((c) => (
-          <button key={c || 'todos'} onClick={() => setCat(c)} aria-pressed={cat === c} className={`text-xs px-2.5 py-1 rounded-full border ${cat === c ? 'bg-zinc-100 text-zinc-900 border-zinc-100 font-bold' : 'border-zinc-700 text-zinc-400 hover:text-zinc-100'}`}>{c || 'Todos'}</button>
-        ))}
-      </div>
+      <FiltrosExercicios filtros={filtros} />
+      <div className="text-[11px] text-zinc-500">{lista.length} exercício{lista.length === 1 ? '' : 's'}</div>
 
       <ul className="flex flex-col gap-1.5">
         {lista.length === 0 && <li className="text-xs text-zinc-500 py-2">Nenhum exercício encontrado.</li>}
@@ -125,7 +106,7 @@ export default function ExerciciosBiblioteca({ config, atualizarConfig, midias, 
             <li key={e.id} className="bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2">
               <button onClick={() => setAberto(ativo ? null : e.id)} aria-expanded={ativo} className="w-full flex items-center justify-between text-left gap-2">
                 <span className="text-sm text-zinc-100">{e.nome}{e.custom && <span className="text-[10px] text-zinc-500"> · seu</span>}</span>
-                <span className="text-[11px] text-zinc-500 shrink-0">{midias[e.id] ? '▶ GIF · ' : ''}{e.cat}</span>
+                <span className="text-[11px] text-zinc-500 shrink-0">{midias[e.id] ? '▶ GIF · ' : ''}{e.cat} · {equipamentosDe(e).map((x) => EQP[x]).join(', ')}</span>
               </button>
               {ativo && <Detalhe ex={e} sexo={sexo} cor={cor} midia={midias[e.id]} admin={admin} aoEscolher={setAberto} onEditar={setEditor} onExcluir={setExcluir} />}
             </li>

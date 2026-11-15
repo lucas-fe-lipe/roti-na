@@ -240,6 +240,25 @@ export default function Configuracoes({ user, config, atualizarConfig, onVoltar 
         <Interruptor rotulo="Linha do horário atual" descricao={'Linha que marca "agora" na grade semanal.'} ligado={blocos.linhaAgora} onChange={(v) => atualizarConfig({ blocos: { linhaAgora: v } })} />
       </Grupo>
 
+      <Grupo titulo="Avatar dos músculos">
+        <div className="py-3 flex flex-col gap-2">
+          <span className="text-sm text-zinc-100">Modelo do corpo</span>
+          <div className="flex rounded border border-zinc-700 overflow-hidden self-start" role="group" aria-label="Modelo do corpo">
+            {[['m', 'Modelo 1'], ['f', 'Modelo 2']].map(([v, r]) => (
+              <button key={v} onClick={() => atualizarConfig({ treino: { sexo: v } })} aria-pressed={config.treino.sexo === v} className={`text-xs px-3 py-1.5 ${config.treino.sexo === v ? 'bg-zinc-100 text-zinc-900 font-bold' : 'text-zinc-400 hover:bg-zinc-800'}`}>{r}</button>
+            ))}
+          </div>
+          <span className="text-xs text-zinc-500">Também define a fórmula usada para estimar gordura e músculo nas medidas: Modelo 1 usa a fórmula masculina e Modelo 2, a feminina.</span>
+        </div>
+        <div className="py-3 flex items-center justify-between gap-3">
+          <label htmlFor="cor-musculos" className="text-sm text-zinc-100">Cor dos músculos</label>
+          <div className="flex items-center gap-2">
+            <input id="cor-musculos" type="color" value={config.treino.cor} onChange={(e) => atualizarConfig({ treino: { cor: e.target.value } })} className="w-10 h-8 bg-transparent border border-zinc-700 rounded p-0 cursor-pointer" />
+            <button onClick={() => atualizarConfig({ treino: { cor: '#3b82f6' } })} className="text-xs text-zinc-400 hover:text-zinc-100 px-2 py-1 rounded hover:bg-zinc-800">Azul padrão</button>
+          </div>
+        </div>
+      </Grupo>
+
       {podeSerAdmin(user) && (
         <Grupo titulo="Administrador">
           <Interruptor rotulo="Modo administrador" descricao="Libera, em cada exercício da biblioteca, o campo para colar o link do GIF (Google Drive público). Vale para todos os usuários do app." ligado={!!config.admin?.ativo} onChange={(v) => atualizarConfig({ admin: { ativo: v } })} />

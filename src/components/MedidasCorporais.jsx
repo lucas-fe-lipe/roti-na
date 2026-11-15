@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import useVoltar from '../hooks/useVoltar';
 import { doc } from 'firebase/firestore';
 import { db } from '../services/firebase';
@@ -99,7 +99,7 @@ function Grafico({ series }) {
 }
 
 // ---------- formulário ----------
-function ModalMedida({ inicial, sexo, onSexo, onClose, onSalvar }) {
+function ModalMedida({ inicial, sexo, onClose, onSalvar }) {
   useVoltar(true, onClose);
   const [f, setF] = useState(inicial);
   const [erro, setErro] = useState('');
@@ -149,11 +149,6 @@ function ModalMedida({ inicial, sexo, onSexo, onClose, onSalvar }) {
             <div>Gordura {numero(f.gordura) > 0 ? '' : 'estimada '}<span className="font-bold text-white">{fmtN(gUsada)}%</span></div>
             <div>Músculo {numero(f.musculo) > 0 ? '' : 'estimado '}<span className="font-bold text-white">{fmtN(numero(f.musculo) > 0 ? numero(f.musculo) : mEst)} kg</span></div>
           </div>
-          <div className="flex rounded border border-zinc-700 overflow-hidden" role="group" aria-label="Sexo para o cálculo">
-            {[['m', 'Homem'], ['f', 'Mulher']].map(([v, r]) => (
-              <button key={v} type="button" onClick={() => onSexo(v)} aria-pressed={sexo === v} className={`text-[11px] px-2 py-1 ${sexo === v ? 'bg-zinc-100 text-zinc-900 font-bold' : 'text-zinc-400 hover:bg-zinc-800'}`}>{r}</button>
-            ))}
-          </div>
         </div>
 
         <button type="button" onClick={() => setMais((m) => !m)} aria-expanded={mais} className="text-xs font-bold text-zinc-300 hover:text-white">
@@ -191,13 +186,37 @@ function ModalMedida({ inicial, sexo, onSexo, onClose, onSalvar }) {
   );
 }
 
+// ---------- pop-up com os detalhes (cards, gráfico, histórico) ----------
+function DetalheMedidas({ onClose, onAdicionar, children }) {
+  useVoltar(true, onClose);
+  return (
+    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-40 p-3" onClick={onClose}>
+      <div role="dialog" aria-modal="true" aria-label="Medidas corporais" className="bg-zinc-900 text-zinc-100 rounded-xl w-full max-w-2xl p-4 shadow-2xl border border-zinc-800 max-h-[92vh] overflow-y-auto flex flex-col gap-3" onClick={(e) => e.stopPropagation()}>
+        <div className="flex justify-between items-center gap-2">
+          <h2 className="text-lg font-bold">Medidas corporais</h2>
+          <div className="flex items-center gap-2">
+            <button onClick={onAdicionar} className="text-xs font-bold px-3 py-1.5 bg-zinc-100 text-zinc-950 rounded hover:bg-zinc-300">+ Adicionar medição</button>
+            <button aria-label="Fechar" onClick={onClose} className="text-zinc-400 hover:text-white text-xl leading-none">×</button>
+          </div>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 // ---------- bloco principal ----------
-export default function MedidasCorporais({ user, medidas, setMedidas, sexo = 'm', onSexo = () => {} }) {
+export default function MedidasCorporais({ user, medidas, setMedidas, sexo = 'm', comando = null }) {
   const [modal, setModal] = useState(null); // formulário inicial
+  const [detalhe, setDetalhe] = useState(false);
   const [excluir, setExcluir] = useState(null);
   const enr = useMemo(() => enriquecer(medidas, sexo), [medidas, sexo]);
   const series = useMemo(() => montarSeries(enr), [enr]);
   const ultimaAltura = [...enr].reverse().find((r) => r.alturaUsada)?.alturaUsada ?? '';
+
+  const cmdVisto = useRef(comando);
+  useEffect(() => { if (comando !== cmdVisto.current) { cmdVisto.current = comando; setModal(vazio(ultimaAltura)); } // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [comando]);
 
   const persistirLocal = (lista) => { setMedidas(lista); if (!user) { try { localStorage.setItem('local_medidas', JSON.stringify(lista)); } catch { /* sem armazenamento */ } } };
 
@@ -239,21 +258,29 @@ export default function MedidasCorporais({ user, medidas, setMedidas, sexo = 'm'
 
   const historico = [...enr].reverse();
 
-  return (
-    <div className="mt-2 w-full px-2 sm:px-0 flex flex-col gap-3">
-      <div className="flex items-center justify-between">
-        <h2 className="text-base font-bold text-zinc-100">Medidas corporais</h2>
-        <button onClick={() => setModal(vazio(ultimaAltura))} className="text-xs font-bold px-3 py-1.5 bg-zinc-100 text-zinc-950 rounded hover:bg-zinc-300 transition-colors">+ Medição</button>
-      </div>
+  const ult = (c) => ultimoDe(c);
+  const pesoAtual = ult('peso')?.peso;
+  const imcAtual = ult('imc')?.imc;
+  const resumo = [['Altura', ultimaAltura !== '' ? `${fmt(Number(ultimaAltura), 0)} cm` : '–'], ['Peso', Number.isFinite(pesoAtual) ? `${fmt(pesoAtual)} kg` : '–'], ['IMC', fmt(imcAtual)]];
 
-      {enr.length === 0 ? (
-        <div className="bg-zinc-900 border border-dashed border-zinc-700 rounded-xl p-6 text-center">
-          <p className="text-sm text-zinc-300 mb-1">Nenhuma medição ainda.</p>
-          <p className="text-xs text-zinc-500 mb-3">Registre peso, altura e a medida da barriga: o app calcula o IMC e estima gordura e músculo.</p>
-          <button onClick={() => setModal(vazio(''))} className="text-sm font-bold px-4 py-2 bg-zinc-100 text-zinc-950 rounded hover:bg-zinc-300">Registrar a primeira medição</button>
+  return (
+    <>
+      {enr.length > 0 && (
+        <div className="mt-2 w-full px-2 sm:px-0">
+          <div className="flex items-center gap-3 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2">
+            <h2 className="text-xs font-bold text-zinc-300 shrink-0">Medidas</h2>
+            <div className="flex-1 flex justify-around gap-2">
+              {resumo.map(([r, v]) => (
+                <div key={r} className="text-center"><div className="text-[10px] text-zinc-500">{r}</div><div className="text-sm font-bold text-white leading-tight">{v}</div></div>
+              ))}
+            </div>
+            <button onClick={() => setDetalhe(true)} aria-label="Ver detalhes das medidas" className="shrink-0 w-8 h-8 rounded-full bg-zinc-800 hover:bg-zinc-700 text-zinc-100 text-lg font-bold leading-none">+</button>
+          </div>
         </div>
-      ) : (
-        <>
+      )}
+
+      {detalhe && enr.length > 0 && (
+        <DetalheMedidas onClose={() => setDetalhe(false)} onAdicionar={() => setModal(vazio(ultimaAltura))}>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {cards.map((c) => (
               <div key={c.r} className="bg-zinc-900 border border-zinc-800 rounded-lg p-3">
@@ -295,10 +322,10 @@ export default function MedidasCorporais({ user, medidas, setMedidas, sexo = 'm'
               );
             })}
           </div>
-        </>
+        </DetalheMedidas>
       )}
 
-      {modal && <ModalMedida inicial={modal} sexo={sexo} onSexo={onSexo} onClose={() => setModal(null)} onSalvar={salvar} />}
+      {modal && <ModalMedida inicial={modal} sexo={sexo} onClose={() => setModal(null)} onSalvar={salvar} />}
       <ConfirmModal
         aberto={!!excluir}
         titulo="Excluir medição"
@@ -306,6 +333,6 @@ export default function MedidasCorporais({ user, medidas, setMedidas, sexo = 'm'
         onCancelar={() => setExcluir(null)}
         onConfirmar={() => { const id = excluir.id; setExcluir(null); apagar(id); }}
       />
-    </div>
+    </>
   );
 }

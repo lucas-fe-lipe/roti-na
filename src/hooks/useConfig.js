@@ -11,7 +11,7 @@ export const CONFIG_PADRAO = {
   layout: LAYOUT_PADRAO, // ordem das páginas e dos blocos dentro delas
   integracoes: { googleAutoSync: false },
   grade: { pxPorHora: 22 }, // altura da grade horária
-  treino: { sexo: 'm', cor: '#f97316', modo: 'absoluto' }, // avatar dos músculos
+  treino: { sexo: 'm', cor: '#3b82f6', modo: 'absoluto' }, // avatar dos músculos (sexo 'm' = Modelo 1, 'f' = Modelo 2)
   metas: { linhas: 1 }, // metas diárias em 1 ou 2 linhas
   admin: { ativo: false }, // modo administrador (só vale para a conta autorizada)
   agendaGoogle: { email: '', incluirRotiNa: true, extras: '', minimizada: false }, // fontes do bloco "Google Agenda na tela"
@@ -25,7 +25,7 @@ const mesclar = (salva) => ({
   integracoes: { ...CONFIG_PADRAO.integracoes, ...(salva?.integracoes || {}) },
   layout: normalizarLayout(salva?.layout),
   grade: { ...CONFIG_PADRAO.grade, ...(salva?.grade || {}) },
-  treino: { ...CONFIG_PADRAO.treino, ...(salva?.treino || {}) },
+  treino: (() => { const t = { ...CONFIG_PADRAO.treino, ...(salva?.treino || {}) }; if (t.cor === '#f97316') t.cor = CONFIG_PADRAO.treino.cor; return t; })(), // laranja era o padrão antigo
   metas: { ...CONFIG_PADRAO.metas, ...(salva?.metas || {}) },
   admin: { ...CONFIG_PADRAO.admin, ...(salva?.admin || {}) },
   agendaGoogle: { ...CONFIG_PADRAO.agendaGoogle, ...(salva?.agendaGoogle || {}) },
