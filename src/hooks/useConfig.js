@@ -6,15 +6,12 @@ import { normalizarLayout, LAYOUT_PADRAO } from '../utils/layout';
 
 // Valores padrão: tudo ligado, como o app era antes das configurações existirem.
 export const CONFIG_PADRAO = {
-  paginas: { grade: true, notas: true, treinos: true },
-  blocos: { grade: true, metas: true, cursos: true, medidas: true, exercicios: true, treinos: true, linhaAgora: true, agendaGoogle: false },
+  paginas: { grade: true, notas: true },
+  blocos: { grade: true, metas: true, cursos: true, linhaAgora: true, agendaGoogle: false },
   layout: LAYOUT_PADRAO, // ordem das páginas e dos blocos dentro delas
   integracoes: { googleAutoSync: false },
   grade: { pxPorHora: 22 }, // altura da grade horária
-  treino: { sexo: 'm', cor: '#3b82f6', modo: 'absoluto' }, // avatar dos músculos (sexo 'm' = Modelo 1, 'f' = Modelo 2)
-  medidas: {}, // preferências do bloco/gráficos de medidas (ver prefsMedidas)
   metas: { linhas: 1 }, // metas diárias em 1 ou 2 linhas
-  admin: { ativo: false }, // modo administrador (só vale para a conta autorizada)
   agendaGoogle: { email: '', incluirRotiNa: true, extras: '', minimizada: false }, // fontes do bloco "Google Agenda na tela"
 };
 
@@ -26,10 +23,7 @@ const mesclar = (salva) => ({
   integracoes: { ...CONFIG_PADRAO.integracoes, ...(salva?.integracoes || {}) },
   layout: normalizarLayout(salva?.layout),
   grade: { ...CONFIG_PADRAO.grade, ...(salva?.grade || {}) },
-  treino: (() => { const t = { ...CONFIG_PADRAO.treino, ...(salva?.treino || {}) }; if (t.cor === '#f97316') t.cor = CONFIG_PADRAO.treino.cor; return t; })(), // laranja era o padrão antigo
-  medidas: { ...(salva?.medidas || {}) },
   metas: { ...CONFIG_PADRAO.metas, ...(salva?.metas || {}) },
-  admin: { ...CONFIG_PADRAO.admin, ...(salva?.admin || {}) },
   agendaGoogle: { ...CONFIG_PADRAO.agendaGoogle, ...(salva?.agendaGoogle || {}) },
 });
 
@@ -75,10 +69,7 @@ export default function useConfig(user) {
       integracoes: { ...atual.integracoes, ...(parcial.integracoes || {}) },
       layout: parcial.layout || atual.layout,
       grade: { ...atual.grade, ...(parcial.grade || {}) },
-      treino: { ...atual.treino, ...(parcial.treino || {}) },
-      medidas: { ...atual.medidas, ...(parcial.medidas || {}) },
       metas: { ...atual.metas, ...(parcial.metas || {}) },
-      admin: { ...atual.admin, ...(parcial.admin || {}) },
       agendaGoogle: { ...atual.agendaGoogle, ...(parcial.agendaGoogle || {}) },
     });
     setConfig(nova);

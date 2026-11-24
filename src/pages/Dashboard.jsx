@@ -1,18 +1,9 @@
 import { useState, useEffect, useRef, Fragment } from 'react';
 import AgendaGoogle from '../components/AgendaGoogle';
-import MedidasCorporais from '../components/MedidasCorporais';
-import BibliotecaMinimizada from '../components/BibliotecaMinimizada';
-import TreinosLista from '../components/TreinosLista';
-import { treinoDaAtividade, modeloAtividadeDoTreino } from '../utils/treinoAtividade';
-import { resumoTreino } from '../utils/treinoModelo';
 import MetasMenu from '../components/MetasMenu';
 import MetaPopup from '../components/MetaPopup';
 import useVoltar from '../hooks/useVoltar';
 import { linhasDe, distribuirMetas, moverMeta, posicaoNovaMeta } from '../utils/metasLayout';
-import useBiblioteca from '../hooks/useBiblioteca';
-import useExerciciosCustom from '../hooks/useExerciciosCustom';
-import { registrarCustom } from '../data/exercicios';
-import { modoAdminAtivo } from '../utils/treino';
 import { textoParaFundo } from '../utils/cores';
 import { paginasVisiveis, secoesAtivasDaPagina, PAGINAS } from '../utils/layout';
 import { integracaoConfigurada } from '../services/googleAgenda';
@@ -55,17 +46,10 @@ export default function Dashboard() {
   const paginaAtual = activePage === 'Configuracoes' ? 'Configuracoes' : (paginasMenu.includes(activePage) ? activePage : (paginasMenu[0] || 'Configuracoes'));
   // botão voltar do celular: fora da página inicial, volta para ela (em vez de fechar o app)
   useVoltar(paginasMenu.length > 0 && paginaAtual !== paginasMenu[0], () => setActivePage(null));
-  const midias = useBiblioteca();
-  const { atividades, setAtividades, metas, setMetas, tarefas, cursos, medidas, setMedidas, treinos, setTreinos, sessoes, setSessoes, exerciciosCustom, setExerciciosCustom } = useDados(user, paginaAtual);
-  registrarCustom(exerciciosCustom);
-  const exCustom = { lista: exerciciosCustom, ...useExerciciosCustom(user, exerciciosCustom, setExerciciosCustom) };
+  const { atividades, setAtividades, metas, setMetas, tarefas, cursos } = useDados(user, paginaAtual);
   const sync = useGoogleAutoSync({ user, atividades, tarefas, ativo: config.integracoes.googleAutoSync });
   
   const [atividadeEditando, setAtividadeEditando] = useState(null);
-  const [modeloAtividade, setModeloAtividade] = useState(null); // pré-preenchimento de "Agendar na grade"
-  const [cmdTreino, setCmdTreino] = useState(0); // contadores: cada clique nos botões do topo de Treinos pede para abrir o formulário
-  const [cmdMedida, setCmdMedida] = useState(0);
-  const [treinoAbrir, setTreinoAbrir] = useState(null); // { id, registrar } pedido para abrir um treino na página Treinos
   const [metaEditando, setMetaEditando] = useState(null);
   const [metaPopup, setMetaPopup] = useState(null); // { id, rect }
   const [modoVisualizacao, setModoVisualizacao] = useState(true);
@@ -292,48 +276,12 @@ export default function Dashboard() {
   }, [metas, currentTime]);
 
   const abrirNovaAtividade = () => {
-    setModeloAtividade(null);
     setAtividadeEditando(null);
     setModoVisualizacao(false);
     setIsModalOpen(true);
-  };
-
-  // liga (ou desliga, com treinoId null) uma atividade da grade a um treino
-  const vincularAtividade = (atividadeId, treinoId) => {
-    const a = atividades.find((x) => x.id === atividadeId);
-    if (!a) return;
-    const nova = { ...a };
-    if (treinoId) nova.treinoId = treinoId; else delete nova.treinoId;
-    handleSalvarAtividade(nova);
-  };
-
-  // peso mais recente registrado nas medidas (para estimar calorias)
-  const pesoKg = (() => {
-    const c = [...medidas].filter((m) => Number(m.peso) > 0).sort((a, b) => String(b.data).localeCompare(String(a.data)))[0];
-    return c ? Number(c.peso) : null;
-  })();
-
-  // "Agendar na grade": abre o formulário de atividade já com o treino escolhido
-  const agendarTreino = (treino) => {
-    setModeloAtividade(modeloAtividadeDoTreino(treino));
-    setAtividadeEditando(null);
-    setModoVisualizacao(false);
-    setIsModalOpen(true);
-  };
-
-  // da atividade na grade para o treino (e, se pedido, direto para o registro da sessão)
-  const abrirTreino = (id, registrar) => {
-    if (!paginasMenu.includes('Treinos') || config.blocos.treinos === false) {
-      notificar('Ative a página Treinos e o bloco "Meus treinos" em Configurações para abrir o treino.', 'info');
-      return;
-    }
-    setIsModalOpen(false);
-    setTreinoAbrir({ id, registrar: !!registrar });
-    setActivePage('Treinos');
   };
 
   const abrirDetalhesAtividade = (atv) => {
-    setModeloAtividade(null);
     setAtividadeEditando(atv);
     setModoVisualizacao(true);
     setIsModalOpen(true);
@@ -512,9 +460,6 @@ export default function Dashboard() {
       </>
     ),
     cursos: secaoCursos,
-    medidas: <MedidasCorporais user={user} medidas={medidas} setMedidas={setMedidas} sexo={config.treino.sexo} comando={cmdMedida} config={config} atualizarConfig={atualizarConfig} />,
-    treinos: <TreinosLista user={user} treinos={treinos} setTreinos={setTreinos} sessoes={sessoes} setSessoes={setSessoes} atividades={atividades} onAgendar={agendarTreino} onVincular={vincularAtividade} pesoKg={pesoKg} abrir={treinoAbrir} onAbriu={() => setTreinoAbrir(null)} config={config} atualizarConfig={atualizarConfig} exCustom={exCustom} midias={midias} comando={cmdTreino} />,
-    exercicios: <BibliotecaMinimizada config={config} atualizarConfig={atualizarConfig} midias={midias} admin={modoAdminAtivo(user, config)} exCustom={exCustom} treinos={treinos} sessoes={sessoes} />,
   };
 
   return (
@@ -570,17 +515,6 @@ export default function Dashboard() {
         
         {paginaAtual !== 'Configuracoes' && (
           <div className="w-full max-w-5xl flex flex-col pb-10">
-            {paginaAtual === 'Treinos' && (() => {
-              const mostrarMedidas = secoesDaPaginaAtual.includes('medidas') && medidas.length === 0;
-              const mostrarTreino = secoesDaPaginaAtual.includes('treinos');
-              if (!mostrarMedidas && !mostrarTreino) return null;
-              return (
-                <div className="flex flex-col items-start gap-2 px-2 sm:px-0 mt-2">
-                  {mostrarMedidas && <button onClick={() => setCmdMedida((n) => n + 1)} className="text-sm font-bold px-4 py-2 bg-zinc-800 text-zinc-100 rounded-lg hover:bg-zinc-700 transition-colors">+ Adicionar medidas</button>}
-                  {mostrarTreino && <button onClick={() => setCmdTreino((n) => n + 1)} className="text-sm font-bold px-4 py-2 bg-zinc-100 text-zinc-950 rounded-lg hover:bg-zinc-300 transition-colors">+ Adicionar treino</button>}
-                </div>
-              );
-            })()}
             {secoesDaPaginaAtual.map((id) => (
               <Fragment key={id}>{secoes[id]}</Fragment>
             ))}
@@ -603,13 +537,6 @@ export default function Dashboard() {
         categorias={categoriasTodas}
         coresUsadas={coresUsadas}
         modoVisualizacaoInicial={modoVisualizacao}
-        treinos={treinos}
-        modelo={modeloAtividade}
-        treinoVinculado={(() => {
-          const t = atividadeEditando ? treinoDaAtividade(treinos, atividadeEditando) : null;
-          return t ? { id: t.id, nome: t.nome, ...resumoTreino(t) } : null;
-        })()}
-        onAbrirTreino={abrirTreino}
         disciplinaVinculada={(() => {
           const v = atividadeEditando ? disciplinaDaAtividade(cursos, atividadeEditando.id) : null;
           return v ? { nome: v.disc.nome, ...resumoDisciplina(v.disc, v.periodo) } : null;

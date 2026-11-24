@@ -401,14 +401,15 @@ import { normalizarLayout, moverPagina, moverSecao, paginasVisiveis, secoesAtiva
 test('layout: normalizar completa, remove repetidos e ids desconhecidos', () => {
   assert.deepEqual(normalizarLayout(undefined), LAYOUT_PADRAO);
   const l = normalizarLayout({ paginas: ['Notas', 'X', 'Notas'], secoes: { Grade: ['metas', 'metas', 'lixo'], Notas: ['grade'] } });
-  assert.deepEqual(l.paginas, ['Notas', 'Grade', 'Treinos']);
+  assert.deepEqual(l.paginas, ['Notas', 'Grade']);
   assert.deepEqual(l.secoes.Grade, ['metas', 'agenda']);
   assert.deepEqual(l.secoes.Notas, ['grade', 'cursos']); // "cursos" ausente volta para a página de origem
 });
 
 test('layout: mover página e mover bloco entre páginas', () => {
-  assert.deepEqual(moverPagina(LAYOUT_PADRAO, 'Notas', 0).paginas, ['Notas', 'Grade', 'Treinos']);
-  assert.deepEqual(moverPagina(LAYOUT_PADRAO, 'Grade', 5).paginas, ['Notas', 'Treinos', 'Grade']);
+  assert.deepEqual(moverPagina(LAYOUT_PADRAO, 'Notas', 0).paginas, ['Notas', 'Grade']);
+  assert.deepEqual(moverPagina(LAYOUT_PADRAO, 'Grade', 5).paginas, ['Notas', 'Grade']);
+  assert.deepEqual(normalizarLayout({ paginas: ['Treinos', 'Notas'] }).paginas, ['Notas', 'Grade']); // página removida é ignorada
   const m = moverSecao(LAYOUT_PADRAO, 'cursos', 'Grade', 1);
   assert.deepEqual(m.secoes.Grade, ['grade', 'cursos', 'metas', 'agenda']);
   assert.deepEqual(m.secoes.Notas, []);
@@ -418,18 +419,18 @@ test('layout: mover página e mover bloco entre páginas', () => {
 
 test('layout: página vazia some do menu e a ordem define a primeira página', () => {
   const base = { paginas: { grade: true, notas: true }, blocos: { grade: true, metas: true, cursos: true, agendaGoogle: false }, layout: LAYOUT_PADRAO };
-  assert.deepEqual(paginasVisiveis(base), ['Grade', 'Notas', 'Treinos']);
-  assert.deepEqual(paginasVisiveis({ ...base, layout: moverPagina(LAYOUT_PADRAO, 'Notas', 0) }), ['Notas', 'Grade', 'Treinos']);
+  assert.deepEqual(paginasVisiveis(base), ['Grade', 'Notas']);
+  assert.deepEqual(paginasVisiveis({ ...base, layout: moverPagina(LAYOUT_PADRAO, 'Notas', 0) }), ['Notas', 'Grade']);
   // "cursos" arrastado para a Rotina: Notas fica vazia e desativada
   const movido = { ...base, layout: moverSecao(LAYOUT_PADRAO, 'cursos', 'Grade', 3) };
-  assert.deepEqual(paginasVisiveis(movido), ['Grade', 'Treinos']);
+  assert.deepEqual(paginasVisiveis(movido), ['Grade']);
   assert.deepEqual(secoesAtivasDaPagina(movido, 'Grade'), ['grade', 'metas', 'cursos']);
   // agenda só conta com a integração Google configurada
   const comAgenda = { ...base, blocos: { ...base.blocos, agendaGoogle: true } };
   assert.deepEqual(secoesAtivasDaPagina(comAgenda, 'Grade', true), ['grade', 'metas', 'agenda']);
   assert.deepEqual(secoesAtivasDaPagina(comAgenda, 'Grade', false), ['grade', 'metas']);
   // página desligada
-  assert.deepEqual(paginasVisiveis({ ...base, paginas: { grade: false, notas: true } }), ['Notas', 'Treinos']);
+  assert.deepEqual(paginasVisiveis({ ...base, paginas: { grade: false, notas: true } }), ['Notas']);
 });
 
 test('barra de notas: pontos distribuídos e obtidos sobre o total', () => {
@@ -439,173 +440,8 @@ test('barra de notas: pontos distribuídos e obtidos sobre o total', () => {
   assert.equal(r.preenchimento, 24);
 });
 
-import { numero, calcIMC, classificarIMC, validarMedida, enriquecer, montarSeries, variacao, estimarGordura, estimarMusculo } from '../src/utils/medidas.js';
-import { intensidadeDoTreino, corDoMusculo, midiaDoLink, idDoDrive, linkValido, podeSerAdmin, modoAdminAtivo, COR_MUSCULO_PARADO } from '../src/utils/treino.js';
-import { EXERCICIOS, MUSCULOS } from '../src/data/exercicios.js';
-import { CORPOS } from '../src/data/corpoSvg.js';
-
-test('medidas: números com vírgula, IMC e classificação', () => {
-  assert.equal(numero('72,5'), 72.5);
-  assert.equal(numero(''), null);
-  assert.ok(Number.isNaN(numero('abc')));
-  assert.ok(Math.abs(calcIMC(80, 180) - 24.691) < 0.001);
-  assert.equal(calcIMC(0, 180), null);
-  assert.equal(calcIMC(80, ''), null);
-  assert.equal(classificarIMC(17), 'Abaixo do peso');
-  assert.equal(classificarIMC(24.9), 'Peso normal');
-  assert.equal(classificarIMC(27), 'Sobrepeso');
-  assert.equal(classificarIMC(31), 'Obesidade grau I');
-  assert.equal(classificarIMC(null), '');
-});
-
-test('medidas: validação do formulário', () => {
-  const hoje = '2026-11-10';
-  assert.equal(validarMedida({ data: '', peso: '70' }, hoje).ok, false);
-  assert.equal(validarMedida({ data: '2026-11-11', peso: '70' }, hoje).ok, false); // futuro
-  assert.equal(validarMedida({ data: hoje }, hoje).ok, false); // nada preenchido
-  assert.equal(validarMedida({ data: hoje, peso: '10' }, hoje).ok, false); // fora do limite
-  assert.equal(validarMedida({ data: hoje, peso: '70', musculo: '80' }, hoje).ok, false); // músculo > peso
-  assert.equal(validarMedida({ data: hoje, peso: 'x' }, hoje).ok, false);
-  const r = validarMedida({ data: hoje, peso: '72,5', altura: '178', gordura: '18', extras: { cintura: '80', peito: '' }, obs: ' ok ' }, hoje);
-  assert.equal(r.ok, true);
-  assert.deepEqual(r.medida, { data: hoje, extras: { cintura: 80 }, peso: 72.5, altura: 178, abdomen: null, gordura: 18, musculo: null, obs: 'ok' });
-  assert.equal(validarMedida({ data: hoje, extras: { cintura: '80' } }, hoje).ok, true); // só uma circunferência já vale
-});
-
-test('medidas: altura vale daí em diante; séries do gráfico só com valores existentes', () => {
-  const regs = [
-    { id: 'b', data: '2026-02-01', peso: 75, altura: null, gordura: 20, musculo: 30 },
-    { id: 'a', data: '2026-01-01', peso: 80, altura: 180, gordura: null, musculo: null },
-    { id: 'c', data: '2026-03-01', peso: 70, altura: null, gordura: null, musculo: null },
-  ];
-  const e = enriquecer(regs);
-  assert.deepEqual(e.map((r) => r.id), ['a', 'b', 'c']);
-  assert.ok(Math.abs(e[1].imc - 75 / 1.8 ** 2) < 1e-9);
-  assert.ok(Math.abs(e[1].musculoPct - 40) < 1e-9);
-  const s = montarSeries(e);
-  assert.deepEqual(s.map((x) => x.pontos.length), [3, 1, 1]);
-  assert.equal(variacao(s[0].pontos) < 0, true);
-  assert.equal(variacao(s[1].pontos), null);
-  // sem nenhuma altura: sem IMC
-  assert.equal(enriquecer([{ id: 'x', data: '2026-01-01', peso: 70 }])[0].imc, null);
-});
-
 // ---------- medidas simplificadas (altura, peso, barriga) ----------
-test('estimarGordura: RFM com altura e barriga; mulher soma 12; limita 3–60', () => {
-  assert.ok(Math.abs(estimarGordura('m', 175, 85) - (64 - 20 * (175 / 85))) < 1e-9);
-  assert.ok(Math.abs(estimarGordura('f', 165, 80) - (64 - 20 * (165 / 80) + 12)) < 1e-9);
-  assert.equal(estimarGordura('m', 180, 40), 3);
-  assert.equal(estimarGordura('m', 150, 250) >= 3, true);
-  assert.equal(estimarGordura('m', '', 80), null);
-  assert.equal(estimarGordura('m', 175, null), null);
-});
-
-test('estimarMusculo: fração da massa magra; precisa de peso e gordura', () => {
-  assert.ok(Math.abs(estimarMusculo('m', 80, 20) - 80 * 0.8 * 0.54) < 1e-9);
-  assert.ok(Math.abs(estimarMusculo('f', 60, 30) - 60 * 0.7 * 0.46) < 1e-9);
-  assert.equal(estimarMusculo('m', 80, null), null);
-  assert.equal(estimarMusculo('m', '', 20), null);
-});
-
-test('enriquecer: estima gordura/músculo; valores digitados têm prioridade; abdômen antigo em extras', () => {
-  const [a, b, c] = enriquecer([
-    { id: '1', data: '2026-01-01', peso: 80, altura: 175, abdomen: 85 },
-    { id: '2', data: '2026-02-01', peso: 79, abdomen: 84, gordura: 18, musculo: 35 },
-    { id: '3', data: '2026-03-01', peso: 78, extras: { abdomen: 83 } },
-  ], 'm');
-  assert.equal(a.gorduraEstimada, true);
-  assert.equal(a.musculoEstimado, true);
-  assert.ok(Math.abs(a.gorduraUsada - (64 - 20 * (175 / 85))) < 1e-9);
-  assert.equal(b.gorduraUsada, 18);
-  assert.equal(b.gorduraEstimada, false);
-  assert.equal(b.musculoUsado, 35);
-  assert.equal(b.musculoEstimado, false);
-  assert.equal(c.abdomen, 83); // altura herdada da primeira medição
-  assert.equal(c.gorduraEstimada, true);
-  const s = montarSeries([a, b, c]).find((x) => x.id === 'gordura');
-  assert.equal(s.pontos.length, 3);
-});
-
-test('enriquecer: sem barriga não estima; peso+abdômen sozinhos já bastam para validar', () => {
-  const [a] = enriquecer([{ id: '1', data: '2026-01-01', peso: 80, altura: 175 }], 'm');
-  assert.equal(a.gorduraUsada, null);
-  assert.equal(a.musculoUsado, null);
-  const r = validarMedida({ data: '2026-01-01', abdomen: '85', extras: {} }, '2026-02-01');
-  assert.equal(r.ok, true);
-  assert.equal(r.medida.abdomen, 85);
-  assert.equal(validarMedida({ data: '2026-01-01', abdomen: '5', extras: {} }, '2026-02-01').ok, false);
-});
-
 // ---------- treinos: avatar, intensidade e mídia ----------
-test('intensidadeDoTreino: soma séries × peso do músculo; modo absoluto e relativo', () => {
-  const achar = (id) => EXERCICIOS.find((e) => e.id === id);
-  const itens = [{ exercicioId: 'supino-reto', series: 4 }];
-  const abs = intensidadeDoTreino(itens, achar, 'absoluto');
-  assert.ok(Math.abs(abs.chest - 0.4) < 1e-9);
-  assert.ok(Math.abs(abs.triceps - 0.2) < 1e-9);
-  const rel = intensidadeDoTreino(itens, achar, 'relativo');
-  assert.equal(rel.chest, 1);
-  assert.ok(Math.abs(rel.triceps - 0.5) < 1e-9);
-  const cheio = intensidadeDoTreino([{ exercicioId: 'supino-reto', series: 40 }], achar);
-  assert.equal(cheio.chest, 1); // satura em 100%
-  assert.deepEqual(intensidadeDoTreino([{ exercicioId: 'nao-existe', series: 3 }, { exercicioId: 'supino-reto', series: 0 }], achar), {});
-});
-
-test('corDoMusculo: parado = cinza; qualquer intensidade aparece; 1 = cor escolhida', () => {
-  assert.equal(corDoMusculo(0), COR_MUSCULO_PARADO);
-  assert.equal(corDoMusculo(1, '#ff0000'), '#ff0000');
-  assert.notEqual(corDoMusculo(0.05, '#ff0000'), COR_MUSCULO_PARADO);
-  assert.equal(corDoMusculo(0.5, 'invalida').length, 7); // cor inválida cai no padrão
-});
-
-test('mídia: link do Drive vira imagem direta; link comum é mantido; só https', () => {
-  const id = '1AbCdEfGhIjKlMnOpQrStUvWxYz';
-  assert.equal(idDoDrive(`https://drive.google.com/file/d/${id}/view?usp=sharing`), id);
-  assert.equal(idDoDrive(`https://drive.google.com/open?id=${id}`), id);
-  assert.equal(midiaDoLink(`https://drive.google.com/file/d/${id}/view`).img, `https://lh3.googleusercontent.com/d/${id}`);
-  assert.equal(midiaDoLink('https://exemplo.com/a.gif').img, 'https://exemplo.com/a.gif');
-  assert.equal(midiaDoLink('http://exemplo.com/a.gif'), null);
-  assert.equal(linkValido(''), true);
-  assert.equal(linkValido('javascript:alert(1)'), false);
-});
-
-test('administrador: só a conta autorizada, e só com o modo ligado', () => {
-  const lucas = { email: 'Lucasfelipe.NP@gmail.com ' };
-  assert.equal(podeSerAdmin(lucas), true);
-  assert.equal(podeSerAdmin({ email: 'outra@gmail.com' }), false);
-  assert.equal(podeSerAdmin(null), false);
-  assert.equal(modoAdminAtivo(lucas, { admin: { ativo: true } }), true);
-  assert.equal(modoAdminAtivo(lucas, { admin: { ativo: false } }), false);
-  assert.equal(modoAdminAtivo({ email: 'outra@gmail.com' }, { admin: { ativo: true } }), false);
-});
-
-test('biblioteca: todo músculo dos exercícios existe no desenho e tem nome; ids únicos', () => {
-  const ids = new Set();
-  const nosDesenhos = new Set();
-  Object.values(CORPOS).forEach((c) => Object.values(c).forEach((v) => v.musculos.forEach((m) => nosDesenhos.add(m.g))));
-  EXERCICIOS.forEach((e) => {
-    assert.equal(ids.has(e.id), false, `id repetido: ${e.id}`);
-    ids.add(e.id);
-    assert.ok(Object.keys(e.m).length > 0, `${e.id} sem músculos`);
-    Object.entries(e.m).forEach(([g, w]) => {
-      assert.ok(MUSCULOS[g], `${e.id}: músculo sem nome ${g}`);
-      assert.ok(nosDesenhos.has(g), `${e.id}: músculo ${g} não existe no desenho`);
-      assert.ok(w > 0 && w <= 1);
-    });
-  });
-  assert.ok(EXERCICIOS.length >= 90);
-  ['m', 'f'].forEach((s) => ['frente', 'costas'].forEach((v) => assert.ok(CORPOS[s][v].musculos.length >= 15)));
-});
-
-test('layout: biblioteca de exercícios fica na página Treinos por padrão e liga/desliga', () => {
-  const l = normalizarLayout(null);
-  assert.deepEqual(l.secoes.Treinos, ['treinos', 'medidas', 'exercicios']);
-  // mesmo que o salvo tenha outra ordem, a biblioteca vai para o fim
-  assert.deepEqual(normalizarLayout({ secoes: { Treinos: ['exercicios', 'treinos', 'medidas'] } }).secoes.Treinos, ['treinos', 'medidas', 'exercicios']);
-  assert.equal(secoesAtivasDaPagina({ blocos: { treinos: false } }, 'Treinos', false).includes('treinos'), false);
-  assert.equal(secoesAtivasDaPagina({ blocos: { exercicios: false, medidas: true } }, 'Treinos', false).includes('exercicios'), false);
-});
-
 // ---------- metas diárias: ordem e linhas ----------
 import { linhasDe, ordenarMetas, distribuirMetas, moverMeta, posicaoNovaMeta } from '../src/utils/metasLayout.js';
 import { criarVoltar } from '../src/utils/voltar.js';
@@ -723,221 +559,15 @@ test('voltar: depois de fechar uma camada, a próxima também é capturada', () 
 });
 
 // ---------- treinos montados (modelos) ----------
-import { novoItem, validarTreino, resumoTreino, intensidadesDoTreino, musculosMaisTrabalhados, moverItem, ordenarTreinos, reordenarIds, proximaOrdem } from '../src/utils/treinoModelo.js';
-
-test('treino: validação de nome, exercícios, séries, repetições e carga', () => {
-  const it = (o = {}) => ({ id: 'i1', exercicioId: 'supino-reto', series: '4', reps: '8-12', carga: '60,5', ...o });
-  const ok = validarTreino({ nome: '  Peito  ', itens: [it()] });
-  assert.equal(ok.ok, true);
-  assert.deepEqual(ok.treino, { nome: 'Peito', itens: [{ id: 'i1', exercicioId: 'supino-reto', series: 4, reps: '8-12', carga: 60.5 }] });
-  assert.equal(validarTreino({ nome: '', itens: [it()] }).ok, false);
-  assert.equal(validarTreino({ nome: 'X', itens: [] }).ok, false);
-  assert.equal(validarTreino({ nome: 'X', itens: [it({ series: '0' })] }).ok, false);
-  assert.equal(validarTreino({ nome: 'X', itens: [it({ series: '21' })] }).ok, false);
-  assert.equal(validarTreino({ nome: 'X', itens: [it({ reps: 'abc' })] }).ok, false);
-  assert.equal(validarTreino({ nome: 'X', itens: [it({ carga: '-5' })] }).ok, false);
-  assert.equal(validarTreino({ nome: 'X', itens: [it({ carga: '' })] }).treino.itens[0].carga, null);
-  assert.equal(validarTreino({ nome: 'X', itens: [it()] }, () => false).ok, false); // exercício removido da biblioteca
-  assert.equal(validarTreino({ nome: 'x'.repeat(61), itens: [it()] }).ok, false);
-});
-
-test('treino: novoItem gera ids diferentes; resumo soma séries', () => {
-  assert.notEqual(novoItem('a').id, novoItem('a').id);
-  assert.deepEqual(resumoTreino({ itens: [{ series: 4 }, { series: 3 }] }), { exercicios: 2, series: 7 });
-  assert.deepEqual(resumoTreino(undefined), { exercicios: 0, series: 0 });
-});
-
-test('treino: intensidade dos músculos pelo treino todo e ranking', () => {
-  const achar = (id) => EXERCICIOS.find((e) => e.id === id);
-  const t = { itens: [{ exercicioId: 'supino-reto', series: 4 }, { exercicioId: 'supino-inclinado', series: 4 }] };
-  const inten = intensidadesDoTreino(t, achar);
-  assert.ok(Math.abs(inten.chest - 0.8) < 1e-9);
-  assert.ok(inten.deltoids > 0 && inten.triceps > 0);
-  const rank = musculosMaisTrabalhados(inten, 2);
-  assert.equal(rank[0][0], 'chest');
-  assert.equal(rank.length, 2);
-  assert.equal(intensidadesDoTreino(t, achar, 'relativo').chest, 1);
-});
-
-test('treino: mover item e ordenar lista', () => {
-  const l = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
-  assert.deepEqual(moverItem(l, 'b', -1).map((x) => x.id), ['b', 'a', 'c']);
-  assert.deepEqual(moverItem(l, 'b', 1).map((x) => x.id), ['a', 'c', 'b']);
-  assert.deepEqual(moverItem(l, 'a', -1), l); // já é o primeiro
-  assert.deepEqual(moverItem(l, 'z', 1), l);
-  assert.deepEqual(ordenarTreinos([{ nome: 'A', criadoEm: '2026-01-01' }, { nome: 'B', criadoEm: '2026-02-01' }, { nome: 'C' }]).map((t) => t.nome), ['C', 'A', 'B']); // sem ordem: mais antigos primeiro
-  // com ordem escolhida pelo usuário, ela manda
-  assert.deepEqual(ordenarTreinos([{ nome: 'A', ordem: 1 }, { nome: 'B', ordem: 0 }, { nome: 'C', ordem: 2 }]).map((t) => t.nome), ['B', 'A', 'C']);
-  assert.deepEqual(reordenarIds(['a', 'b', 'c', 'd'], 'a', 2), ['b', 'c', 'a', 'd']);
-  assert.deepEqual(reordenarIds(['a', 'b', 'c'], 'c', 0), ['c', 'a', 'b']);
-  assert.deepEqual(reordenarIds(['a', 'b'], 'x', 1), ['a', 'b']);
-  assert.equal(proximaOrdem([{ ordem: 0 }, { ordem: 4 }, {}]), 5);
-  assert.equal(proximaOrdem([{}, {}]), undefined);
-});
-
 // ---------- sessões de treino (registro do que foi feito) ----------
-import { sessaoInicial, sessaoParaForm, validarSessao, volumeDaSerie, resumoSessao, intensidadesDaSessao, historicoDoTreino, evolucaoExercicio, variacaoEvolucao } from '../src/utils/sessoes.js';
-
 const treinoA = { id: 't1', nome: 'A', itens: [{ id: 'i1', exercicioId: 'supino-reto', series: 3, reps: '8-12', carga: 60 }, { id: 'i2', exercicioId: 'crucifixo', series: 2, reps: '12', carga: null }] };
 
-test('sessão: formulário inicial segue o plano; com histórico segue a última sessão', () => {
-  const f = sessaoInicial(treinoA, null, '2026-11-11');
-  assert.equal(f.itens[0].series.length, 3);
-  assert.deepEqual(f.itens[0].series.map((s) => [s.reps, s.carga]), [['8', '60'], ['8', '60'], ['8', '60']]);
-  assert.deepEqual(f.itens[1].series.map((s) => [s.reps, s.carga]), [['12', ''], ['12', '']]);
-  const ultima = { itens: [{ exercicioId: 'supino-reto', series: [{ reps: 10, carga: 65 }, { reps: 8, carga: 65 }] }] };
-  const g = sessaoInicial(treinoA, ultima, '2026-11-12');
-  assert.deepEqual(g.itens[0].series.map((s) => [s.reps, s.carga]), [['10', '65'], ['8', '65']]);
-  assert.equal(g.itens[1].series.length, 2); // sem histórico desse exercício: volta ao plano
-  assert.equal(new Set(f.itens[0].series.map((s) => s.id)).size, 3); // ids únicos
-});
-
-test('sessão: validar ignora séries em branco, converte números e barra erros', () => {
-  const base = { treinoId: 't1', treinoNome: 'A', data: '2026-11-11', obs: ' boa ', itens: [
-    { exercicioId: 'supino-reto', series: [{ reps: '10', carga: '62,5' }, { reps: '', carga: '' }, { reps: '8', carga: '' }] },
-    { exercicioId: 'crucifixo', series: [{ reps: '', carga: '' }] },
-  ] };
-  const r = validarSessao(base, '2026-11-11');
-  assert.equal(r.ok, true);
-  assert.deepEqual(r.sessao.itens, [{ exercicioId: 'supino-reto', series: [{ reps: 10, carga: 62.5 }, { reps: 8, carga: null }] }]);
-  assert.equal(r.sessao.obs, 'boa');
-  assert.equal(validarSessao({ ...base, data: '2026-11-12' }, '2026-11-11').ok, false); // futuro
-  assert.equal(validarSessao({ ...base, data: '' }, '2026-11-11').ok, false);
-  assert.equal(validarSessao({ ...base, itens: [{ exercicioId: 'supino-reto', series: [{ reps: 'x', carga: '' }] }] }, '2026-11-11').ok, false);
-  assert.equal(validarSessao({ ...base, itens: [{ exercicioId: 'supino-reto', series: [{ reps: '10', carga: '-3' }] }] }, '2026-11-11').ok, false);
-  assert.equal(validarSessao({ ...base, itens: [{ exercicioId: 'supino-reto', series: [{ reps: '', carga: '' }] }] }, '2026-11-11').ok, false); // nada feito
-  assert.equal(validarSessao(base, '2026-11-11', () => false).ok, false); // exercício que não existe mais
-});
-
-test('sessão: volume, resumo e conversão de volta para o formulário', () => {
-  const s = { id: 'x', treinoId: 't1', treinoNome: 'A', data: '2026-11-11', itens: [{ exercicioId: 'supino-reto', series: [{ reps: 10, carga: 60 }, { reps: 8, carga: 60 }] }, { exercicioId: 'flexao', series: [{ reps: 20, carga: null }] }] };
-  assert.equal(volumeDaSerie({ reps: 10, carga: 60 }), 600);
-  assert.equal(volumeDaSerie({ reps: 20, carga: null }), 0);
-  assert.deepEqual(resumoSessao(s), { exercicios: 2, series: 3, volume: 1080 });
-  const f = sessaoParaForm(s);
-  assert.equal(f.itens[0].series[0].reps, '10');
-  assert.equal(f.itens[1].series[0].carga, '');
-  assert.equal(validarSessao(f, '2026-11-11').ok, true);
-});
-
-test('sessão: avatar pelo que foi feito (séries feitas por exercício)', () => {
-  const achar = (id) => EXERCICIOS.find((e) => e.id === id);
-  const s = { itens: [{ exercicioId: 'supino-reto', series: [{ reps: 10 }, { reps: 10 }, { reps: 10 }, { reps: 10 }] }] };
-  assert.ok(Math.abs(intensidadesDaSessao(s, achar).chest - 0.4) < 1e-9);
-});
-
-test('sessão: histórico do treino (mais recente primeiro) e evolução do exercício', () => {
-  const sessoes = [
-    { id: '1', treinoId: 't1', data: '2026-10-01', itens: [{ exercicioId: 'supino-reto', series: [{ reps: 10, carga: 50 }, { reps: 8, carga: 55 }] }] },
-    { id: '2', treinoId: 't2', data: '2026-10-05', itens: [{ exercicioId: 'agachamento', series: [{ reps: 10, carga: 80 }] }] },
-    { id: '3', treinoId: 't1', data: '2026-10-15', itens: [{ exercicioId: 'supino-reto', series: [{ reps: 10, carga: 60 }] }] },
-  ];
-  assert.deepEqual(historicoDoTreino(sessoes, 't1').map((s) => s.id), ['3', '1']);
-  const ev = evolucaoExercicio(sessoes, 'supino-reto');
-  assert.deepEqual(ev, [{ data: '2026-10-01', cargaMax: 55, volume: 940, series: 2 }, { data: '2026-10-15', cargaMax: 60, volume: 600, series: 1 }]);
-  assert.equal(variacaoEvolucao(ev, 'cargaMax'), 5);
-  assert.equal(variacaoEvolucao(ev, 'volume'), -340);
-  assert.equal(variacaoEvolucao([ev[0]]), null);
-  assert.deepEqual(evolucaoExercicio(sessoes, 'nao-existe'), []);
-});
-
 // ---------- treino ligado à atividade da grade ----------
-import { treinoDaAtividade, modeloAtividadeDoTreino, horariosDoTreino, proximoHorarioDoTreino, rotuloProximo } from '../src/utils/treinoAtividade.js';
-
 const atvsTreino = [
   { id: 'a1', nome: 'Treino A', treinoId: 't1', horarios: [{ dia: 'QUA', inicio: '19:00', fim: '20:00' }, { dia: 'SEG', inicio: '07:00', fim: '08:00' }] },
   { id: 'a2', nome: 'Outro', horarios: [{ dia: 'TER', inicio: '10:00', fim: '11:00' }] },
   { id: 'a3', nome: 'Treino A (sábado)', treinoId: 't1', horarios: [{ dia: 'SÁB', inicio: '09:00', fim: '10:00' }] },
 ];
-
-test('treino x atividade: encontra o treino ligado e monta o modelo da atividade nova', () => {
-  const ts = [{ id: 't1', nome: 'A', itens: [{}, {}] }];
-  assert.equal(treinoDaAtividade(ts, atvsTreino[0]).id, 't1');
-  assert.equal(treinoDaAtividade(ts, atvsTreino[1]), null);
-  assert.equal(treinoDaAtividade(ts, { treinoId: 'apagado' }), null);
-  assert.deepEqual(modeloAtividadeDoTreino(ts[0]), { nome: 'A', categoria: 'Treinos', treinoId: 't1', detalhes: '2 exercícios' });
-  assert.equal(modeloAtividadeDoTreino({ id: 'x', nome: 'B', itens: [{}] }).detalhes, '1 exercício');
-});
-
-test('treino x atividade: horários do treino em ordem de semana; só as atividades ligadas a ele', () => {
-  assert.deepEqual(horariosDoTreino(atvsTreino, 't1').map((h) => `${h.dia} ${h.inicio}`), ['SEG 07:00', 'QUA 19:00', 'SÁB 09:00']);
-  assert.deepEqual(horariosDoTreino(atvsTreino, 'nenhum'), []);
-});
-
-test('treino x atividade: próximo horário (hoje se ainda não começou, senão o seguinte)', () => {
-  const quarta1800 = new Date(2026, 10, 11, 18, 0); // 11/11/2026 é quarta-feira
-  assert.equal(quarta1800.getDay(), 3);
-  const p = proximoHorarioDoTreino(atvsTreino, 't1', quarta1800);
-  assert.deepEqual([p.dia, p.inicio, p.emDias], ['QUA', '19:00', 0]);
-  assert.equal(rotuloProximo(p), 'hoje às 19:00');
-  const quarta2000 = new Date(2026, 10, 11, 20, 0);
-  const q = proximoHorarioDoTreino(atvsTreino, 't1', quarta2000);
-  assert.deepEqual([q.dia, q.emDias], ['SÁB', 3]);
-  assert.equal(rotuloProximo(q), 'SÁB às 09:00');
-  const domingo = new Date(2026, 10, 15, 12, 0);
-  const r = proximoHorarioDoTreino(atvsTreino, 't1', domingo);
-  assert.deepEqual([r.dia, r.emDias], ['SEG', 1]);
-  assert.equal(rotuloProximo(r), 'amanhã às 07:00');
-  assert.equal(proximoHorarioDoTreino(atvsTreino, 'nenhum', domingo), null);
-  assert.equal(rotuloProximo(null), '');
-});
-
-test('biblioteca: variações (equipamento) não duplicam exercícios; pegadas são exercícios próprios', () => {
-  const ids = new Set(EXERCICIOS.map((e) => e.id));
-  ['cadeira-abdutora', 'supino-reto-aberto', 'supino-reto-fechado', 'barra-fixa', 'barra-fixa-supinada', 'barra-fixa-neutra', 'barra-fixa-aberta'].forEach((i) => assert.ok(ids.has(i), i));
-  const barra = EXERCICIOS.find((e) => e.id === 'barra-fixa-supinada');
-  assert.ok(barra.eq.includes('Com elástico') && barra.eq.includes('Negativa') && barra.eq.includes('Máquina assistida'));
-  const sup = EXERCICIOS.find((e) => e.id === 'supino-reto');
-  assert.ok(sup.uni && sup.eq.includes('Máquina articulada com anilhas'));
-  EXERCICIOS.forEach((e) => { if (e.eq) { assert.equal(new Set(e.eq).size, e.eq.length); assert.ok(e.eq.length >= 2); } });
-});
-
-test('treino/sessão: variação e unilateral só aparecem quando escolhidos e seguem para a sessão', () => {
-  const t = { nome: 'A', itens: [{ id: 'i1', exercicioId: 'supino-reto', series: '3', reps: '10', carga: '', variacao: 'Halteres', unilateral: true }, { id: 'i2', exercicioId: 'crucifixo', series: '3', reps: '10', carga: '', unilateral: false }] };
-  const r = validarTreino(t);
-  assert.equal(r.treino.itens[0].variacao, 'Halteres');
-  assert.equal(r.treino.itens[0].unilateral, true);
-  assert.equal('variacao' in r.treino.itens[1], false);
-  assert.equal('unilateral' in r.treino.itens[1], false);
-  const f = sessaoInicial({ id: 't', nome: 'A', itens: r.treino.itens }, null, '2026-11-12');
-  assert.equal(f.itens[0].variacao, 'Halteres');
-  const v = validarSessao(f, '2026-11-12');
-  assert.equal(v.sessao.itens[0].variacao, 'Halteres');
-  assert.equal(v.sessao.itens[0].unilateral, true);
-  const sess = [
-    { data: '2026-11-01', itens: [{ exercicioId: 'supino-reto', variacao: 'Barra', series: [{ reps: 10, carga: 60 }] }] },
-    { data: '2026-11-08', itens: [{ exercicioId: 'supino-reto', variacao: 'Halteres', series: [{ reps: 10, carga: 24 }] }] },
-  ];
-  assert.equal(evolucaoExercicio(sess, 'supino-reto').length, 2);
-  assert.deepEqual(evolucaoExercicio(sess, 'supino-reto', 'Halteres').map((p) => p.cargaMax), [24]);
-});
-
-import { validarExercicio, proximoNivel, usoDoExercicio } from '../src/utils/exercicioCustom.js';
-import { registrarCustom, achar as acharEx, todosExercicios } from '../src/data/exercicios.js';
-
-test('exercício próprio: validação de nome, categoria, músculos e nome repetido', () => {
-  const ok = validarExercicio({ nome: '  Remada   no TRX ', cat: 'Costas', m: { lats: 1, biceps: 0.5, xx: 1, chest: 0.3 } }, []);
-  assert.equal(ok.ok, true);
-  assert.deepEqual(ok.exercicio, { nome: 'Remada no TRX', cat: 'Costas', m: { lats: 1, biceps: 0.5 } });
-  assert.equal(validarExercicio({ nome: '', cat: 'Costas', m: { lats: 1 } }).ok, false);
-  assert.equal(validarExercicio({ nome: 'x'.repeat(51), cat: 'Costas', m: { lats: 1 } }).ok, false);
-  assert.equal(validarExercicio({ nome: 'A', cat: 'Outra', m: { lats: 1 } }).ok, false);
-  assert.equal(validarExercicio({ nome: 'A', cat: 'Costas', m: {} }).ok, false);
-  assert.equal(validarExercicio({ nome: 'supino reto', cat: 'Peito', m: { chest: 1 } }, todosExercicios()).ok, false);
-  assert.equal(validarExercicio({ nome: 'Meu', cat: 'Peito', m: { chest: 1 } }, [{ id: 'c1', nome: 'meu' }], 'c1').ok, true); // editando o próprio
-});
-
-test('exercício próprio: ciclo de níveis, registro nos lookups e uso', () => {
-  assert.deepEqual([0, 0.25, 0.5, 1].map(proximoNivel), [0.25, 0.5, 1, 0]);
-  assert.equal(acharEx('c1'), null);
-  registrarCustom([{ id: 'c1', nome: 'Meu', cat: 'Costas', m: { lats: 1 }, custom: true }]);
-  assert.equal(acharEx('c1').nome, 'Meu');
-  assert.ok(todosExercicios().length > 96);
-  assert.deepEqual(intensidadeDoTreino([{ exercicioId: 'c1', series: 5 }], acharEx), { lats: 0.5 });
-  registrarCustom([]);
-  assert.equal(acharEx('c1'), null);
-  assert.deepEqual(usoDoExercicio('c1', [{ itens: [{ exercicioId: 'c1' }] }, { itens: [] }], [{ itens: [{ exercicioId: 'c1' }] }, { itens: [{ exercicioId: 'c1' }] }]), { treinos: 1, sessoes: 2 });
-});
 
 test('ICS: inclui VTIMEZONE quando há horário e separa por agenda', () => {
   const base = {
@@ -968,141 +598,4 @@ test('planilha de notas: notas abaixo da aprovação ficam vermelhas, como no ap
   assert.deepEqual(est(6).slice(1, 4), ['pretoNum', 'pretoNum', 'pretoPct']);
   const verm = montarAbasNotas([{ nome: 'C', periodos: [{ nome: 'P', disciplinas: [{ nome: 'D', percentualAprovacao: 70, avaliacoes: [{ nome: 'A', max: '10', obtida: '5' }] }] }] }]);
   assert.deepEqual(verm[0].linhas[2].c.slice(2, 4).map((c) => c.e), ['pretoNumVerm', 'pretoPctVerm']);
-});
-
-import { lerFaixa, textoDuracao, caloriasDoTreino, validarTreinoGeral, resumoDoTreino, volumeKg, distanciaEmKm, tipoDe } from '../src/utils/treinoTipos.js';
-
-test('treinos: faixas exatas ou mín-máx e duração em texto', () => {
-  assert.deepEqual(lerFaixa('45'), { min: 45, max: 45 });
-  assert.deepEqual(lerFaixa('1,5-2'), { min: 1.5, max: 2 });
-  assert.deepEqual(lerFaixa('5 a 7'), { min: 5, max: 7 });
-  assert.equal(lerFaixa(''), null);
-  assert.equal(lerFaixa('7-5'), undefined);
-  assert.equal(lerFaixa('abc'), undefined);
-  assert.equal(lerFaixa('1-2-3'), undefined);
-  assert.equal(textoDuracao({ min: 60, max: 120 }), '1h a 2h');
-  assert.equal(textoDuracao({ min: 90, max: 90 }), '1h30');
-  assert.equal(textoDuracao({ min: 45, max: 45 }), '45 min');
-});
-
-test('treinos: validação por tipo (força, cardio, outro)', () => {
-  assert.equal(tipoDe({}), 'forca'); // treinos antigos
-  const item = { id: 'i', exercicioId: 'supino-reto', series: '3', reps: '10', carga: '' };
-  const f = validarTreinoGeral({ tipo: 'forca', nome: 'A', itens: [item], duracaoTexto: '60-90' });
-  assert.equal(f.ok, true);
-  assert.deepEqual(f.treino.duracao, { min: 60, max: 90 });
-  assert.equal(validarTreinoGeral({ tipo: 'forca', nome: 'A', itens: [item], duracaoTexto: 'x' }).ok, false);
-  assert.equal(validarTreinoGeral({ tipo: 'forca', nome: 'A', itens: [item] }).treino.duracao, undefined);
-
-  const c = validarTreinoGeral({ tipo: 'cardio', nome: 'Corrida', modalidade: 'corrida', duracaoTexto: '30-40', distanciaTexto: '5', distanciaUnidade: 'km' });
-  assert.equal(c.ok, true);
-  assert.deepEqual(c.treino.distancia, { faixa: { min: 5, max: 5 }, unidade: 'km' });
-  assert.equal(validarTreinoGeral({ tipo: 'cardio', nome: 'x', modalidade: 'corrida', duracaoTexto: '' }).ok, false); // duração obrigatória
-  assert.equal(validarTreinoGeral({ tipo: 'cardio', nome: 'x', modalidade: 'outra', modalidadeNome: '', duracaoTexto: '20' }).ok, false);
-  assert.equal(validarTreinoGeral({ tipo: 'cardio', nome: 'x', modalidade: 'corrida', duracaoTexto: '20', distanciaTexto: '7-5' }).ok, false);
-  const o = validarTreinoGeral({ tipo: 'outro', nome: 'Pilates', intensidade: 'leve', duracaoTexto: '50' });
-  assert.equal(o.ok, true);
-  assert.equal(o.treino.intensidade, 'leve');
-  assert.equal(validarTreinoGeral({ tipo: 'outro', nome: '', duracaoTexto: '50' }).ok, false);
-});
-
-test('treinos: calorias estimadas, volume e distância', () => {
-  // corrida (MET 9,8) 30 min, 70 kg: 9,8 × 70 × 0,5 = 343
-  assert.deepEqual(caloriasDoTreino({ tipo: 'cardio', modalidade: 'corrida', duracao: { min: 30, max: 30 } }, 70), { min: 343, max: 343 });
-  assert.deepEqual(caloriasDoTreino({ tipo: 'outro', intensidade: 'intensa', duracao: { min: 60, max: 60 } }, 80), { min: 640, max: 640 });
-  // sem peso nas medidas: usa 70 kg; força sem duração: 2,5 min por série
-  assert.equal(caloriasDoTreino({ tipo: 'forca', itens: [{ series: 4 }] }, null).min, Math.round((5 * 70 * 10) / 60));
-  assert.equal(caloriasDoTreino({ tipo: 'outro' }, 70), null);
-  // cardio sem duração, só com distância (5 km a 9 km/h)
-  assert.equal(caloriasDoTreino({ tipo: 'cardio', modalidade: 'corrida', distancia: { faixa: { min: 5, max: 5 }, unidade: 'km' } }, 70).min, Math.round((9.8 * 70 * ((5 / 9) * 60)) / 60));
-  assert.equal(volumeKg({ itens: [{ series: 3, reps: '10', carga: 20 }, { series: 2, reps: '8-12', carga: 10 }] }), 3 * 10 * 20 + 2 * 10 * 10);
-  assert.deepEqual(distanciaEmKm({ faixa: { min: 5, max: 5 }, unidade: 'mi' }), { min: 5 * 1.609344, max: 5 * 1.609344 });
-  const linhas = resumoDoTreino({ tipo: 'forca', duracao: { min: 60, max: 60 }, itens: [{ series: 3, reps: '10', carga: 20 }] }, 70).map((l) => l.rotulo);
-  assert.deepEqual(linhas, ['Exercícios', 'Repetições', 'Peso levantado', 'Duração', 'Calorias']);
-});
-
-import { filtrarExercicios, equipamentosDe, atendeCategoria } from '../src/data/exercicios.js';
-
-test('filtros da biblioteca: categorias exigem todas, equipamentos aceitam qualquer um', () => {
-  const todos = todosExercicios();
-  const ids = (l) => l.map((e) => e.id);
-  // Peito + Ombros: supino inclinado atende (deltoide principal); supino reto (deltoide auxiliar) também
-  const pe = filtrarExercicios(todos, { cats: ['Peito', 'Ombros'] });
-  assert.ok(ids(pe).includes('supino-inclinado'));
-  assert.ok(!ids(pe).includes('agachamento'));
-  assert.ok(pe.length < filtrarExercicios(todos, { cats: ['Peito'] }).length + 1);
-  assert.ok(ids(filtrarExercicios(todos, { cats: ['Peito'] })).includes('supino-reto'));
-  assert.ok(!ids(filtrarExercicios(todos, { cats: ['Peito', 'Pernas'] })).includes('supino-reto'));
-  // equipamentos: máquinas OU barras
-  const mb = filtrarExercicios(todos, { eqps: ['maquinas', 'barras'] });
-  assert.ok(ids(mb).includes('cadeira-abdutora') && ids(mb).includes('barra-fixa-supinada'));
-  assert.ok(!ids(mb).includes('prancha'));
-  assert.ok(ids(filtrarExercicios(todos, { eqps: ['corpo'] })).includes('flexao'));
-  assert.deepEqual(equipamentosDe({ id: 'x', eqp: ['livres'] }), ['livres']);
-  assert.ok(equipamentosDe(todos.find((e) => e.id === 'barra-fixa')).includes('barras'));
-  assert.equal(filtrarExercicios(todos, { busca: 'abdutora' }).length, 1);
-  assert.equal(atendeCategoria({ cat: 'Costas', m: { lats: 1 } }, 'Peito'), false);
-  // todo exercício tem pelo menos um equipamento válido
-  todos.forEach((e) => assert.ok(equipamentosDe(e).length >= 1));
-});
-
-import { novoItemComSets, setsDoItem, textoSeries, validarSet } from '../src/utils/treinoModelo.js';
-
-test('séries próprias: faixas, agrupamento no texto e compatibilidade com o formato antigo', () => {
-  assert.equal(validarSet({ reps: '5-7', carga: '20-25' }).ok, true);
-  assert.equal(validarSet({ reps: '7-5', carga: '' }).ok, false);
-  assert.equal(validarSet({ reps: '10', carga: '25-20' }).ok, false);
-  assert.equal(validarSet({ reps: '10', carga: '1001' }).ok, false);
-  assert.deepEqual(validarSet({ reps: '10', carga: '22,5' }).set, { reps: '10', carga: '22.5' });
-  const item = novoItemComSets('supino-reto', [{ reps: '10', carga: '20' }, { reps: '10', carga: '20' }, { reps: '8', carga: '25' }]);
-  assert.equal(textoSeries(item), '2 × 10 · 20 kg | 1 × 8 · 25 kg');
-  assert.equal(textoSeries({ series: 3, reps: '10', carga: 20 }), '3 × 10 · 20 kg'); // formato antigo
-  assert.equal(setsDoItem({ series: 2, reps: '12', carga: null }).length, 2);
-  const r = validarTreinoGeral({ tipo: 'forca', nome: 'A', itens: [item] });
-  assert.equal(r.ok, true);
-  assert.equal(r.treino.itens[0].series, 3);
-  assert.equal(r.treino.itens[0].reps, '10');
-  assert.equal(r.treino.itens[0].carga, 20);
-  assert.equal(r.treino.itens[0].sets.length, 3);
-  assert.equal(validarTreinoGeral({ tipo: 'forca', nome: 'A', itens: [{ ...item, sets: [{ reps: 'x', carga: '' }] }] }).ok, false);
-  // volume com faixas: (5-7 → 6) × (20-25 → 22,5) + 10 × 20
-  assert.equal(volumeKg({ itens: [{ sets: [{ reps: '5-7', carga: '20-25' }, { reps: '10', carga: '20' }] }] }), 6 * 22.5 + 200);
-  // a sessão começa com as séries planejadas (primeira repetição e peso mínimo da faixa)
-  const f = sessaoInicial({ id: 't', nome: 'A', itens: [{ ...item, sets: [{ reps: '5-7', carga: '20-25' }, { reps: '10', carga: '' }] }] }, null, '2026-11-12');
-  assert.deepEqual(f.itens[0].series.map((x) => [x.reps, x.carga]), [['5', '20'], ['10', '']]);
-});
-
-test('indiceAlvoY: posição de destino pelo ponteiro', async () => {
-  const { indiceAlvoY } = await import('../src/utils/ordem.js');
-  assert.equal(indiceAlvoY([10, 50, 90], 5), 0);
-  assert.equal(indiceAlvoY([10, 50, 90], 60), 2);
-  assert.equal(indiceAlvoY([10, 50, 90], 200), 3);
-  assert.equal(indiceAlvoY([], 20), 0);
-});
-
-import { faixaDoIMC, nivelIMC, serieDaMedida, ultimoValor, prefsMedidas, MEDIDAS, GRAFICO2_IDS, enriquecer as enriquecerM } from '../src/utils/medidas.js';
-test('faixas do IMC: vermelho nas pontas, amarelo nas demais, normal no meio', () => {
-  assert.equal(nivelIMC(15), 'vermelho');
-  assert.equal(nivelIMC(17.5), 'amarelo');
-  assert.equal(nivelIMC(22), 'normal');
-  assert.equal(nivelIMC(27), 'amarelo');
-  assert.equal(nivelIMC(36), 'amarelo');
-  assert.equal(nivelIMC(41), 'vermelho');
-  assert.equal(faixaDoIMC(null), null);
-});
-test('catálogo de medidas: série, último valor e preferências', () => {
-  const enr = enriquecerM([
-    { id: 'a', data: '2026-01-01', peso: 80, altura: 180, abdomen: 90, extras: { peito: '100' } },
-    { id: 'b', data: '2026-02-01', peso: 78, abdomen: 88 },
-  ], 'm');
-  assert.equal(serieDaMedida(enr, 'peso').pontos.length, 2);
-  assert.equal(serieDaMedida(enr, 'peito').pontos.length, 1);
-  assert.equal(ultimoValor(enr, 'altura').valor, 180);
-  assert.equal(ultimoValor(enr, 'peso').valor, 78);
-  assert.equal(ultimoValor(enr, 'gordura').estimada, true);
-  assert.equal(ultimoValor(enr, 'pescoco'), null);
-  assert.deepEqual(prefsMedidas({}).bloco, ['altura', 'peso', 'imc']);
-  assert.deepEqual(prefsMedidas({ grafico2: ['abdomen', 'xx'] }).grafico2, ['abdomen']);
-  assert.ok(GRAFICO2_IDS.includes('cintura') && !GRAFICO2_IDS.includes('peso'));
-  assert.ok(MEDIDAS.length >= 17);
 });

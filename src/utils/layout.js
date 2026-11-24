@@ -1,10 +1,9 @@
 // Organização das páginas do menu e dos blocos dentro delas (funções puras, testadas em tests/).
-// IDs de página: 'Grade' (Rotina), 'Notas' e 'Treinos'. IDs de bloco: 'grade', 'metas', 'agenda', 'cursos', 'medidas', 'exercicios', 'treinos'.
+// IDs de página: 'Grade' (Rotina) e 'Notas'. IDs de bloco: 'grade', 'metas', 'agenda', 'cursos'.
 
 export const PAGINAS = {
   Grade: { rotulo: 'Rotina' },
   Notas: { rotulo: 'Notas' },
-  Treinos: { rotulo: 'Treinos' },
 };
 
 export const SECOES = {
@@ -12,14 +11,11 @@ export const SECOES = {
   metas: { rotulo: 'Metas diárias', origem: 'Grade' },
   agenda: { rotulo: 'Agenda (Google)', origem: 'Grade' },
   cursos: { rotulo: 'Cursos', origem: 'Notas' },
-  treinos: { rotulo: 'Meus treinos', origem: 'Treinos' },
-  exercicios: { rotulo: 'Biblioteca de exercícios', origem: 'Treinos' },
-  medidas: { rotulo: 'Medidas corporais', origem: 'Treinos' },
 };
 
 export const LAYOUT_PADRAO = {
-  paginas: ['Grade', 'Notas', 'Treinos'],
-  secoes: { Grade: ['grade', 'metas', 'agenda'], Notas: ['cursos'], Treinos: ['treinos', 'medidas', 'exercicios'] },
+  paginas: ['Grade', 'Notas'],
+  secoes: { Grade: ['grade', 'metas', 'agenda'], Notas: ['cursos'] },
 };
 
 const unico = (lista) => Array.from(new Set(lista));
@@ -42,9 +38,6 @@ export function normalizarLayout(salvo) {
     });
   });
   idsSecoes.filter((s) => !usadas.has(s)).forEach((s) => secoes[SECOES[s].origem].push(s));
-  // a biblioteca de exercícios fica sempre por último na página em que estiver
-  Object.keys(secoes).forEach((p) => { if (secoes[p].includes('exercicios')) secoes[p] = [...secoes[p].filter((s) => s !== 'exercicios'), 'exercicios']; });
-
   return { paginas, secoes };
 }
 
@@ -77,9 +70,6 @@ export function secaoAtiva(config, id, googleOk = true) {
   if (id === 'metas') return b.metas !== false;
   if (id === 'agenda') return googleOk && !!b.agendaGoogle;
   if (id === 'cursos') return b.cursos !== false;
-  if (id === 'medidas') return b.medidas !== false;
-  if (id === 'exercicios') return b.exercicios !== false;
-  if (id === 'treinos') return b.treinos !== false;
   return false;
 }
 
@@ -87,7 +77,6 @@ export function paginaLigada(config, id) {
   const p = config?.paginas || {};
   if (id === 'Grade') return p.grade !== false;
   if (id === 'Notas') return p.notas !== false;
-  if (id === 'Treinos') return p.treinos !== false;
   return false;
 }
 
