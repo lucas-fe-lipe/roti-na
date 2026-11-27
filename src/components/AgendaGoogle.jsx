@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { hojeLocalStr } from '../utils/date';
-import { organizarAgenda, rotuloDoDia, linkParaApp } from '../utils/agendaWidget';
+import { organizarAgenda, rotuloDoDia, linkParaApp, linkAbrirAppAgenda } from '../utils/agendaWidget';
 import { pedirTokenLeitura, tokenLeituraValido, carregarAgendaEtarefas, mensagemDeErroLeitura } from '../services/googleLeitura';
 
 const agente = () => (typeof navigator !== 'undefined' ? navigator.userAgent : '');
 const abrirNoApp = (url) => { window.location.href = linkParaApp(url, agente()); };
-const URL_NOVO = 'https://calendar.google.com/calendar/u/0/r/eventedit';
 const URL_AGENDA = 'https://calendar.google.com/calendar/u/0/r/agenda';
+const abrirAgendaNoApp = () => { window.location.href = linkAbrirAppAgenda(URL_AGENDA, agente()); };
 
 const chaveCache = (user) => `google_widget_${user ? user.uid : 'local'}`;
 const lerCache = (user) => { try { return JSON.parse(localStorage.getItem(chaveCache(user)) || 'null'); } catch { return null; } };
@@ -75,8 +75,7 @@ export default function AgendaGoogle({ user, config, atualizarConfig }) {
             Google Agenda e Tarefas
           </button>
           <div className="flex items-center gap-1.5">
-            <button onClick={() => abrirNoApp(URL_NOVO)} className="text-[11px] font-semibold px-2 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded transition-colors">+ Evento</button>
-            <button onClick={() => abrirNoApp(URL_AGENDA)} className="text-[11px] font-semibold px-2 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded transition-colors">Abrir</button>
+            <button onClick={abrirAgendaNoApp} className="text-[11px] font-semibold px-2 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded transition-colors">Abrir</button>
             {!minimizada && <button onClick={() => atualizar(dias)} disabled={carregando} aria-label="Atualizar" title="Atualizar" className="text-[11px] font-semibold px-2 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded transition-colors disabled:opacity-50">{carregando ? '…' : '↻'}</button>}
           </div>
         </div>

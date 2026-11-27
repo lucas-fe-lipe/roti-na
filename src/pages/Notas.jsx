@@ -6,7 +6,7 @@ import { db } from '../services/firebase';
 import { hojeLocalStr } from '../utils/date';
 import { textoParaFundo } from '../utils/cores';
 import { calcAvaliacoes, calcCRA, minimoDoPeriodo as minimoNum } from '../utils/notas';
-import { resumoDisciplina, aprovacaoDe, pontosTotaisDe, coresVermelhas, PONTOS_PADRAO, APROVACAO_PADRAO } from '../utils/notasStatus';
+import { resumoDisciplina, aprovacaoDe, pontosTotaisDe, coresVermelhas, ordenarDisciplinas, PONTOS_PADRAO, APROVACAO_PADRAO } from '../utils/notasStatus';
 import ConfirmModal from '../components/ConfirmModal';
 
 export default function Notas({ user, atividades, isAvaliacoesOpen, setIsAvaliacoesOpen }) {
@@ -390,7 +390,7 @@ export default function Notas({ user, atividades, isAvaliacoesOpen, setIsAvaliac
 
                       {!isMinPer && (
                         <div className="mt-3 flex flex-col gap-2">
-                          {periodo.disciplinas?.map(disc => {
+                          {ordenarDisciplinas(periodo.disciplinas).map(disc => {
                             const { maxTotal, obtidaTotal, percentual } = calcAvaliacoes(disc.avaliacoes, disc.usarMedia);
                             const resumoNota = resumoDisciplina(disc, periodo);
                             const isDiscRed = !!vermelhas[disc.id];

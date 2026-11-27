@@ -1,14 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { updateProfile, deleteUser } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
-import { getInitials } from '../utils/defaultAvatars';
+import { getInitials, avatarSeguro } from '../utils/defaultAvatars';
+import { reduzirParaAvatar } from '../utils/imagem';
 
 export default function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }) {
   const [displayName, setDisplayName] = useState('');
   const [selectedAvatar, setSelectedAvatar] = useState('');
   const [erro, setErro] = useState('');
   const [confirmarExclusao, setConfirmarExclusao] = useState(false);
+  const inputFoto = useRef(null);
 
   // As 3 imagens específicas que você colocou na pasta public
   const customAvatars = [
@@ -28,6 +30,14 @@ export default function EditProfileModal({ isOpen, onClose, user, onProfileUpdat
   }, [user, isOpen]);
 
   if (!isOpen || !user) return null;
+
+  const aoEscolherFoto = async (e) => {
+    const arquivo = e.target.files?.[0];
+    e.target.value = '';
+    if (!arquivo) return;
+    setErro('');
+    try { setSelectedAvatar(await reduzirParaAvatar(arquivo)); } catch (err) { setErro(err.message); }
+  };
 
   const handleSalvar = async (e) => {
     e.preventDefault();
@@ -108,6 +118,15 @@ export default function EditProfileModal({ isOpen, onClose, user, onProfileUpdat
               </div>
 
               {/* Opções das 3 Imagens Personalizadas */}
+              {/* Foto enviada pela pessoa (guardada reduzida na nuvem) */}
+              <input ref={inputFoto} type="file" accept="image/*" onChange={aoEscolherFoto} className="hidden" aria-label="Enviar foto" />
+              {selectedAvatar.startsWith('data:') && avatarSeguro(selectedAvatar) && (
+                <div className="w-20 h-20 rounded-full border-4 border-white scale-105 shadow-lg overflow-hidden shrink-0" title="Sua foto">
+                  <img src={selectedAvatar} alt="Sua foto" className="w-full h-full object-cover" />
+                </div>
+              )}
+              <button type="button" onClick={() => inputFoto.current?.click()} className="w-20 h-20 rounded-full border-4 border-dashed border-zinc-600 text-zinc-300 hover:border-zinc-400 hover:text-white text-[11px] font-bold leading-tight shrink-0 px-1" title="Enviar uma foto">Enviar foto</button>
+
               {customAvatars.map((avatar) => (
                 <div 
                   key={avatar.id}

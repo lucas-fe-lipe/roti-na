@@ -630,3 +630,31 @@ test('widget: rótulos de dia e link para o app do Google', () => {
   assert.ok(linkParaApp('https://tasks.google.com/task/xyz', 'Android').includes('com.google.android.apps.tasks'));
   assert.equal(linkParaApp('https://x.com/a', 'iPhone'), 'https://x.com/a');
 });
+
+import { ordenarDisciplinas } from '../src/utils/notasStatus.js';
+import { linkAbrirAppAgenda } from '../src/utils/agendaWidget.js';
+test('disciplinas: cursando, reprovadas, a cursar, concluídas; ordem de cadastro dentro do grupo', () => {
+  const d = (id, status) => ({ id, status });
+  const o = ordenarDisciplinas([d('a', 'Concluída'), d('b', 'A Cursar'), d('c', 'Reprovado por falta'), d('d', 'Cursando'), d('e', 'Concluída'), d('f', 'Reprovado'), d('g', 'Cursando'), d('h', undefined)]);
+  assert.deepEqual(o.map((x) => x.id), ['d', 'g', 'c', 'f', 'b', 'h', 'a', 'e']);
+  assert.deepEqual(ordenarDisciplinas(undefined), []);
+});
+test('abrir o app do Google Agenda: Android por pacote, iPhone por esquema, resto o site', () => {
+  const site = 'https://calendar.google.com/calendar/u/0/r/agenda';
+  const a = linkAbrirAppAgenda(site, 'Mozilla/5.0 (Linux; Android 14)');
+  assert.ok(a.startsWith('intent:#Intent;') && a.includes('package=com.google.android.calendar') && a.includes(encodeURIComponent(site)));
+  assert.equal(linkAbrirAppAgenda(site, 'iPhone'), 'googlecalendar://');
+  assert.equal(linkAbrirAppAgenda(site, 'Windows'), site);
+});
+
+import { avatarSeguro } from '../src/utils/defaultAvatars.js';
+test('avatar: só imagem do app, https ou JPEG em base64 pequeno', () => {
+  assert.ok(avatarSeguro('/roti-na/avatar1.png'));
+  assert.ok(avatarSeguro('https://exemplo.com/a.png'));
+  assert.ok(avatarSeguro('data:image/jpeg;base64,/9j/4AAQSkZJRgABAQ=='));
+  assert.ok(!avatarSeguro('data:image/svg+xml;base64,PHN2Zz4='));
+  assert.ok(!avatarSeguro('data:text/html;base64,PGI+'));
+  assert.ok(!avatarSeguro('javascript:alert(1)'));
+  assert.ok(!avatarSeguro(`data:image/jpeg;base64,${'A'.repeat(200000)}`));
+  assert.ok(!avatarSeguro(null));
+});

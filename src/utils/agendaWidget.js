@@ -62,3 +62,11 @@ export function linkParaApp(url, agente = '') {
     return `intent://${u.host}${u.pathname}${u.search}#Intent;scheme=https;package=${pacote};S.browser_fallback_url=${encodeURIComponent(url)};end`;
   } catch { return url; }
 }
+
+// Abre o aplicativo do Google Agenda em si (na tela em que ele estava; o app não aceita escolher o modo Agenda por link).
+// Android: abre o app pelo nome do pacote, com volta para o site se ele não estiver instalado. iPhone: esquema do app.
+export function linkAbrirAppAgenda(urlSite, agente = '') {
+  if (/Android/i.test(agente)) return `intent:#Intent;action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;package=com.google.android.calendar;S.browser_fallback_url=${encodeURIComponent(urlSite)};end`;
+  if (/iPhone|iPad|iPod/i.test(agente)) return 'googlecalendar://';
+  return urlSite;
+}

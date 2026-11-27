@@ -66,3 +66,11 @@ export function disciplinaDaAtividade(cursos = [], atividadeId) {
   }
   return null;
 }
+
+// Ordem das disciplinas dentro do período: cursando, reprovadas, a cursar e, por último, as concluídas
+// (dentro de cada grupo mantém a ordem em que foram cadastradas).
+const ORDEM_STATUS = { 'Cursando': 0, 'Reprovado': 1, 'Reprovado por falta': 1, 'A Cursar': 2, 'Concluída': 3 };
+export const ordenarDisciplinas = (disciplinas = []) => disciplinas
+  .map((d, i) => ({ d, i }))
+  .sort((a, b) => ((ORDEM_STATUS[a.d.status] ?? 2) - (ORDEM_STATUS[b.d.status] ?? 2)) || a.i - b.i)
+  .map((x) => x.d);
