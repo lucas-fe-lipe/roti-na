@@ -456,7 +456,7 @@ export default function Dashboard() {
     })(),
     agenda: (
       <>
-              <AgendaGoogle user={user} agendas={sync.agendas} config={config} atualizarConfig={atualizarConfig} />
+              <AgendaGoogle user={user} config={config} atualizarConfig={atualizarConfig} />
       </>
     ),
     cursos: secaoCursos,

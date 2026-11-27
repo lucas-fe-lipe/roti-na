@@ -599,3 +599,34 @@ test('planilha de notas: notas abaixo da aprovação ficam vermelhas, como no ap
   const verm = montarAbasNotas([{ nome: 'C', periodos: [{ nome: 'P', disciplinas: [{ nome: 'D', percentualAprovacao: 70, avaliacoes: [{ nome: 'A', max: '10', obtida: '5' }] }] }] }]);
   assert.deepEqual(verm[0].linhas[2].c.slice(2, 4).map((c) => c.e), ['pretoNumVerm', 'pretoPctVerm']);
 });
+
+import { itensDoEvento, itemDaTarefa, organizarAgenda, rotuloDoDia, linkParaApp } from '../src/utils/agendaWidget.js';
+test('widget: eventos com horário, dia inteiro (vários dias) e recusados', () => {
+  const t = itensDoEvento({ id: 'e1', summary: 'Aula', start: { dateTime: '2026-11-27T13:30:00-03:00' }, end: { dateTime: '2026-11-27T15:00:00-03:00' }, htmlLink: 'https://x' }, { nome: 'Pessoal' });
+  assert.equal(t.length, 1);
+  assert.equal(t[0].hora, '13:30'); assert.equal(t[0].horaFim, '15:00'); assert.equal(t[0].data, '2026-11-27');
+  const d = itensDoEvento({ id: 'e2', summary: 'Viagem', start: { date: '2026-11-28' }, end: { date: '2026-11-31'.replace('31', '30') } });
+  assert.deepEqual(d.map((i) => i.data), ['2026-11-28', '2026-11-29']);
+  assert.deepEqual(itensDoEvento({ id: 'e3', status: 'cancelled' }), []);
+  assert.deepEqual(itensDoEvento({ id: 'e4', summary: 'x', start: { dateTime: '2026-11-27T10:00:00-03:00' }, attendees: [{ self: true, responseStatus: 'declined' }] }), []);
+});
+test('widget: tarefa só com data e não concluída; atrasadas, hoje e próximas em ordem', () => {
+  assert.equal(itemDaTarefa({ id: 't', title: 'x' }), null);
+  assert.equal(itemDaTarefa({ id: 't', title: 'x', due: '2026-11-20T00:00:00.000Z', status: 'completed' }), null);
+  const tar = (id, due, title) => itemDaTarefa({ id, title, due: `${due}T00:00:00.000Z`, status: 'needsAction' });
+  const ev = (id, data, hora, diaInteiro = false) => ({ tipo: 'evento', id, titulo: id, data, hora, diaInteiro });
+  const itens = [tar('velha', '2026-11-20', 'Velha'), tar('hoje-t', '2026-11-27', 'Tarefa hoje'), ev('tarde', '2026-11-27', '15:00'), ev('manha', '2026-11-27', '08:00'), ev('dia', '2026-11-27', '', true), tar('amanha', '2026-11-28', 'Amanhã'), ev('longe', '2026-12-30', '10:00'), ev('ontem', '2026-11-26', '10:00')];
+  const o = organizarAgenda(itens, '2026-11-27', 14);
+  assert.deepEqual(o.atrasadas.map((i) => i.id), ['velha']); // evento passado não é "atrasado"
+  assert.deepEqual(o.hoje.map((i) => i.id), ['hoje-t', 'dia', 'manha', 'tarde']);
+  assert.deepEqual(o.proximas.map((p) => p.data), ['2026-11-28']);
+});
+test('widget: rótulos de dia e link para o app do Google', () => {
+  assert.equal(rotuloDoDia('2026-11-27', '2026-11-27'), 'Hoje · sex, 27 nov');
+  assert.equal(rotuloDoDia('2026-11-28', '2026-11-27'), 'Amanhã · sáb, 28 nov');
+  assert.equal(rotuloDoDia('2026-12-02', '2026-11-27'), 'qua, 2 dez');
+  const a = linkParaApp('https://www.google.com/calendar/event?eid=abc', 'Mozilla/5.0 (Linux; Android 14)');
+  assert.ok(a.startsWith('intent://www.google.com/calendar/event?eid=abc#Intent;scheme=https;package=com.google.android.calendar;'));
+  assert.ok(linkParaApp('https://tasks.google.com/task/xyz', 'Android').includes('com.google.android.apps.tasks'));
+  assert.equal(linkParaApp('https://x.com/a', 'iPhone'), 'https://x.com/a');
+});

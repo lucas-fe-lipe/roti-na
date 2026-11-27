@@ -776,8 +776,8 @@ function ModalDisciplinaResumo({ disciplina, statusClasse, aprovacaoInicial = AP
                     </button>
                   )}
 
-                  <input type="number" value={av.max} onChange={e => hAv(av.id, 'max', e.target.value)} placeholder="Total" className="w-10 sm:w-11 shrink-0 bg-zinc-950 border border-zinc-700 rounded p-1.5 text-white text-xs text-center" />
                   <input type="number" value={av.obtida} onChange={e => hAv(av.id, 'obtida', e.target.value)} placeholder="Nota" className="w-10 sm:w-11 shrink-0 bg-zinc-950 border border-zinc-700 rounded p-1.5 text-white text-xs text-center" />
+                  <input type="number" value={av.max} onChange={e => hAv(av.id, 'max', e.target.value)} placeholder="Total" className="w-10 sm:w-11 shrink-0 bg-zinc-950 border border-zinc-700 rounded p-1.5 text-white text-xs text-center" />
                   <span className={`w-9 shrink-0 text-right text-[10px] font-bold ${isRed ? 'text-red-500' : 'text-zinc-400'}`}>{pLocal}</span>
                   <button onClick={() => setAvaliacoes(p => p.filter(x => x.id !== av.id))} className="text-red-500 hover:text-red-400 font-bold px-1.5 py-0.5 text-base bg-transparent border-none shrink-0" title="Remover avaliação">×</button>
                 </div>

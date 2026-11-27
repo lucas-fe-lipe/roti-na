@@ -18,7 +18,7 @@ export const integracaoConfigurada = () => Boolean(CLIENT_ID);
 
 // ---------- login (Google Identity Services) ----------
 let scriptPromise = null;
-function carregarGIS() {
+export function carregarGIS() {
   if (window.google?.accounts?.oauth2) return Promise.resolve();
   if (!scriptPromise) {
     scriptPromise = new Promise((resolve, reject) => {
